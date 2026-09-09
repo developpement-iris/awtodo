@@ -1,0 +1,136 @@
+.incident-create-dialog__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(36, 28, 28, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: var(--space-4);
+}
+
+.incident-create-dialog {
+  width: 100%;
+  max-width: 480px;
+  max-height: calc(100vh - var(--space-6) * 2);
+  /* Voir ProjectCreateDialog.css — même bug flex min-height:auto vs max-height. */
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-overlay);
+}
+
+.incident-create-dialog__title {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: var(--space-4);
+  text-wrap: balance;
+}
+
+.incident-create-dialog__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+.incident-create-dialog__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+}
+
+.incident-create-dialog__field--full {
+  grid-column: 1 / -1;
+}
+
+.incident-create-dialog__field input,
+.incident-create-dialog__field select,
+.incident-create-dialog__field textarea {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  transition: border-color 0.12s ease;
+}
+
+.incident-create-dialog__field input:focus,
+.incident-create-dialog__field select:focus,
+.incident-create-dialog__field textarea:focus {
+  border-color: var(--color-accent);
+  outline: none;
+}
+
+.incident-create-dialog__field textarea {
+  resize: vertical;
+}
+
+.incident-create-dialog__mono {
+  font-family: var(--font-mono) !important;
+}
+
+.incident-create-dialog__error {
+  background: var(--priority-critique-bg);
+  color: var(--priority-critique-text);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font-size: 13px;
+  margin-top: var(--space-4);
+}
+
+.incident-create-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.incident-create-dialog__cancel,
+.incident-create-dialog__confirm {
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.12s ease;
+}
+
+.incident-create-dialog__cancel {
+  background: none;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+.incident-create-dialog__cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.incident-create-dialog__confirm {
+  background: var(--incident-status-reported-text);
+  border: 1px solid transparent;
+  color: var(--color-accent-contrast);
+}
+
+.incident-create-dialog__confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.incident-create-dialog__confirm:not(:disabled):hover {
+  opacity: 0.85;
+}
+
+@media (max-width: 560px) {
+  .incident-create-dialog__grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,129 @@
+.tasks-tab__toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.tasks-tab__toggle {
+  display: inline-flex;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.tasks-tab__toggle-btn {
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  border: none;
+  padding: var(--space-2) var(--space-4);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.tasks-tab__toggle-btn + .tasks-tab__toggle-btn {
+  border-left: 1px solid var(--color-border);
+}
+
+.tasks-tab__toggle-btn:hover {
+  color: var(--color-text);
+}
+
+.tasks-tab__toggle-btn--active {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
+
+.tasks-tab__version {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tasks-tab__version-select {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  height: 34px;
+}
+
+.tasks-tab__version-note {
+  font-size: 12px;
+  color: var(--tone-error-text);
+  font-style: italic;
+}
+
+.tasks-tab__version-create-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.tasks-tab__version-create-trigger:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.tasks-tab__version-create {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tasks-tab__version-create input {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  height: 34px;
+  width: 160px;
+}
+
+.tasks-tab__version-create button {
+  height: 34px;
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-3);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--color-border);
+  background: none;
+  color: var(--color-text);
+}
+
+.tasks-tab__version-create button:first-of-type {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border-color: transparent;
+}
+
+.tasks-tab__version-create button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tasks-tab__version-error {
+  font-size: 13px;
+  color: var(--tone-error-text);
+  margin: 0 0 var(--space-3);
+}

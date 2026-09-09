@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Watodo - Header Final</title>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Bricolage Grotesque', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #F5EFEC;
+            color: #2A2020;
+        }
+
+        .demo-container {
+            max-width: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        .demo-section {
+            margin-bottom: 60px;
+        }
+
+        .demo-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #753030;
+            padding: 40px 32px 16px;
+            margin: 0;
+        }
+
+        .demo-desc {
+            font-size: 14px;
+            color: #6B5C58;
+            padding: 0 32px 24px;
+            line-height: 1.6;
+        }
+
+        /* ===== HEADER MIX (2+3) ===== */
+        .header-mix-wrapper {
+            display: flex;
+            flex-direction: column;
+            background: white;
+            border-bottom: 1px solid #E6DAD4;
+        }
+
+        .header-mix-top {
+            display: flex;
+            height: 70px;
+        }
+
+        .header-mix-sidebar {
+            width: 70px;
+            background: #753030;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
+        }
+
+        .header-mix-logo {
+            font-size: 32px;
+            color: white;
+            font-weight: 700;
+            letter-spacing: -1px;
+        }
+
+        .header-mix-main {
+            flex: 1;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 32px;
+            gap: 24px;
+        }
+
+        .header-mix-center {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+        }
+
+        .header-mix-search {
+            width: 100%;
+            max-width: 420px;
+            padding: 11px 16px;
+            background: #F5EFEC;
+            border: 1px solid #E6DAD4;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: all 0.2s;
+            color: #2A2020;
+        }
+
+        .header-mix-search::placeholder {
+            color: #948681;
+        }
+
+        .header-mix-search:focus {
+            outline: none;
+            background: white;
+            border-color: #753030;
+            box-shadow: 0 0 0 3px rgba(117, 48, 48, 0.1);
+        }
+
+        .header-mix-right {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .header-mix-icon-btn {
+            width: 38px;
+            height: 38px;
+            border-radius: 6px;
+            background: #F5EFEC;
+            border: 1px solid transparent;
+            cursor: pointer;
+            font-size: 18px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #2A2020;
+        }
+
+        .header-mix-icon-btn:hover {
+            background: #E6DAD4;
+            border-color: #E6DAD4;
+        }
+
+        .header-mix-user {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 12px;
+            background: #F5EFEC;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 13px;
+            font-weight: 500;
+            border: 1px solid transparent;
+        }
+
+        .header-mix-user:hover {
+            background: #E6DAD4;
+            border-color: #E6DAD4;
+        }
+
+        .header-mix-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #753030, #8F4040);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 12px;
+        }
+
+        /* Breadcrumb */
+        .header-mix-breadcrumb {
+            padding: 12px 32px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            font-size: 13px;
+            color: #6B5C58;
+            background: #FAFAF8;
+            border-top: 1px solid #E6DAD4;
+            margin-left: 70px;
+        }
+
+        .header-mix-breadcrumb-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        .header-mix-breadcrumb-item:hover {
+            background: #E6DAD4;
+            color: #2A2020;
+        }
+
+        .header-mix-breadcrumb-item.active {
+            color: #753030;
+            font-weight: 600;
+            background: rgba(117, 48, 48, 0.08);
+        }
+
+        .header-mix-breadcrumb-sep {
+            color: #B0A19D;
+            font-weight: 300;
+        }
+
+        /* ===== DARK MODE ===== */
+        .dark-mode-section {
+            background: #241C1C;
+            border-bottom: 1px solid #4A3838;
+        }
+
+        .header-mix-dark {
+            background: #332828;
+            border-bottom-color: #4A3838;
+        }
+
+        .header-mix-dark .header-mix-main {
+            color: #EDE3DF;
+        }
+
+        .header-mix-dark .header-mix-search {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: #4A3838;
+            color: #EDE3DF;
+        }
+
+        .header-mix-dark .header-mix-search::placeholder {
+            color: #B0A19D;
+        }
+
+        .header-mix-dark .header-mix-search:focus {
+            background: #332828;
+            border-color: #8F4040;
+            box-shadow: 0 0 0 3px rgba(143, 64, 64, 0.2);
+        }
+
+        .header-mix-dark .header-mix-icon-btn {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: transparent;
+            color: #EDE3DF;
+        }
+
+        .header-mix-dark .header-mix-icon-btn:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.12);
+        }
+
+        .header-mix-dark .header-mix-user {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: transparent;
+            color: #EDE3DF;
+        }
+
+        .header-mix-dark .header-mix-user:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.12);
+        }
+
+        .header-mix-dark .header-mix-breadcrumb {
+            background: rgba(0, 0, 0, 0.3);
+            border-top-color: #4A3838;
+            color: #B0A19D;
+        }
+
+        .header-mix-dark .header-mix-breadcrumb-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #EDE3DF;
+        }
+
+        .header-mix-dark .header-mix-breadcrumb-item.active {
+            color: #8F4040;
+            background: rgba(143, 64, 64, 0.15);
+        }
+
+        .header-mix-dark .header-mix-breadcrumb-sep {
+            color: #7A6D6A;
+        }
+
+        /* ===== CONTENT PREVIEW ===== */
+        .content-preview {
+            padding: 40px 32px;
+            background: #F5EFEC;
+            min-height: 300px;
+        }
+
+        .content-preview-dark {
+            background: #241C1C;
+            color: #EDE3DF;
+        }
+
+        .content-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: #2A2020;
+        }
+
+        .content-preview-dark .content-title {
+            color: #EDE3DF;
+        }
+
+        .content-desc {
+            font-size: 14px;
+            color: #6B5C58;
+            line-height: 1.6;
+        }
+
+        .content-preview-dark .content-desc {
+            color: #B0A19D;
+        }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 768px) {
+            .header-mix-top {
+                height: 60px;
+            }
+
+            .header-mix-sidebar {
+                width: 60px;
+            }
+
+            .header-mix-logo {
+                font-size: 24px;
+            }
+
+            .header-mix-main {
+                padding: 0 16px;
+                gap: 12px;
+            }
+
+            .header-mix-search {
+                max-width: 200px;
+                font-size: 13px;
+            }
+
+            .header-mix-icon-btn {
+                width: 36px;
+                height: 36px;
+                font-size: 16px;
+            }
+
+            .header-mix-breadcrumb {
+                padding: 10px 16px;
+                margin-left: 60px;
+                font-size: 12px;
+                overflow-x: auto;
+            }
+
+            .content-preview {
+                padding: 24px 16px;
+            }
+
+            .content-title {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <!-- MODE CLAIR -->
+        <div class="demo-section">
+            <h2 class="demo-title">Header Final — Mode Clair</h2>
+            <p class="demo-desc">
+                Mix du concept 2 (sidebar marque avec logo "W") et concept 3 (breadcrumb pour navigation contextuelle). 
+                Design premium avec présence visuelle forte et guidage clair de l'utilisateur.
+            </p>
+
+            <div class="header-mix-wrapper">
+                <div class="header-mix-top">
+                    <div class="header-mix-sidebar">
+                        <div class="header-mix-logo">W</div>
+                    </div>
+                    <div class="header-mix-main">
+                        <div class="header-mix-center">
+                            <input type="text" class="header-mix-search" placeholder="Rechercher un projet, une tâche, un incident...">
+                        </div>
+                        <div class="header-mix-right">
+                            <button class="header-mix-icon-btn" title="Notifications">🔔</button>
+                            <button class="header-mix-icon-btn" title="Paramètres">⚙️</button>
+                            <div class="header-mix-user">
+                                <div class="header-mix-avatar">AC</div>
+                                <span>Amine</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="header-mix-breadcrumb">
+                    <div class="header-mix-breadcrumb-item">📁 Accueil</div>
+                    <div class="header-mix-breadcrumb-sep">/</div>
+                    <div class="header-mix-breadcrumb-item active">Projets</div>
+                </div>
+            </div>
+
+            <div class="content-preview">
+                <div class="content-title">Projets</div>
+                <div class="content-desc">Voici vos projets actifs. Cliquez sur un projet pour voir les détails, les tâches et les incidents associés.</div>
+            </div>
+        </div>
+
+        <!-- MODE SOMBRE -->
+        <div class="demo-section dark-mode-section">
+            <h2 class="demo-title" style="color: #8F4040; padding-top: 40px;">Header Final — Mode Sombre</h2>
+            <p class="demo-desc" style="color: #B0A19D;">
+                Le même design adapté au mode sombre. Sidebar marque constante, breadcrumb lisible, contraste optimal.
+            </p>
+
+            <div class="header-mix-wrapper header-mix-dark">
+                <div class="header-mix-top">
+                    <div class="header-mix-sidebar">
+                        <div class="header-mix-logo">W</div>
+                    </div>
+                    <div class="header-mix-main">
+                        <div class="header-mix-center">
+                            <input type="text" class="header-mix-search" placeholder="Rechercher un projet, une tâche, un incident...">
+                        </div>
+                        <div class="header-mix-right">
+                            <button class="header-mix-icon-btn" title="Notifications">🔔</button>
+                            <button class="header-mix-icon-btn" title="Paramètres">⚙️</button>
+                            <div class="header-mix-user">
+                                <div class="header-mix-avatar">AC</div>
+                                <span>Amine</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="header-mix-breadcrumb">
+                    <div class="header-mix-breadcrumb-item">📁 Accueil</div>
+                    <div class="header-mix-breadcrumb-sep">/</div>
+                    <div class="header-mix-breadcrumb-item active">Projets</div>
+                </div>
+            </div>
+
+            <div class="content-preview content-preview-dark">
+                <div class="content-title">Projets</div>
+                <div class="content-desc">Voici vos projets actifs. Cliquez sur un projet pour voir les détails, les tâches et les incidents associés.</div>
+            </div>
+        </div>
+
+        <!-- VARIANTES -->
+        <div class="demo-section" style="padding: 40px 32px;">
+            <h2 class="demo-title" style="padding: 0 0 16px;">Variantes & Détails</h2>
+            <p class="demo-desc" style="padding: 0 0 24px;">
+                <strong>Sidebar marque :</strong> Largeur 70px, couleur fixe #753030, logo "W" blanc. Crée une présence visuelle constante et reconnaissable.<br><br>
+                <strong>Breadcrumb :</strong> Affiche le chemin de navigation contextuelle. Cliquable pour revenir aux niveaux antérieurs. Icônes lucide-react (pas d'emoji dans le code final).<br><br>
+                <strong>Recherche :</strong> Centrée, max-width 420px, focus ring marque. Placeholder descriptif.<br><br>
+                <strong>Actions :</strong> Notifications, Paramètres, Profil utilisateur avec avatar dégradé marque.<br><br>
+                <strong>Responsive :</strong> Sur mobile, sidebar passe à 60px, breadcrumb scrollable, recherche réduite à 200px max.
+            </p>
+        </div>
+    </div>
+</body>
+</html>

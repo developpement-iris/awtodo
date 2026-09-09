@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Watodo — Accueil v3 (oblique)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #241C1C; --surface: #332828; --surface-raised: #3D2F2F; --border: #4A3838;
+    --ink: #EDE3DF; --ink-muted: #B0A19D; --ink-faint: #7A6D6A;
+    --accent: #8F4040; --accent-strong: #A34E4E; --cream: #F5E7E3;
+    --seam: #C2691F;
+    --pr-haute: #C2691F; --pr-haute-bg: #332212;
+    --incident: #5B8A8A; --incident-bg: #1D2C2C;
+    --incident-live: #6FA3A3; --incident-live-bg: #223838;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Bricolage Grotesque', sans-serif; height: 100vh; overflow: hidden; background: var(--bg); color: var(--ink); }
+
+  .screen { position: relative; width: 100%; height: 100vh; }
+
+  /* ── Calques de fond : diagonale 35/65, reprise du login ── */
+  .bg-left {
+    position: absolute; inset: 0;
+    background: linear-gradient(150deg, #A34E4E 0%, var(--accent) 55%, #6E2F2F 100%);
+    clip-path: polygon(0 0, 39% 0, 31% 100%, 0 100%);
+  }
+  .bg-seam {
+    position: absolute; inset: 0;
+    background: var(--seam);
+    clip-path: polygon(39% 0, 41.6% 0, 33.6% 100%, 31% 100%);
+  }
+  .bg-right {
+    position: absolute; inset: 0;
+    background: var(--bg);
+    clip-path: polygon(41.6% 0, 100% 0, 100% 100%, 33.6% 100%);
+  }
+
+  /* ── Salutation dactylo, en haut, pleine largeur ── */
+  .greeting-wrap { position:absolute; top: 34px; left:0; right:0; text-align:center; z-index:3; }
+  .greeting { font-family:'IBM Plex Mono',monospace; font-weight:600; font-size: 22px; color: var(--cream); }
+  .greeting .cursor { display:inline-block; width:2px; height:19px; background:var(--cream); margin-left:3px; vertical-align:-3px; animation: blink 1s step-end infinite; }
+  @keyframes blink { 50% { opacity:0; } }
+
+  /* ── Contenu gauche : backlog ── */
+  .content-left {
+    position:absolute; top:0; left:0; width:30%; height:100%; z-index:2;
+    display:flex; align-items:center; justify-content:center; padding: 0 18px;
+  }
+  .postit {
+    position: relative; width: 100%;
+    background: var(--surface-raised); border: 1px solid var(--border);
+    border-radius: 3px 14px 14px 14px; transform: rotate(-1.4deg);
+    box-shadow: 0 16px 30px rgba(0,0,0,.4);
+    padding: 20px 20px 24px;
+  }
+  .postit::before {
+    content:""; position:absolute; right:0; bottom:0; width:0; height:0;
+    border-style:solid; border-width:0 0 18px 18px;
+    border-color: transparent transparent rgba(0,0,0,.3) transparent;
+    border-bottom-right-radius: 14px;
+  }
+  .postit h2 { margin:0 0 14px; font-size: 16px; font-weight:800; color: var(--cream); }
+  .postit ul { list-style:none; margin:0; padding:0; }
+  .postit li { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12.5px; font-weight:500; padding:8px 0; border-bottom: 1px dashed var(--border); }
+  .postit li:last-child { border-bottom:none; }
+  .chip { font-family:'IBM Plex Mono',sans-serif; font-size:10px; font-weight:700; padding:2px 7px; border-radius:999px; white-space:nowrap; }
+
+  /* ── Contenu droite : onglets classeur, collés à la diagonale ── */
+  .content-right { position:absolute; top:0; left:0; width:100%; height:100%; z-index:2; }
+  .tab {
+    position: absolute; width: 220px;
+    background: var(--tab-color, var(--surface-raised));
+    border: 1px solid var(--border); border-left: none;
+    border-radius: 0 12px 12px 0;
+    padding: 14px 16px;
+    box-shadow: -4px 0 14px rgba(0,0,0,.25);
+    transition: transform .16s ease, box-shadow .16s ease;
+    cursor: pointer;
+  }
+  .tab:hover { transform: translateX(10px); box-shadow: -6px 0 20px rgba(0,0,0,.35); }
+  .tab .row { display:flex; align-items:center; gap:9px; margin-bottom:3px; }
+  .tab .name { font-weight:700; font-size:13.5px; }
+  .tab .sub { font-size:10.5px; color:var(--ink-muted); margin-left:27px; }
+</style>
+</head>
+<body>
+
+<div class="screen">
+  <div class="bg-left"></div>
+  <div class="bg-seam"></div>
+  <div class="bg-right"></div>
+
+  <div class="greeting-wrap">
+    <span class="greeting" id="typedText"></span><span class="greeting cursor"></span>
+  </div>
+
+  <div class="content-left">
+    <div class="postit">
+      <h2>Backlog</h2>
+      <ul>
+        <li>Faire ceci <span class="chip" style="background:var(--pr-haute-bg); color:var(--pr-haute);">Haute</span></li>
+        <li>Verif incident sans projet <span class="chip" style="background:var(--incident-bg); color:var(--incident);">Signalé</span></li>
+        <li>Verif E2E incident <span class="chip" style="background:var(--incident-bg); color:var(--incident);">Signalé</span></li>
+        <li>Erreur 500 sur /login <span class="chip" style="background:var(--incident-live-bg); color:var(--incident-live);">En cours</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="content-right">
+    <!-- Positions calculées pour suivre la diagonale (x passe de 39% en haut à 31% en bas) -->
+    <div class="tab" style="top:16%; left:calc(38% - 1px); --tab-color:#3D2F2F">
+      <div class="row"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg><span class="name">Projets</span></div>
+      <div class="sub">5 au total</div>
+    </div>
+    <div class="tab" style="top:32%; left:calc(37% - 1px); --tab-color:#3D3226">
+      <div class="row"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span class="name">Tâches</span></div>
+      <div class="sub">Liste et filtres</div>
+    </div>
+    <div class="tab" style="top:48%; left:calc(36% - 1px); --tab-color:#223838; color:var(--incident-live)">
+      <div class="row"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4M12 17h.01"/></svg><span class="name" style="color:var(--ink)">Incidents</span></div>
+      <div class="sub">3 actifs</div>
+    </div>
+    <div class="tab" style="top:64%; left:calc(35% - 1px); --tab-color:#332B14">
+      <div class="row"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3v18h18M7 15l4-6 4 3 5-8"/></svg><span class="name">Statistiques</span></div>
+      <div class="sub">Vue d'ensemble</div>
+    </div>
+    <div class="tab" style="top:80%; left:calc(34% - 1px); --tab-color:#3D2F2F">
+      <div class="row"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg><span class="name">Administration</span></div>
+      <div class="sub">Comptes, groupes</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const typedEl = document.getElementById('typedText');
+  const TEXT = 'Bonjour, utilisateur !';
+  const TYPE_SPEED = 70;
+
+  function typeOnce() {
+    let i = 0;
+    const typing = setInterval(() => {
+      typedEl.textContent = TEXT.slice(0, i + 1);
+      i++;
+      if (i === TEXT.length) clearInterval(typing);
+    }, TYPE_SPEED);
+  }
+  typeOnce();
+</script>
+</body>
+</html>

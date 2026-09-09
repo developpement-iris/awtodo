@@ -1,0 +1,143 @@
+.groups-section__message {
+  padding: var(--space-4) 0;
+  color: var(--color-text-muted);
+}
+
+.groups-section__message--error {
+  color: var(--tone-error-text);
+}
+
+.groups-section__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-4);
+}
+
+.groups-section__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-resting);
+}
+
+.groups-section__card-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 16px;
+  text-wrap: balance;
+}
+
+.groups-section__members {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.groups-section__members li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: 13.5px;
+  color: var(--color-text);
+}
+
+.groups-section__empty {
+  color: var(--color-text-muted);
+}
+
+.groups-section__remove {
+  display: inline-flex;
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: color 0.12s ease;
+}
+
+.groups-section__remove:hover {
+  color: var(--tone-error-text);
+}
+
+.groups-section__add {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.groups-section__add select {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+}
+
+.groups-section__add button {
+  background: var(--tone-neutral-bg);
+  color: var(--tone-neutral-text);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.groups-section__add button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.groups-section__card--creating {
+  justify-content: center;
+}
+
+.groups-section__name-input {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+}
+
+.groups-section__create-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.groups-section__create-actions button {
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--color-border);
+  background: none;
+  color: var(--color-text);
+}
+
+.groups-section__create-actions button:last-child {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border-color: transparent;
+}
+
+.groups-section__create-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

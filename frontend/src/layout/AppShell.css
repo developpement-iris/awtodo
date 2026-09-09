@@ -1,0 +1,12 @@
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--color-bg);
+}
+
+.app-shell__content {
+  flex: 1;
+  padding: var(--space-6);
+  overflow-x: auto;
+}

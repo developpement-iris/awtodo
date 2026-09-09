@@ -1,0 +1,269 @@
+/* Bricolage Grotesque (variable) — voir docs/charte-graphique.md > Typographie
+   (v3) : remplace IBM Plex Sans pour tout le texte non-donnée. IBM Plex Sans
+   avait résolu le problème "AI slop" en v2 mais est devenu lui-même un choix
+   répandu entre-temps ; Bricolage Grotesque garde la même logique (une seule
+   famille pour titres et corps) avec un caractère plus distinctif. */
+@import "@fontsource-variable/bricolage-grotesque";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+
+:root {
+  /*
+    Palette v4 (session du 07/08/2026) — voir docs/charte-graphique.md >
+    "Charte graphique". Abandon du principe d'inversion jour/nuit (l'ancien
+    cyan/violet-galaxie échangeaient de rôle selon le mode). Nouveau principe :
+    une couleur de marque constante dans les deux modes (`#753030` clair,
+    `#8F4040` sombre), portée par des neutres chauds qui s'adaptent — pas
+    d'inversion de rôle entre deux couleurs.
+  */
+  --color-bg: #F5EFEC;
+  --color-surface: #FFFFFF;
+  /* Sur-élévation (cartes Kanban, éléments imbriqués) — même valeur que
+     `--color-surface` en clair (les deux sont déjà blanc pur), distincte en
+     sombre. Pas encore consommée par un composant existant (voir doc). */
+  --color-surface-raised: #FFFFFF;
+  --color-border: #E6DAD4;
+  --color-text: #2A2020;
+  --color-text-muted: #6B5C58;
+  /* Texte tertiaire, libellés — pas encore consommé par un composant
+     existant (voir docs/charte-graphique.md). */
+  --color-text-faint: #948681;
+  --color-accent: #753030;
+  /* Hover sur accent — pas encore câblé sur les boutons primaires existants,
+     qui utilisent une opacité au survol (voir docs/charte-graphique.md). */
+  --color-accent-strong: #5E2626;
+  --color-accent-contrast: #FFFFFF;
+
+  /* Sidebar : couleur constante, ne dépend JAMAIS du thème clair/sombre. */
+  --sidebar-bg: #753030;
+  --sidebar-text: #F5E7E3;
+  --sidebar-muted: #D6ADA8;
+  --sidebar-active: #FFFFFF;
+  --sidebar-active-bg: rgba(255, 255, 255, 0.14);
+
+  /*
+    Palette sémantique — actée dans CLAUDE.md.
+    Règle stricte : une couleur = un seul axe de sens. Chaque famille ci-dessous
+    n'est utilisée QUE pour l'axe indiqué en commentaire, jamais ailleurs.
+    Le type de tâche n'a volontairement pas de famille dédiée (traitement
+    icône + neutre, voir components/TypeBadge.tsx).
+  */
+
+  /* Partagés (même signification partout où ils apparaissent, pas une
+     collision) — inchangés depuis la refonte couleur v4 : aucune raison de
+     changer, notamment le vert de `positive`. */
+  --tone-neutral-bg: #EEF0F4;
+  --tone-neutral-text: #444A58;
+  --tone-positive-bg: #E6F4EC;   /* "sain" : Projet=Actif, Incident=Résolu */
+  --tone-positive-text: #2E6B45;
+
+  /* Priorité — même famille chaude que la marque, ramp par saturation
+     croissante (pas par changement de teinte), exclusive à cet axe */
+  --priority-basse-bg: #ECE4E0;
+  --priority-basse-text: #766863;
+  --priority-moyenne-bg: #FAF0D2;
+  --priority-moyenne-text: #96790F;
+  --priority-haute-bg: #FADFC8;
+  --priority-haute-text: #A24F10;
+  --priority-critique-bg: #FBDED8;
+  --priority-critique-text: #C23D28;
+  --tone-error-text: #C23D28;
+
+  /* Statut de tâche — famille marque (brique), exclusive à cet axe */
+  --task-status-available-bg: #F4E6E6;
+  --task-status-available-text: #762D2D;
+  --task-status-assigned-bg: #E6C7C7;
+  --task-status-assigned-text: #5F1C1C;
+  --task-status-inprogress-bg: #753030;
+  --task-status-inprogress-text: #FFFFFF;
+
+  /* Statut d'incident — famille bleu-sarcelle (froide), exclusive à cet axe :
+     changement de famille délibéré (pas juste de valeur) pour rester
+     distincte d'une interface désormais globalement chaude. */
+  --incident-status-reported-bg: #E7F3F3;
+  --incident-status-reported-text: #2E6363;
+  --incident-status-inprogress-bg: #CBE6E6;
+  --incident-status-inprogress-text: #194D4D;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  /* 3ᵉ palier — grandes surfaces (dialogs, drawers, panneaux hero) : voir
+     CLAUDE.md > "Librairies de composants front autorisées" — proche du
+     `rounded-xl` réellement observé sur le Dialog d'Origin UI (consulté via
+     WebFetch cette session), retravaillé à l'échelle déjà en place ici
+     (6px/10px) plutôt que copié tel quel. */
+  --radius-lg: 14px;
+
+  /*
+    Système d'élévation — 3 paliers, teinté (jamais un gris/noir neutre qui
+    jurerait avec l'encre de la charte) en mode clair, noir pur en mode
+    sombre (l'ambiance y est déjà sombre, un noir pur s'y fond naturellement
+    — cohérent avec le `shadow-lg` d'Origin UI observé sur son Dialog, lui
+    aussi un noir pur). Inchangé par la refonte couleur v4 (formes/élévation
+    hors périmètre de cette passe) — la teinte `rgba(25, 16, 51, ...)` en
+    mode clair date de l'ancienne encre galaxie, conservée telle quelle.
+    `resting` : cartes qui méritent un repos élevé (grille de projets, cartes
+    Kanban, cartes de section) — jamais sur une ligne de tableau dense.
+    `hover` : état d'interaction. `overlay` : dialogs/drawers/menus
+    flottants, palier le plus fort.
+  */
+  --shadow-resting: 0 1px 2px rgba(25, 16, 51, 0.05), 0 3px 10px rgba(25, 16, 51, 0.06);
+  --shadow-hover: 0 2px 4px rgba(25, 16, 51, 0.08), 0 10px 24px rgba(25, 16, 51, 0.12);
+  --shadow-overlay: 0 12px 20px rgba(25, 16, 51, 0.14), 0 32px 64px rgba(25, 16, 51, 0.2);
+
+  --transition-fast: 0.12s ease;
+
+  /*
+    Une seule famille (Bricolage Grotesque) pour tout le texte non-donnée —
+    titres, UI, corps, tableaux — pas de rupture de personnalité entre eux.
+    IBM Plex Mono reste réservé aux données/références (voir
+    docs/charte-graphique.md > Typographie, v3).
+  */
+  --font-display: "Bricolage Grotesque Variable", -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-sans: "Bricolage Grotesque Variable", -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #241C1C;
+    --color-surface: #332828;
+    --color-surface-raised: #3D2F2F;
+    --color-border: #4A3838;
+    --color-text: #EDE3DF;
+    --color-text-muted: #B0A19D;
+    --color-text-faint: #7A6D6A;
+    --color-accent: #8F4040;
+    --color-accent-strong: #A34E4E;
+    --color-accent-contrast: #FFFFFF;
+
+    --tone-neutral-bg: #262433;
+    --tone-neutral-text: #B7BAC6;
+    --tone-positive-bg: #16301F;
+    --tone-positive-text: #8FD6A8;
+
+    --priority-basse-bg: #2C2422;
+    --priority-basse-text: #93867F;
+    --priority-moyenne-bg: #332B14;
+    --priority-moyenne-text: #C9A227;
+    --priority-haute-bg: #332212;
+    --priority-haute-text: #C2691F;
+    --priority-critique-bg: #35201A;
+    --priority-critique-text: #E8503A;
+    --tone-error-text: #E8503A;
+
+    --task-status-available-bg: #3B2626;
+    --task-status-available-text: #E0AEAE;
+    --task-status-assigned-bg: #583232;
+    --task-status-assigned-text: #EFC8C8;
+    --task-status-inprogress-bg: #8F4040;
+    --task-status-inprogress-text: #FFFFFF;
+
+    --incident-status-reported-bg: #233939;
+    --incident-status-reported-text: #A2CDCD;
+    --incident-status-inprogress-bg: #284848;
+    --incident-status-inprogress-text: #D7EAEA;
+
+    --shadow-resting: 0 1px 2px rgba(0, 0, 0, 0.3), 0 3px 10px rgba(0, 0, 0, 0.28);
+    --shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.35), 0 12px 28px rgba(0, 0, 0, 0.4);
+    --shadow-overlay: 0 16px 24px rgba(0, 0, 0, 0.45), 0 40px 72px rgba(0, 0, 0, 0.55);
+  }
+}
+
+:root[data-theme="dark"] {
+  --color-bg: #241C1C;
+  --color-surface: #332828;
+  --color-surface-raised: #3D2F2F;
+  --color-border: #4A3838;
+  --color-text: #EDE3DF;
+  --color-text-muted: #B0A19D;
+  --color-text-faint: #7A6D6A;
+  --color-accent: #8F4040;
+  --color-accent-strong: #A34E4E;
+  --color-accent-contrast: #FFFFFF;
+
+  --tone-neutral-bg: #262433;
+  --tone-neutral-text: #B7BAC6;
+  --tone-positive-bg: #16301F;
+  --tone-positive-text: #8FD6A8;
+
+  --priority-basse-bg: #2C2422;
+  --priority-basse-text: #93867F;
+  --priority-moyenne-bg: #332B14;
+  --priority-moyenne-text: #C9A227;
+  --priority-haute-bg: #332212;
+  --priority-haute-text: #C2691F;
+  --priority-critique-bg: #35201A;
+  --priority-critique-text: #E8503A;
+  --tone-error-text: #E8503A;
+
+  --task-status-available-bg: #3B2626;
+  --task-status-available-text: #E0AEAE;
+  --task-status-assigned-bg: #583232;
+  --task-status-assigned-text: #EFC8C8;
+  --task-status-inprogress-bg: #8F4040;
+  --task-status-inprogress-text: #FFFFFF;
+
+  --incident-status-reported-bg: #233939;
+  --incident-status-reported-text: #A2CDCD;
+  --incident-status-inprogress-bg: #284848;
+  --incident-status-inprogress-text: #D7EAEA;
+
+  --shadow-resting: 0 1px 2px rgba(0, 0, 0, 0.3), 0 3px 10px rgba(0, 0, 0, 0.28);
+  --shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.35), 0 12px 28px rgba(0, 0, 0, 0.4);
+  --shadow-overlay: 0 16px 24px rgba(0, 0, 0, 0.45), 0 40px 72px rgba(0, 0, 0, 0.55);
+}
+
+:root[data-theme="light"] {
+  --color-bg: #F5EFEC;
+  --color-surface: #FFFFFF;
+  --color-surface-raised: #FFFFFF;
+  --color-border: #E6DAD4;
+  --color-text: #2A2020;
+  --color-text-muted: #6B5C58;
+  --color-text-faint: #948681;
+  --color-accent: #753030;
+  --color-accent-strong: #5E2626;
+  --color-accent-contrast: #FFFFFF;
+
+  --tone-neutral-bg: #EEF0F4;
+  --tone-neutral-text: #444A58;
+  --tone-positive-bg: #E6F4EC;
+  --tone-positive-text: #2E6B45;
+
+  --priority-basse-bg: #ECE4E0;
+  --priority-basse-text: #766863;
+  --priority-moyenne-bg: #FAF0D2;
+  --priority-moyenne-text: #96790F;
+  --priority-haute-bg: #FADFC8;
+  --priority-haute-text: #A24F10;
+  --priority-critique-bg: #FBDED8;
+  --priority-critique-text: #C23D28;
+  --tone-error-text: #C23D28;
+
+  --task-status-available-bg: #F4E6E6;
+  --task-status-available-text: #762D2D;
+  --task-status-assigned-bg: #E6C7C7;
+  --task-status-assigned-text: #5F1C1C;
+  --task-status-inprogress-bg: #753030;
+  --task-status-inprogress-text: #FFFFFF;
+
+  --incident-status-reported-bg: #E7F3F3;
+  --incident-status-reported-text: #2E6363;
+  --incident-status-inprogress-bg: #CBE6E6;
+  --incident-status-inprogress-text: #194D4D;
+
+  --shadow-resting: 0 1px 2px rgba(25, 16, 51, 0.05), 0 3px 10px rgba(25, 16, 51, 0.06);
+  --shadow-hover: 0 2px 4px rgba(25, 16, 51, 0.08), 0 10px 24px rgba(25, 16, 51, 0.12);
+  --shadow-overlay: 0 12px 20px rgba(25, 16, 51, 0.14), 0 32px 64px rgba(25, 16, 51, 0.2);
+}

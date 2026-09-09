@@ -1,0 +1,75 @@
+/* Checkbox unique du site — voir docs/charte-graphique.md > "Checkbox".
+   Tout aux jetons du thème, état coché sur l'accent brique (jamais une
+   couleur hors palette). Trois tailles via --checkbox-size. */
+
+.checkbox {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  vertical-align: middle;
+  --checkbox-size: 16px;
+}
+
+.checkbox--md {
+  --checkbox-size: 20px;
+}
+
+.checkbox--lg {
+  --checkbox-size: 24px;
+}
+
+/* Input réel : couvre exactement la case, invisible mais cliquable et
+   focusable (on garde toute la sémantique native). */
+.checkbox__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.checkbox__input:disabled {
+  cursor: not-allowed;
+}
+
+.checkbox__box {
+  display: grid;
+  place-items: center;
+  width: var(--checkbox-size);
+  height: var(--checkbox-size);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: transparent;
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.checkbox__input:not(:disabled):hover + .checkbox__box {
+  border-color: var(--color-accent);
+}
+
+.checkbox__input:checked + .checkbox__box {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
+
+.checkbox__input:focus-visible + .checkbox__box {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.checkbox__input:disabled + .checkbox__box {
+  opacity: 0.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .checkbox__box {
+    transition: none;
+  }
+}

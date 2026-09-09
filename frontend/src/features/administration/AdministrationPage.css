@@ -1,0 +1,15 @@
+.administration-page__message {
+  padding: var(--space-6) 0;
+  color: var(--color-text-muted);
+}
+
+.administration-page__body {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-5);
+}
+
+.administration-page__panel {
+  flex: 1;
+  min-width: 0;
+}

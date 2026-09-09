@@ -1,0 +1,28 @@
+.completion-trend {
+  flex: 2 1 380px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-resting);
+}
+
+.completion-trend__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-4);
+}
+
+.completion-trend__header h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 14.5px;
+  color: var(--color-text);
+}
+
+.completion-trend__message {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}

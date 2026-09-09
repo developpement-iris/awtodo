@@ -1,0 +1,163 @@
+.project-create-dialog__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(36, 28, 28, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: var(--space-4);
+}
+
+.project-create-dialog {
+  width: 100%;
+  max-width: 480px;
+  max-height: calc(100vh - var(--space-6) * 2);
+  /* Item flex dans un overlay centré : sans ça, le min-height:auto par défaut
+     d'un flex item (= hauteur intrinsèque du contenu) prime sur max-height
+     quand le formulaire est plus haut que le viewport — overflow-y n'engage
+     jamais et le haut du dialog (titre, premier champ) sort de l'écran. */
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-overlay);
+}
+
+.project-create-dialog__title {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: var(--space-4);
+  text-wrap: balance;
+}
+
+.project-create-dialog__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+.project-create-dialog__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+}
+
+.project-create-dialog__field--full {
+  grid-column: 1 / -1;
+}
+
+.project-create-dialog__field input,
+.project-create-dialog__field select,
+.project-create-dialog__field textarea {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  transition: border-color 0.12s ease;
+}
+
+.project-create-dialog__field input:focus,
+.project-create-dialog__field select:focus,
+.project-create-dialog__field textarea:focus {
+  border-color: var(--color-accent);
+  outline: none;
+}
+
+.project-create-dialog__field textarea {
+  resize: vertical;
+}
+
+.project-create-dialog__member-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 140px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+}
+
+.project-create-dialog__member-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 13px;
+  color: var(--color-text);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.project-create-dialog__hint {
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+  margin-top: var(--space-3);
+}
+
+.project-create-dialog__error {
+  background: var(--priority-critique-bg);
+  color: var(--priority-critique-text);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font-size: 13px;
+  margin-top: var(--space-4);
+}
+
+.project-create-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.project-create-dialog__cancel,
+.project-create-dialog__confirm {
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.12s ease;
+}
+
+.project-create-dialog__cancel {
+  background: none;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+.project-create-dialog__cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.project-create-dialog__confirm {
+  background: var(--color-accent);
+  border: 1px solid transparent;
+  color: var(--color-accent-contrast);
+}
+
+.project-create-dialog__confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.project-create-dialog__confirm:not(:disabled):hover {
+  opacity: 0.85;
+}
+
+@media (max-width: 560px) {
+  .project-create-dialog__grid {
+    grid-template-columns: 1fr;
+  }
+}

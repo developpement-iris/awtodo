@@ -1,0 +1,293 @@
+.roadmap__error {
+  background: var(--priority-critique-bg);
+  color: var(--priority-critique-text);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font-size: 13px;
+  margin-bottom: var(--space-4);
+}
+
+.roadmap__empty {
+  color: var(--color-text-muted);
+  padding: var(--space-5) 0;
+}
+
+/*
+  Carte dédiée (voir CLAUDE.md > "Corrections UI" > "Visibilité de la
+  Roadmap") : fond `--color-surface`, plus clair que le fond de page
+  (`--color-bg`) dans les deux thèmes — même surface que les autres cartes
+  de l'app (`.project-card`), pas une teinte propre à la Roadmap.
+*/
+.roadmap__card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+}
+
+.roadmap__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.roadmap__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+}
+
+.roadmap__legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 1.5px solid transparent;
+  flex: none;
+}
+
+.roadmap__legend-swatch--basse {
+  background: color-mix(in srgb, var(--priority-basse-text) 22%, transparent);
+  border-color: var(--priority-basse-text);
+}
+
+.roadmap__legend-swatch--moyenne {
+  background: color-mix(in srgb, var(--priority-moyenne-text) 22%, transparent);
+  border-color: var(--priority-moyenne-text);
+}
+
+.roadmap__legend-swatch--haute {
+  background: color-mix(in srgb, var(--priority-haute-text) 22%, transparent);
+  border-color: var(--priority-haute-text);
+}
+
+.roadmap__legend-swatch--critique {
+  background: color-mix(in srgb, var(--priority-critique-text) 22%, transparent);
+  border-color: var(--priority-critique-text);
+}
+
+.roadmap__scroll {
+  overflow-x: auto;
+  padding-bottom: var(--space-2);
+}
+
+.roadmap__timeline {
+  min-width: 720px;
+  display: flex;
+  flex-direction: column;
+}
+
+.roadmap__axis-row,
+.roadmap__row {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.roadmap__axis-row {
+  height: 32px;
+  margin-bottom: var(--space-2);
+}
+
+.roadmap__axis {
+  position: relative;
+  height: 100%;
+}
+
+.roadmap__gridline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px dashed var(--color-text-muted);
+  padding-left: var(--space-2);
+}
+
+.roadmap__gridline span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.roadmap__today {
+  position: absolute;
+  top: 0;
+  bottom: -4px;
+  border-left: 2px solid var(--color-accent);
+}
+
+.roadmap__today span {
+  position: absolute;
+  top: -1px;
+  left: var(--space-1);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-accent);
+  white-space: nowrap;
+}
+
+.roadmap__row {
+  height: 44px;
+}
+
+.roadmap__row-label {
+  font-size: 13px;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.roadmap__row-track {
+  position: relative;
+  height: 100%;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.roadmap__row-gridline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px dashed var(--color-border);
+  opacity: 0.5;
+}
+
+.roadmap__segment {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  min-width: 24px;
+  height: 20px;
+  border-radius: 999px;
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--space-1);
+  transition: box-shadow 0.12s ease, transform 0.12s ease;
+}
+
+.roadmap__segment:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(calc(-50% - 1px));
+}
+
+/*
+  Fond teinté clair (mélange translucide de la couleur de priorité, pas un
+  aplat opaque) + bordure/icône en couleur de priorité pleine — corrigé
+  suite au constat "segments peu contrastés" : la paire bg/text des badges
+  (voir tokens.css) est pensée pour du texte sur fond plein, pas pour un
+  remplissage de grande surface — en mode sombre, `--priority-*-bg` est
+  lui-même sombre et se fond dans le fond de page. `color-mix` avec la
+  teinte "text" (vive dans les deux thèmes) donne un fond qui reste
+  visiblement teinté quel que soit le thème, jamais un aplat sombre uni.
+*/
+.roadmap__segment--basse {
+  background: color-mix(in srgb, var(--priority-basse-text) 22%, transparent);
+  border-color: var(--priority-basse-text);
+  color: var(--priority-basse-text);
+}
+
+.roadmap__segment--moyenne {
+  background: color-mix(in srgb, var(--priority-moyenne-text) 22%, transparent);
+  border-color: var(--priority-moyenne-text);
+  color: var(--priority-moyenne-text);
+}
+
+.roadmap__segment--haute {
+  background: color-mix(in srgb, var(--priority-haute-text) 22%, transparent);
+  border-color: var(--priority-haute-text);
+  color: var(--priority-haute-text);
+}
+
+.roadmap__segment--critique {
+  background: color-mix(in srgb, var(--priority-critique-text) 22%, transparent);
+  border-color: var(--priority-critique-text);
+  color: var(--priority-critique-text);
+}
+
+.roadmap__late-icon {
+  flex: none;
+}
+
+.roadmap__no-deadline {
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.roadmap__no-deadline-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  margin: 0 0 var(--space-3);
+}
+
+.roadmap__no-deadline-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.roadmap__no-deadline-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.roadmap__no-deadline-item:hover {
+  border-color: var(--color-border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.roadmap__priority-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.roadmap__priority-dot--basse {
+  background: var(--priority-basse-text);
+}
+
+.roadmap__priority-dot--moyenne {
+  background: var(--priority-moyenne-text);
+}
+
+.roadmap__priority-dot--haute {
+  background: var(--priority-haute-text);
+}
+
+.roadmap__priority-dot--critique {
+  background: var(--priority-critique-text);
+}
+
+@media (max-width: 700px) {
+  .roadmap__axis-row,
+  .roadmap__row {
+    grid-template-columns: 140px 1fr;
+  }
+}

@@ -1,0 +1,404 @@
+/*
+  Page de connexion — panneau oblique (session du 10/08/2026), reprise de
+  `maquette-login-oblique.html`. Écran figé volontairement en clair, pas
+  d'adaptation au thème sombre de l'app (le `ThemeToggle` n'apparaît pas sur
+  cet écran) — c'est un moment de marque, pas un écran de travail au long
+  cours, cohérent avec l'esprit de la maquette (une seule palette assumée).
+  Conformément à la consigne : les couleurs de la maquette sont reprises
+  telles quelles (pas remappées sur les tokens `theme/tokens.css`, qui
+  suivent le thème) ; seules les polices sont ramenées sur le système de
+  typographie du projet (`--font-display`/`--font-mono`, déjà auto-hébergées
+  via `theme/tokens.css`, pas de rechargement Google Fonts). Voir
+  docs/charte-graphique.md > "Page de connexion — panneau oblique".
+*/
+.login-page {
+  --login-accent: #8f4040;
+  --login-accent-strong: #a34e4e;
+  --login-cream: #f5e7e3;
+  --login-beige: #f5efec;
+  --login-beige-card: #ffffff;
+  --login-beige-border: #e6dad4;
+  --login-ink: #2a2020;
+  --login-ink-muted: #6b5c58;
+  --login-seam: #c2691f;
+  --login-error: #c23d28;
+
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--login-beige);
+  font-family: var(--font-sans);
+}
+
+.login-page__panel-left {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(150deg, var(--login-accent-strong) 0%, var(--login-accent) 55%, #6e2f2f 100%);
+  clip-path: polygon(0 0, 39% 0, 31% 100%, 0 100%);
+}
+
+.login-page__panel-seam {
+  position: absolute;
+  inset: 0;
+  background: var(--login-seam);
+  clip-path: polygon(39% 0, 41.6% 0, 33.6% 100%, 31% 100%);
+}
+
+.login-page__panel-right {
+  position: absolute;
+  inset: 0;
+  background: var(--login-beige);
+  clip-path: polygon(41.6% 0, 100% 0, 100% 100%, 33.6% 100%);
+}
+
+.login-page__brand {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 30%;
+  height: 100%;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  padding: 0 var(--space-5);
+}
+
+.login-page__signature-svg {
+  width: min(26vw, 260px);
+  height: auto;
+  overflow: visible;
+}
+
+.login-page__signature-path {
+  fill: none;
+  stroke: var(--login-cream);
+  stroke-width: 110;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.login-page__signature-dot {
+  fill: var(--login-cream);
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.login-page__signature-dot--jump {
+  animation: login-signature-dot-jump 0.62s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes login-signature-dot-jump {
+  0% {
+    opacity: 0;
+    transform: translateY(-190px) scale(0.6);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(14px) scale(1.05);
+  }
+  75% {
+    transform: translateY(-8px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.login-page__tagline {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--login-cream);
+  text-align: center;
+  max-width: 260px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.login-page__stage {
+  position: absolute;
+  top: 0;
+  left: 40%;
+  width: 60%;
+  height: 100%;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  overflow-y: auto;
+  padding: var(--space-6) 0;
+}
+
+.login-page__card {
+  width: 100%;
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.login-page__card-title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 26px;
+  letter-spacing: -0.01em;
+  color: var(--login-ink);
+  margin: 0 0 6px;
+}
+
+.login-page__card-subtitle {
+  font-size: 13.5px;
+  color: var(--login-ink-muted);
+  margin: 0 0 var(--space-6);
+}
+
+.login-page__error {
+  font-size: 13px;
+  color: var(--login-error);
+  margin: 0 0 var(--space-2);
+}
+
+.login-page__field {
+  display: block;
+  margin-bottom: var(--space-4);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--login-ink-muted);
+}
+
+.login-page__field span {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.login-page__field input {
+  width: 100%;
+  padding: 11px var(--space-4);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--login-beige-border);
+  background: var(--login-beige-card);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--login-ink);
+}
+
+.login-page__field input:focus {
+  outline: none;
+  border-color: var(--login-accent);
+  box-shadow: 0 0 0 3px rgba(143, 64, 64, 0.12);
+}
+
+.login-page__submit {
+  width: 100%;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  border: none;
+  background: var(--login-accent);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  margin-top: 6px;
+  transition: background-color 0.12s ease;
+}
+
+.login-page__submit:hover:not(:disabled) {
+  background: var(--login-accent-strong);
+}
+
+.login-page__submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login-page__divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-5) 0;
+  color: var(--login-ink-muted);
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+.login-page__divider::before,
+.login-page__divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--login-beige-border);
+}
+
+.login-page__sso {
+  width: 100%;
+  padding: 11px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--login-beige-border);
+  background: var(--login-beige-card);
+  color: var(--login-ink);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  transition: background-color 0.12s ease;
+}
+
+.login-page__sso:hover {
+  background: var(--login-beige);
+}
+
+.login-page__sso-logo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  width: 15px;
+  height: 15px;
+  gap: 1.5px;
+  flex: none;
+}
+
+/* Couleurs officielles du logo Microsoft — identité tierce, jamais rapprochée
+   de la palette Awtodo, pas concernée par la consigne "reste en l'état"
+   puisqu'il n'y a rien à décider ici. */
+.login-page__sso-logo span:nth-child(1) {
+  background: #f35325;
+}
+.login-page__sso-logo span:nth-child(2) {
+  background: #81bc06;
+}
+.login-page__sso-logo span:nth-child(3) {
+  background: #05a6f0;
+}
+.login-page__sso-logo span:nth-child(4) {
+  background: #ffba08;
+}
+
+.login-page__cancel {
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--login-ink-muted);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  cursor: pointer;
+  padding: var(--space-2) 0 0;
+  text-align: center;
+}
+
+.login-page__cancel:hover:not(:disabled) {
+  color: var(--login-ink);
+}
+
+.login-page__hint {
+  font-size: 12px;
+  color: var(--login-ink-muted);
+  text-align: center;
+  margin: var(--space-4) 0 0;
+}
+
+.login-page__demo {
+  width: 100%;
+  max-width: 340px;
+  background: var(--login-beige-card);
+  border: 1px solid var(--login-beige-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+.login-page__demo-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--login-ink-muted);
+  margin: 0 0 var(--space-2);
+}
+
+.login-page__demo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.login-page__demo-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: var(--login-ink);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.12s ease;
+}
+
+.login-page__demo-option:hover {
+  background: var(--login-beige);
+}
+
+.login-page__demo-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--login-accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  flex: none;
+}
+
+/* En dessous de 720px (même palier que le reste de l'app, voir HomePage/
+   TaskAccordion/SpecTab) : le fractionnement oblique devient illisible sur
+   une colonne étroite (bandeau gauche écrasé, texte qui casse mal) — repli
+   en simple empilement vertical, panneaux/signature masqués. */
+@media (max-width: 720px) {
+  .login-page {
+    height: auto;
+    min-height: 100vh;
+    overflow-y: auto;
+  }
+
+  .login-page__panel-left,
+  .login-page__panel-seam,
+  .login-page__brand {
+    display: none;
+  }
+
+  .login-page__panel-right {
+    clip-path: none;
+  }
+
+  .login-page__stage {
+    position: static;
+    width: 100%;
+    height: auto;
+    padding: var(--space-7) var(--space-5);
+  }
+}

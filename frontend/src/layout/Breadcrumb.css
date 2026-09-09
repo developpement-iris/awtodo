@@ -1,0 +1,64 @@
+/*
+  Fil d'Ariane contextuel — nouveau (session du 10/08/2026), adapté du
+  template `watodo-header-final.html`, voir docs/charte-graphique.md >
+  "Header — logo et recherche centrée". Absent sur l'accueil (items vide,
+  voir Breadcrumb.tsx).
+*/
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-6);
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+  overflow-x: auto;
+}
+
+.breadcrumb__segment {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+}
+
+.breadcrumb__sep {
+  color: var(--color-text-faint);
+  font-weight: 300;
+}
+
+.breadcrumb__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-family: var(--font-sans);
+  font-size: inherit;
+  color: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.breadcrumb__item:hover {
+  background: var(--tone-neutral-bg);
+  color: var(--color-text);
+}
+
+.breadcrumb__item--active {
+  color: var(--color-accent);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+  cursor: default;
+}
+
+@media (max-width: 720px) {
+  .breadcrumb {
+    padding: var(--space-2) var(--space-4);
+    font-size: 12px;
+  }
+}

@@ -1,0 +1,103 @@
+.invitations-section__message {
+  padding: var(--space-4) 0;
+  color: var(--color-text-muted);
+}
+
+.invitations-section__message--error {
+  color: var(--tone-error-text);
+}
+
+.invitations-section__form {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin-bottom: var(--space-5);
+  box-shadow: var(--shadow-resting);
+}
+
+.invitations-section__form h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: var(--space-3);
+}
+
+.invitations-section__form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.invitations-section__form-row input,
+.invitations-section__form-row select {
+  flex: 1;
+  min-width: 140px;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+}
+
+.invitations-section__form-row button {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.invitations-section__form-row button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.invitations-section__table {
+  width: 100%;
+  border-top: 1px solid var(--color-border);
+}
+
+.invitations-section__table th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.invitations-section__table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  font-size: 14px;
+}
+
+.invitations-section__actions {
+  text-align: right;
+}
+
+.invitations-section__actions button {
+  background: var(--tone-neutral-bg);
+  color: var(--tone-neutral-text);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.invitations-section__actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

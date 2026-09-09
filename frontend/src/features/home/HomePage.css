@@ -1,0 +1,491 @@
+/*
+  Écran d'accueil v3 — panneau oblique (session du 10/08/2026), reprise de
+  `maquette-accueil-v3-oblique.html` (fournie comme base à peaufiner, pas un
+  gabarit final — voir docs/charte-graphique.md > "Écran d'accueil — panneau
+  oblique" pour le détail des écarts). Écran plein viewport, sans chrome
+  d'application (Topbar/BinderTabs) — même traitement que LoginPage, voir
+  App.tsx. Contrairement à LoginPage, cet écran RESTE thémé (suit
+  clair/sombre via les tokens réels) : aucune consigne "garde les couleurs
+  telles quelles" n'a été donnée ici, et c'est l'écran le plus visité de
+  l'app, pas un aller simple comme la connexion.
+*/
+.home-page {
+  --home-seam: #c2691f;
+
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--color-bg);
+  font-family: var(--font-sans);
+  color: var(--color-text);
+}
+
+/* ─── Calques de fond : diagonale, reprise du panneau de LoginPage ───
+   Panneau gauche élargi (retour direct, session du 11/08/2026) : bord
+   intérieur 51%→43% (delta 8, pente inchangée), pour que `.home-page__content-left`
+   (40% de large, voir plus bas) reste toujours contenu avec une marge de
+   sécurité de 3pt même à son point le plus étroit (le bas de l'écran, 43%).
+   `.home-page__bg-seam` garde la même largeur de bande (2.6pt) qu'avant,
+   juste translatée d'autant. **Écart volontaire par rapport à LoginPage**,
+   qui garde ses valeurs d'origine (39%/31%) — pas demandé pour cet écran,
+   voir docs/charte-graphique.md. `OBLIQUE_OUTER_TOP`/`OBLIQUE_SLOPE` dans
+   HomePage.tsx doivent rester synchronisés avec le bord extérieur ci-dessous
+   (53.6%) si ces valeurs bougent encore. */
+
+.home-page__bg-left {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: linear-gradient(
+    150deg,
+    var(--color-accent-strong) 0%,
+    var(--color-accent) 55%,
+    color-mix(in srgb, var(--color-accent-strong) 75%, black 25%) 100%
+  );
+  clip-path: polygon(0 0, 51% 0, 43% 100%, 0 100%);
+}
+
+.home-page__bg-seam {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  /* Teinte décorative pure, jamais un jeton sémantique — l'ambre d'origine
+     recoupe par coïncidence `--priority-haute-text`, le réutiliser ici
+     casserait "une couleur = un seul axe de sens". Constante entre les deux
+     thèmes par choix, comme `--sidebar-bg` ailleurs dans l'app (accent fixe,
+     faible poids visuel, pas besoin de suivre le thème). */
+  background: var(--home-seam);
+  clip-path: polygon(51% 0, 53.6% 0, 45.6% 100%, 43% 100%);
+}
+
+.home-page__bg-right {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: var(--color-bg);
+  clip-path: polygon(53.6% 0, 100% 0, 100% 100%, 45.6% 100%);
+}
+
+/* ─── Déconnexion ─── */
+
+.home-page__logout {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.home-page__logout:hover {
+  background: var(--tone-neutral-bg);
+}
+
+/* ─── Salutation dactylo ─── */
+
+.home-page__greeting-wrap {
+  position: absolute;
+  top: var(--space-6);
+  /* Centrée sur la zone de droite uniquement (pas sur 0→100%) — le panneau
+     gauche fait maintenant 40% (voir .home-page__content-left et le bloc
+     "Calques de fond" plus haut) : un centrage pleine largeur retombait trop
+     près de la diagonale, voire dessus (retour direct). 56% dépasse
+     confortablement le point le plus large du calque oblique (53.6%, le
+     sommet de `bg-seam` — voir `OBLIQUE_OUTER_TOP` dans HomePage.tsx). */
+  left: 56%;
+  right: 0;
+  z-index: 4;
+  text-align: center;
+  padding: 0 var(--space-7);
+}
+
+.home-page__greeting {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 22px;
+  color: var(--color-text);
+}
+
+.home-page__greeting-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 19px;
+  margin-left: 3px;
+  background: var(--color-text);
+  vertical-align: -3px;
+  animation: home-page-cursor-blink 1s step-end infinite;
+}
+
+@keyframes home-page-cursor-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-page__greeting-cursor {
+    animation: none;
+  }
+}
+
+/* ─── Backlog — carte "post-it" incorporée au panneau oblique ─── */
+
+.home-page__content-left {
+  position: absolute;
+  top: 0;
+  left: 0;
+  /* 40% (retour direct, session du 11/08/2026 — auparavant 30%) : voir la
+     note sur `.home-page__bg-left` plus haut pour la marge de sécurité
+     conservée par rapport au bord du dégradé. */
+  width: 40%;
+  height: 100%;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  padding: 0 var(--space-6);
+}
+
+.home-page__brand-logo {
+  height: 38px;
+  width: auto;
+}
+
+.home-page__lead {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--sidebar-muted);
+  text-align: center;
+}
+
+.home-page__postit {
+  position: relative;
+  width: 100%;
+  /* Fond translucide teinté crème plutôt qu'un aplat neutre opaque posé
+     par-dessus le dégradé — la carte se lit comme une facette du panneau
+     oblique, pas comme un autocollant appliqué dessus. */
+  background: color-mix(in srgb, var(--sidebar-text) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--sidebar-text) 22%, transparent);
+  border-radius: 3px 16px 16px 16px;
+  transform: rotate(-1.4deg);
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.4);
+  padding: var(--space-6) var(--space-6) var(--space-7);
+}
+
+.home-page__postit::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 0 18px 18px;
+  border-color: transparent transparent rgba(0, 0, 0, 0.3) transparent;
+  border-bottom-right-radius: 14px;
+}
+
+.home-page__postit-title {
+  margin: 0 0 var(--space-4);
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  /* Crème, pas `--color-text` : cette carte vit sur le dégradé de marque
+     fixe, pas sur le fond thémé de la page — même famille que
+     `--sidebar-text`/`--sidebar-muted` ailleurs dans l'app. */
+  color: var(--sidebar-text);
+}
+
+.home-page__postit-note {
+  font-size: 14px;
+  color: var(--sidebar-muted);
+}
+
+.home-page__postit-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.home-page__postit-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.home-page__postit-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  background: none;
+  border: none;
+  border-bottom: 1px dashed color-mix(in srgb, var(--sidebar-text) 25%, transparent);
+  padding: var(--space-3) 2px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: opacity 0.12s ease;
+}
+
+.home-page__postit-list li:last-child .home-page__postit-item {
+  border-bottom: none;
+}
+
+.home-page__postit-item:hover {
+  opacity: 0.75;
+}
+
+.home-page__postit-item-title {
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--sidebar-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── Récap statistique — sous le post-it, même famille crème (posé sur le
+   même dégradé de marque) ─── */
+
+.home-page__stats-row {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.home-page__stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+}
+
+.home-page__stat-value {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--sidebar-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.home-page__stat-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--sidebar-muted);
+}
+
+/* ─── Accès rapide — onglets qui dépassent de la diagonale ─── */
+
+.home-page__content-right {
+  position: absolute;
+  inset: 0;
+  /* Sous les calques obliques (z-index 2) : chaque onglet doit disparaître
+     sous la barre/le panneau là où il la croise, comme s'il en sortait par
+     en dessous, plutôt que de flotter par-dessus. */
+  z-index: 1;
+}
+
+.home-page__tab {
+  position: absolute;
+  /* Plus longs et plus épais qu'à l'origine (retours directs successifs) :
+     largeur et padding augmentés, la hauteur suit naturellement (pas de
+     valeur fixe) du fait du texte plus grand et de la ligne de descriptif en
+     plus. Voir aussi `tabPosition` (HomePage.tsx) — la largeur ne suffisait
+     pas tant que la position grignotait une partie de la carte en trop.
+     400px (retour direct, "bien plus large pour mieux occuper l'espace
+     disponible", session du 11/08/2026) : reste confortable même sur les
+     écrans les plus étroits couverts par ce layout (au-delà de 720px, où le
+     panneau droit — voir bg-right — laisse encore plusieurs centaines de
+     pixels de marge). */
+  width: 400px;
+  /* Même variante neutre teintée que l'ancienne rangée d'onglets "classeur"
+     (voir historique CLAUDE.md > "Onglets classeur") — pas les couleurs
+     distinctes par onglet de la maquette de référence, qui réintroduiraient
+     une "teinte arbitraire par onglet" déjà écartée lors de cette passe. */
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface-raised));
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-left: none;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  /* Padding gauche nettement plus généreux que les autres côtés : le nom du
+     menu doit respirer par rapport au bord tucked sous la diagonale, pas
+     démarrer collé dessus (retour direct). DOIT rester strictement supérieur
+     à `TAB_OVERLAP_PX` (48px, HomePage.tsx) — sinon l'icône/le texte
+     démarrent encore dans la zone cachée sous le calque oblique (bug trouvé
+     après coup : `var(--space-6)`, 32px, était resté sous les 48px du
+     chevauchement une fois celui-ci relevé, l'icône restait donc en partie
+     dissimulée). `calc(var(--space-7) + var(--space-2))` = 56px, 8px de
+     marge au-delà des 48px. */
+  padding: var(--space-4) var(--space-5) var(--space-4) calc(var(--space-7) + var(--space-2));
+  box-shadow: -4px 0 14px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.home-page__tab:hover {
+  /* `translateX` de retour (retour direct, session du 11/08/2026) — mais
+     STRICTEMENT plus petit que `TAB_OVERLAP_PX` (48px, HomePage.tsx), avec
+     une marge confortable : ce décalage ne doit jamais faire apparaître le
+     coin carré de la carte (`border-left: none`, pas de radius de ce côté)
+     hors du calque oblique. Voir le commentaire sur `TAB_OVERLAP_PX` pour le
+     détail du calcul (pente de la diagonale sur la hauteur d'une carte +
+     marge de ce décalage, toutes deux couvertes par les 48px de repos). */
+  transform: translateX(14px);
+  box-shadow: -6px 0 20px rgba(0, 0, 0, 0.3);
+}
+
+.home-page__tab--incident {
+  background: var(--incident-status-inprogress-bg);
+  color: var(--incident-status-inprogress-text);
+}
+
+.home-page__tab-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: 4px;
+}
+
+.home-page__tab-name {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.home-page__tab-meta {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-accent);
+  margin-left: calc(19px + var(--space-2));
+  margin-bottom: 2px;
+}
+
+.home-page__tab--incident .home-page__tab-meta {
+  color: inherit;
+}
+
+.home-page__tab-desc {
+  display: block;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-text-muted);
+  margin-left: calc(19px + var(--space-2));
+}
+
+.home-page__tab--incident .home-page__tab-desc {
+  color: inherit;
+  opacity: 0.85;
+}
+
+/* ─── En dessous de 720px (même palier que HomePage/TaskAccordion/SpecTab
+   avant cette passe) : le fractionnement oblique devient illisible sur une
+   colonne étroite — repli en empilement vertical simple, panneaux masqués,
+   post-it et onglets repassent en traitement thémé normal (ils ne vivent
+   plus sur le dégradé de marque). ─── */
+@media (max-width: 720px) {
+  .home-page {
+    height: auto;
+    min-height: 100vh;
+    overflow-y: auto;
+  }
+
+  .home-page__bg-left,
+  .home-page__bg-seam {
+    display: none;
+  }
+
+  .home-page__bg-right {
+    clip-path: none;
+  }
+
+  .home-page__greeting-wrap {
+    position: static;
+    padding: var(--space-5) var(--space-5) 0;
+  }
+
+  .home-page__content-left {
+    position: static;
+    width: 100%;
+    padding: var(--space-5) var(--space-5) 0;
+  }
+
+  .home-page__postit {
+    transform: none;
+    background: var(--color-surface-raised);
+    border-color: var(--color-border);
+  }
+
+  .home-page__postit-title,
+  .home-page__postit-item-title {
+    color: var(--color-text);
+  }
+
+  .home-page__postit-note {
+    color: var(--color-text-muted);
+  }
+
+  .home-page__postit-item {
+    border-bottom-color: var(--color-border);
+  }
+
+  .home-page__stat-value {
+    color: var(--color-text);
+  }
+
+  .home-page__stat-label,
+  .home-page__lead {
+    color: var(--color-text-muted);
+  }
+
+  /* Le logo (crème, pensé pour le dégradé de marque fixe) perd son fond
+     dégradé sous ce palier — même traitement "chip" que `.topbar__brand`
+     pour rester lisible sur le fond thémé (clair en mode jour). */
+  .home-page__brand-logo {
+    height: 22px;
+    background: var(--sidebar-bg);
+    border-radius: var(--radius-sm);
+    padding: 6px 10px;
+    box-sizing: content-box;
+  }
+
+  .home-page__content-right {
+    position: static;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-5);
+  }
+
+  .home-page__tab {
+    position: static;
+    width: 100%;
+    border-radius: var(--radius-md);
+    border-left: 1px solid var(--color-border);
+    box-shadow: none;
+  }
+}

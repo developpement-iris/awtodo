@@ -1,0 +1,117 @@
+.command-palette__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(36, 28, 28, 0.45);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  z-index: 80;
+}
+
+.command-palette__panel {
+  width: 100%;
+  max-width: 560px;
+  max-height: min(480px, 70vh);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-overlay);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.command-palette__panel [cmdk-root] {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.command-palette__input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+  flex: none;
+}
+
+.command-palette__search-icon {
+  color: var(--color-text-muted);
+  flex: none;
+}
+
+.command-palette__input {
+  flex: 1;
+  border: none;
+  background: none;
+  outline: none;
+  font-family: var(--font-sans);
+  font-size: 14.5px;
+  color: var(--color-text);
+}
+
+.command-palette__input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.command-palette__list {
+  overflow-y: auto;
+  padding: var(--space-2);
+}
+
+.command-palette__empty {
+  padding: var(--space-5);
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--color-text-muted);
+}
+
+.command-palette__group [cmdk-group-heading] {
+  padding: var(--space-3) var(--space-3) var(--space-1);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.command-palette__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.command-palette__item svg {
+  flex: none;
+  color: var(--color-text-muted);
+}
+
+.command-palette__item[data-selected="true"] {
+  background: var(--tone-neutral-bg);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .command-palette__panel {
+    animation: command-palette-in 0.12s ease;
+  }
+}
+
+@keyframes command-palette-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

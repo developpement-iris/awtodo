@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Watodo — Exploration brique/brun</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  [data-theme="dark"] {
+    --bg: #241C1C; --surface: #332828; --surface-raised: #3D2F2F; --border: #4A3838;
+    --ink: #EDE3DF; --ink-muted: #B0A19D; --ink-faint: #7A6D6A;
+    --accent: #8F4040; --accent-strong: #A34E4E; --accent-contrast: #FFFFFF;
+    --sidebar-bg: #753030; --sidebar-text: #F5E7E3; --sidebar-muted: #D6ADA8; --sidebar-active: #FFFFFF;
+    --sidebar-active-bg: rgba(255,255,255,0.14);
+    --shadow: rgba(20,12,12,.4);
+    --pr-basse: #93867F; --pr-basse-bg: #2C2422;
+    --pr-moyenne: #C9A227; --pr-moyenne-bg: #332B14;
+    --pr-haute: #C2691F; --pr-haute-bg: #332212;
+    --pr-critique: #E8503A; --pr-critique-bg: #35201A;
+  }
+  [data-theme="light"] {
+    --bg: #F5EFEC; --surface: #FFFFFF; --surface-raised: #FFFFFF; --border: #E6DAD4;
+    --ink: #2A2020; --ink-muted: #6B5C58; --ink-faint: #948681;
+    --accent: #753030; --accent-strong: #5E2626; --accent-contrast: #FFFFFF;
+    --sidebar-bg: #753030; --sidebar-text: #F5E7E3; --sidebar-muted: #D6ADA8; --sidebar-active: #FFFFFF;
+    --sidebar-active-bg: rgba(255,255,255,0.14);
+    --shadow: rgba(60,40,35,.18);
+    --pr-basse: #766863; --pr-basse-bg: #ECE4E0;
+    --pr-moyenne: #96790F; --pr-moyenne-bg: #FAF0D2;
+    --pr-haute: #A24F10; --pr-haute-bg: #FADFC8;
+    --pr-critique: #C23D28; --pr-critique-bg: #FBDED8;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Bricolage Grotesque', sans-serif; background: var(--bg); color: var(--ink); transition: background .2s, color .2s; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+  .shell { display: flex; min-height: 100vh; }
+  .sidebar { width: 210px; flex: none; background: var(--sidebar-bg); color: var(--sidebar-text); padding: 18px 12px; }
+  .sidebar .brand { font-weight: 800; font-size: 18px; padding: 6px 10px 20px; letter-spacing: -0.01em; color:#fff; }
+  .sidebar .item { display:flex; align-items:center; gap:9px; font-size: 13px; font-weight: 600; color: var(--sidebar-muted); padding: 9px 11px; border-radius: 7px; margin-bottom: 2px; cursor:pointer; }
+  .sidebar .item.active { color: var(--sidebar-active); background: var(--sidebar-active-bg); }
+  .sidebar .item svg { flex:none; }
+
+  .main { flex: 1; padding: 26px 34px 60px; }
+  .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom: 26px; }
+  .page-title { font-size: 24px; font-weight: 800; letter-spacing: -0.015em; margin:0; }
+  .toggle-btn { font-family:'IBM Plex Mono',monospace; font-size:11px; background:var(--surface); border:1px solid var(--border); color:var(--ink-muted); padding:7px 13px; border-radius:7px; cursor:pointer; }
+
+  .section-label { font-family:'IBM Plex Mono',monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-faint); margin: 28px 0 12px; }
+  .section-label:first-of-type{margin-top:0;}
+
+  .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(210px,1fr)); gap: 14px; }
+  .card { background: var(--surface); border:1px solid var(--border); border-radius: 12px; padding: 16px; transition: box-shadow .15s ease, transform .15s ease; }
+  .card:hover { box-shadow: 0 8px 22px var(--shadow); transform: translateY(-2px); }
+  .card h3 { margin:0 0 4px; font-size:15px; font-weight:700; }
+  .card p { margin:0 0 10px; font-size:12.5px; color:var(--ink-muted); }
+  .badges { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;}
+  .badge { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; }
+  .progress { height:5px; border-radius:3px; background:var(--border); overflow:hidden; }
+  .progress b { display:block; height:100%; background:var(--accent); width:38%; }
+  .create-card { border:1.5px dashed var(--border); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; color:var(--ink-faint); font-weight:700; font-size:13px; cursor:pointer; min-height:104px; }
+  .create-card:hover { border-color:var(--accent); color:var(--accent); box-shadow:none; transform:none; }
+
+  .btn-row{ display:flex; gap:10px; margin-bottom:8px;}
+  .btn{ font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:12px; padding:9px 16px; border-radius:8px; cursor:pointer; border:1px solid transparent;}
+  .btn-primary{ background:var(--accent); color:var(--accent-contrast);}
+  .btn-primary:hover{ background:var(--accent-strong);}
+  .btn-ghost{ background:transparent; border-color:var(--border); color:var(--ink-muted);}
+
+  .kanban { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+  .col { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:12px; min-height:130px;}
+  .col-head { font-family:'IBM Plex Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-faint); margin-bottom:10px; display:flex; justify-content:space-between;}
+  .kcard { background:var(--surface-raised); border:1px solid var(--border); border-radius:9px; padding:10px 11px; margin-bottom:8px; transition: box-shadow .15s, transform .15s;}
+  .kcard:hover{ box-shadow:0 6px 16px var(--shadow); transform:translateY(-1px);}
+  .kcard .t{font-size:12.5px; font-weight:600; margin-bottom:7px;}
+
+  .type-badge{ display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600; color:var(--ink-muted);}
+
+  .legend{ margin-top:26px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-muted); background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 16px;}
+  .legend b{color:var(--ink);}
+</style>
+</head>
+<body data-theme="dark">
+<div class="shell">
+  <div class="sidebar">
+    <div class="brand">Watodo</div>
+    <div class="item active">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>
+      Projets
+    </div>
+    <div class="item">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      Tâches
+    </div>
+    <div class="item">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4M12 17h.01"/></svg>
+      Incidents
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <h1 class="page-title">Refonte Intranet</h1>
+      <button class="toggle-btn" id="toggle">◐ MODE CLAIR</button>
+    </div>
+
+    <div class="section-label">Projets</div>
+    <div class="grid">
+      <div class="card">
+        <h3>Refonte Intranet</h3>
+        <p>Modernisation du portail interne</p>
+        <div class="badges">
+          <span class="badge" style="background:var(--surface-raised); color:var(--ink-muted); border:1px solid var(--border);">Collaboratif</span>
+          <span class="badge" style="background:var(--pr-haute-bg); color:var(--pr-haute);">Haute</span>
+        </div>
+        <div class="progress"><b></b></div>
+      </div>
+      <div class="create-card">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        Nouveau projet
+      </div>
+    </div>
+
+    <div class="section-label">Boutons</div>
+    <div class="btn-row">
+      <button class="btn btn-primary">Créer une tâche</button>
+      <button class="btn btn-ghost">Filtrer</button>
+    </div>
+
+    <div class="section-label">Tâches — Kanban</div>
+    <div class="kanban">
+      <div class="col"><div class="col-head">En attente <span>0</span></div></div>
+      <div class="col">
+        <div class="col-head">Disponible <span>1</span></div>
+        <div class="kcard">
+          <div class="t">Corriger le bug de connexion SSO</div>
+          <span class="type-badge">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m14.7 6.3 3 3L21 6l-3-3-3.3 3.3ZM3 21l6-1 8.5-8.5-5-5L4 15l-1 6Z"/></svg>
+          </span>
+          <span class="badge" style="background:var(--pr-critique-bg); color:var(--pr-critique); margin-left:4px;">Critique</span>
+        </div>
+      </div>
+      <div class="col"><div class="col-head">Assignée <span>0</span></div></div>
+      <div class="col">
+        <div class="col-head">En cours <span>1</span></div>
+        <div class="kcard">
+          <div class="t">Maquettes de la page accueil</div>
+          <span class="badge" style="background:var(--pr-haute-bg); color:var(--pr-haute);">Haute</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <b>Palette :</b> fond/surfaces ancrés sur <b>#332828</b>, marque/sidebar sur <b>#753030</b> tels quels — pas de rouge ni de noir purs nulle part. "Critique" reste dans la même famille chaude mais nettement plus saturé (<b>#E8503A</b>) que le rouge de marque volontairement sourd — le contraste vient de l'intensité, pas d'un changement de teinte comme dans l'exploration précédente.
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById('toggle').addEventListener('click', () => {
+    const isDark = document.body.getAttribute('data-theme') === 'dark';
+    document.body.setAttribute('data-theme', isDark ? 'light' : 'dark');
+    document.getElementById('toggle').textContent = isDark ? '◑ MODE SOMBRE' : '◐ MODE CLAIR';
+  });
+</script>
+</body>
+</html>

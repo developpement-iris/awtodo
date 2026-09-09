@@ -1,0 +1,191 @@
+.incidents-page__inbox {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  /* Même palier que le bandeau "Backlog" de l'accueil : un bloc éditorial à
+     part, pas une simple variante du tableau principal en dessous. */
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  margin-bottom: var(--space-6);
+  box-shadow: var(--shadow-resting);
+}
+
+.incidents-page__inbox .incidents-page__table {
+  border-top: none;
+  margin-top: var(--space-3);
+}
+
+.incidents-page__inbox-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.incidents-page__inbox-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 var(--space-2);
+  border-radius: 999px;
+  background: var(--tone-neutral-bg);
+  color: var(--tone-neutral-text);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.incidents-page__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.incidents-page__filter-label {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.incidents-page__filter-select {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+}
+
+.incidents-page__create {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+  background: none;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.incidents-page__create:hover {
+  color: var(--incident-status-reported-text);
+  border-color: var(--incident-status-reported-text);
+}
+
+.incidents-page__table {
+  width: 100%;
+  border-top: 2px solid var(--incident-status-reported-text);
+}
+
+.incidents-page__table th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--incident-status-reported-text);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.incidents-page__table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+  font-size: 14px;
+}
+
+.incidents-page__ref {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+}
+
+.incidents-page__table tbody tr {
+  transition: background-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.incidents-page__row--clickable {
+  cursor: pointer;
+}
+
+.incidents-page__row--clickable:hover {
+  background: var(--color-surface);
+  box-shadow: 0 1px 0 var(--color-border), var(--shadow-hover);
+}
+
+.incidents-page__sort {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: color 0.12s ease;
+}
+
+.incidents-page__sort:hover {
+  color: var(--incident-status-reported-text);
+}
+
+.incidents-page__delay {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.incidents-page__message {
+  padding: var(--space-6) 0;
+  color: var(--color-text-muted);
+}
+
+.incidents-page__message--error {
+  color: var(--tone-error-text);
+}
+
+.incidents-page__actions {
+  text-align: right;
+}
+
+.incidents-page__action {
+  background: var(--tone-neutral-bg);
+  color: var(--tone-neutral-text);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.12s ease;
+}
+
+.incidents-page__action:hover {
+  opacity: 0.85;
+}
+
+.incidents-page__action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.incidents-page__accordion-row td {
+  padding: 0;
+  /* Le contenu (IncidentAccordion) gère son propre padding/fond — une ligne
+     de tableau normale ajouterait un double padding + une bordure en trop. */
+}

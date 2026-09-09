@@ -1,0 +1,300 @@
+.task-accordion {
+  overflow: hidden;
+}
+
+.task-accordion__inner {
+  cursor: default;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-5);
+}
+
+.task-accordion__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.task-accordion__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.task-accordion__collapse {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  flex: none;
+  transition: color 0.12s ease;
+}
+
+.task-accordion__collapse:hover {
+  color: var(--color-text);
+}
+
+.task-accordion__ref {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-top: var(--space-3);
+}
+
+.task-accordion__ref span {
+  font-family: var(--font-mono);
+  color: var(--color-text);
+}
+
+.task-accordion__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.task-accordion__action {
+  background: var(--tone-neutral-bg);
+  color: var(--tone-neutral-text);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.12s ease;
+}
+
+.task-accordion__action:hover {
+  opacity: 0.85;
+}
+
+.task-accordion__action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.task-accordion__action--danger {
+  background: var(--priority-critique-bg);
+  color: var(--priority-critique-text);
+}
+
+.task-accordion__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-5);
+}
+
+@media (max-width: 720px) {
+  .task-accordion__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.task-accordion__section {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.task-accordion__section-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-2);
+}
+
+.task-accordion__meta {
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.task-accordion__assign {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.task-accordion__assign-select {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+}
+
+.task-accordion__assign-submit {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.12s ease;
+}
+
+.task-accordion__assign-submit:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.task-accordion__assign-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.task-accordion__meta-note {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: var(--space-1);
+}
+
+.task-accordion__empty {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-3);
+}
+
+.task-accordion__error {
+  font-size: 13px;
+  color: var(--tone-error-text);
+  margin: 0 0 var(--space-3);
+}
+
+.task-accordion__comment-list {
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.task-accordion__comment {
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.task-accordion__comment:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.task-accordion__comment-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-1);
+}
+
+.task-accordion__comment-author {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.task-accordion__comment-content {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--color-text);
+  white-space: pre-wrap;
+}
+
+.task-accordion__comment-composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.task-accordion__comment-input {
+  width: 100%;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  resize: vertical;
+  transition: border-color 0.12s ease;
+}
+
+.task-accordion__comment-input:focus {
+  border-color: var(--color-accent);
+}
+
+.task-accordion__comment-input:disabled {
+  opacity: 0.6;
+}
+
+.task-accordion__comment-submit {
+  align-self: flex-end;
+  background: var(--tone-neutral-bg);
+  color: var(--tone-neutral-text);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.12s ease;
+}
+
+.task-accordion__comment-submit:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.task-accordion__comment-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.task-accordion__audit-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.task-accordion__audit-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 13px;
+}
+
+.task-accordion__audit-entry:last-child {
+  border-bottom: none;
+}
+
+.task-accordion__audit-field {
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+
+.task-accordion__audit-change {
+  color: var(--color-text-muted);
+  flex: 1 1 auto;
+}
+
+.task-accordion__audit-meta {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}

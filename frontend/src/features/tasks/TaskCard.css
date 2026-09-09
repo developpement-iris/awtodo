@@ -1,0 +1,84 @@
+.task-card {
+  position: relative;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-resting);
+  touch-action: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+
+.task-card:hover {
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-hover);
+  transform: translateY(-2px);
+}
+
+.task-card--dragging {
+  z-index: 30;
+  box-shadow: var(--shadow-overlay);
+  cursor: grabbing;
+}
+
+.task-card--pending {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.task-card__body {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  background: none;
+  border: none;
+  padding: var(--space-3);
+  text-align: left;
+  font-family: inherit;
+  cursor: grab;
+}
+
+.task-card__title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.task-card__ref {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.task-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.task-card__assignee {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.task-card__reject {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: inline-flex;
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease;
+}
+
+.task-card:hover .task-card__reject {
+  opacity: 1;
+}
+
+.task-card__reject:hover {
+  color: var(--tone-error-text);
+}

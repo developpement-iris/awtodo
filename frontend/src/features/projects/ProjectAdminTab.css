@@ -1,0 +1,209 @@
+.project-admin-tab__message {
+  padding: var(--space-3) 0;
+  color: var(--color-text-muted);
+}
+
+.project-admin-tab__message--error {
+  color: var(--tone-error-text);
+}
+
+.project-admin-tab__table {
+  width: 100%;
+  border-top: 1px solid var(--color-border);
+  margin-bottom: var(--space-6);
+}
+
+.project-admin-tab__table th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.project-admin-tab__table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+  font-size: 14px;
+}
+
+.project-admin-tab__member {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.project-admin-tab__avatar {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--tone-neutral-bg);
+  color: var(--tone-neutral-text);
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.project-admin-tab__status-dot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  border: 2px solid var(--color-surface);
+}
+
+.project-admin-tab__status-dot--active {
+  background: var(--tone-positive-text);
+}
+
+.project-admin-tab__status-dot--pending {
+  background: var(--color-text-faint);
+}
+
+.project-admin-tab__member-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.project-admin-tab__member-name {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.project-admin-tab__member-username {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--color-text-muted);
+}
+
+.project-admin-tab__actions {
+  /* `display: flex` posé directement sur un <td> le fait sortir du calcul de
+     hauteur/bordure standard des tables dans certains navigateurs (sa
+     bordure basse ne s'aligne plus avec le reste de la ligne) — le flex vit
+     dans un wrapper interne, le <td> reste une cellule de table normale. */
+  text-align: right;
+  white-space: nowrap;
+}
+
+.project-admin-tab__actions-inner {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.project-admin-tab__action {
+  background: var(--tone-neutral-bg);
+  color: var(--tone-neutral-text);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.12s ease;
+}
+
+.project-admin-tab__action:hover {
+  opacity: 0.85;
+}
+
+.project-admin-tab__action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.project-admin-tab__action--danger {
+  background: var(--priority-critique-bg);
+  color: var(--priority-critique-text);
+}
+
+.project-admin-tab__forms {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-4);
+}
+
+.project-admin-tab__form {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  box-shadow: var(--shadow-resting);
+}
+
+.project-admin-tab__external-badge {
+  display: inline-block;
+  margin-left: var(--space-2);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tone-neutral-text);
+  background: var(--tone-neutral-bg);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+}
+
+.project-admin-tab__form-row--stacked {
+  flex-direction: column;
+}
+
+.project-admin-tab__form h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: var(--space-2);
+}
+
+.project-admin-tab__hint {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin: 0 0 var(--space-3);
+}
+
+.project-admin-tab__form-row {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.project-admin-tab__form-row select,
+.project-admin-tab__form-row input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-2);
+}
+
+.project-admin-tab__form-row button {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.project-admin-tab__form-row button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

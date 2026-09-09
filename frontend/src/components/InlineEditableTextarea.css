@@ -1,0 +1,88 @@
+.inline-editable-textarea__trigger {
+  white-space: pre-wrap;
+  font-size: inherit;
+  line-height: inherit;
+  color: var(--color-text);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+  margin: calc(var(--space-2) * -1);
+  cursor: default;
+}
+
+.inline-editable-textarea__trigger--editable {
+  cursor: text;
+  transition: background-color 0.12s ease;
+}
+
+.inline-editable-textarea__trigger--editable:hover {
+  background: var(--tone-neutral-bg);
+}
+
+.inline-editable-textarea__trigger--empty {
+  color: var(--color-text-muted);
+}
+
+.inline-editable-textarea__editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.inline-editable-textarea__input {
+  width: 100%;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+  resize: vertical;
+}
+
+.inline-editable-textarea__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.inline-editable-textarea__cancel {
+  background: none;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.inline-editable-textarea__cancel:hover:not(:disabled) {
+  color: var(--color-text);
+}
+
+.inline-editable-textarea__save {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.12s ease;
+}
+
+.inline-editable-textarea__save:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.inline-editable-textarea__save:disabled,
+.inline-editable-textarea__cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

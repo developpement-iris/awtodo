@@ -1,0 +1,108 @@
+.stats-tab__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.stats-tab__widgets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.stats-tab__message {
+  padding: var(--space-4) 0;
+  color: var(--color-text-muted);
+}
+
+.stats-tab__message--error {
+  color: var(--tone-error-text);
+}
+
+.stats-tab__section-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--color-text);
+  margin-bottom: var(--space-3);
+}
+
+.stats-tab__table-wrapper {
+  overflow-x: auto;
+}
+
+.stats-tab__table {
+  width: 100%;
+  border-collapse: collapse;
+  border-top: 1px solid var(--color-border);
+}
+
+.stats-tab__table th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.stats-tab__table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+  font-size: 14px;
+  transition: background-color var(--transition-fast);
+}
+
+.stats-tab__table tbody tr:hover td {
+  background: var(--tone-neutral-bg);
+}
+
+.stats-tab__num {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+
+.stats-tab__sort {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.stats-tab__sort:hover {
+  color: var(--color-accent);
+}
+
+.stats-tab__user {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 500;
+}
+
+.stats-tab__avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--task-status-inprogress-bg);
+  color: var(--task-status-inprogress-text);
+  font-size: 11px;
+  font-weight: 700;
+  flex: none;
+}

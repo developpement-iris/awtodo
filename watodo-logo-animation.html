@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>watodo — animation logo</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
+  .stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 28px;
+  }
+
+  svg {
+    width: min(70vw, 520px);
+    height: auto;
+    overflow: visible;
+  }
+
+  #letterPath {
+    fill: none;
+    stroke: #c46c60;
+    stroke-width: 110;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  #dot {
+    fill: #c46c60;
+    opacity: 0;
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+
+  #dot.jump {
+    animation: dotJump 0.62s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+
+  @keyframes dotJump {
+    0% {
+      opacity: 0;
+      transform: translateY(-190px) scale(0.6);
+    }
+    55% {
+      opacity: 1;
+      transform: translateY(14px) scale(1.05);
+    }
+    75% {
+      transform: translateY(-8px) scale(0.98);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  button {
+    border: none;
+    background: #c46c60;
+    color: white;
+    font-size: 14px;
+    padding: 10px 22px;
+    border-radius: 999px;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+  }
+  button:hover { opacity: 0.9; }
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <svg viewBox="0 0 1222 916" xmlns="http://www.w3.org/2000/svg">
+    <path id="letterPath" d="
+      M 110 250
+      C 20 400, 20 610, 130 690
+      C 210 750, 300 630, 360 480
+      C 395 400, 420 370, 455 415
+      C 495 470, 515 610, 560 690
+      C 600 750, 660 705, 685 600
+      C 705 510, 695 400, 705 320
+      C 715 235, 760 140, 860 105
+      C 955 70, 1080 100, 1115 185
+      C 1145 255, 1115 325, 1045 345
+      C 995 360, 955 335, 945 285
+    "/>
+    <circle id="dot" cx="895" cy="785" r="58"/>
+  </svg>
+
+  <button id="replayBtn">Rejouer</button>
+</div>
+
+<script>
+  const path = document.getElementById('letterPath');
+  const dot = document.getElementById('dot');
+  const replayBtn = document.getElementById('replayBtn');
+
+  const length = path.getTotalLength();
+  const DRAW_DURATION = 1900; // ms
+  const HOLD_DURATION = 1600; // ms pause once fully drawn
+
+  let loopTimer = null;
+
+  function resetState() {
+    path.style.transition = 'none';
+    path.style.strokeDasharray = length;
+    path.style.strokeDashoffset = length;
+    dot.classList.remove('jump');
+    // force reflow so the reset is applied before re-animating
+    path.getBoundingClientRect();
+  }
+
+  function playAnimation() {
+    resetState();
+
+    requestAnimationFrame(() => {
+      path.style.transition = `stroke-dashoffset ${DRAW_DURATION}ms cubic-bezier(0.65, 0, 0.35, 1)`;
+      path.style.strokeDashoffset = '0';
+    });
+
+    setTimeout(() => {
+      dot.classList.add('jump');
+    }, DRAW_DURATION - 150);
+  }
+
+  function loop() {
+    playAnimation();
+    clearTimeout(loopTimer);
+    loopTimer = setTimeout(loop, DRAW_DURATION + HOLD_DURATION);
+  }
+
+  replayBtn.addEventListener('click', () => {
+    clearTimeout(loopTimer);
+    loop();
+  });
+
+  window.addEventListener('load', loop);
+</script>
+
+</body>
+</html>

@@ -1,0 +1,67 @@
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.status-badge--neutral {
+  background: var(--tone-neutral-bg);
+  color: var(--tone-neutral-text);
+}
+
+.status-badge--positive {
+  background: var(--tone-positive-bg);
+  color: var(--tone-positive-text);
+}
+
+.status-badge--priorityBasse {
+  background: var(--priority-basse-bg);
+  color: var(--priority-basse-text);
+}
+
+.status-badge--priorityMoyenne {
+  background: var(--priority-moyenne-bg);
+  color: var(--priority-moyenne-text);
+}
+
+.status-badge--priorityHaute {
+  background: var(--priority-haute-bg);
+  color: var(--priority-haute-text);
+}
+
+.status-badge--priorityCritique {
+  background: var(--priority-critique-bg);
+  color: var(--priority-critique-text);
+}
+
+.status-badge--taskAvailable {
+  background: var(--task-status-available-bg);
+  color: var(--task-status-available-text);
+}
+
+.status-badge--taskAssigned {
+  background: var(--task-status-assigned-bg);
+  color: var(--task-status-assigned-text);
+}
+
+.status-badge--taskInProgress {
+  background: var(--task-status-inprogress-bg);
+  color: var(--task-status-inprogress-text);
+}
+
+.status-badge--incidentReported {
+  background: var(--incident-status-reported-bg);
+  color: var(--incident-status-reported-text);
+}
+
+.status-badge--incidentInProgress {
+  background: var(--incident-status-inprogress-bg);
+  color: var(--incident-status-inprogress-text);
+}

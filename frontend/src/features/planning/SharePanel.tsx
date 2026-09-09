@@ -1,0 +1,117 @@
+import { Trash2, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { createCalendarShare, listCalendarShares, revokeCalendarShare } from "../../api/client";
+import { useCurrentUser } from "../../context/CurrentUserContext";
+import type { CalendarShareList } from "../../types/watodo";
+
+interface SharePanelProps {
+  onClose: () => void;
+  onChanged: () => void;
+}
+
+function displayName(user: { first_name: string; last_name: string; username: string }): string {
+  return `${user.first_name} ${user.last_name}`.trim() || user.username;
+}
+
+export function SharePanel({ onClose, onChanged }: SharePanelProps) {
+  const { users, currentUser } = useCurrentUser();
+  const [shares, setShares] = useState<CalendarShareList | null>(null);
+  const [granteeId, setGranteeId] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  function reload() {
+    listCalendarShares()
+      .then(setShares)
+      .catch(() => setError("Impossible de charger les partages."));
+  }
+
+  useEffect(reload, []);
+
+  async function handleShare() {
+    if (!granteeId) return;
+    setError(null);
+    try {
+      await createCalendarShare(granteeId);
+      setGranteeId("");
+      reload();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Partage impossible.");
+    }
+  }
+
+  async function handleRevoke(shareId: string) {
+    try {
+      await revokeCalendarShare(shareId);
+      reload();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Révocation impossible.");
+    }
+  }
+
+  const alreadyGranted = new Set((shares?.granted ?? []).map((s) => s.grantee.id));
+  const pickable = users.filter(
+    (u) => u.id !== currentUser?.id && u.account_type === "interne" && !alreadyGranted.has(u.id),
+  );
+
+  return (
+    <div className="planning-dialog__overlay" onClick={onClose}>
+      <div className="planning-dialog planning-dialog--narrow" onClick={(e) => e.stopPropagation()} role="dialog">
+        <div className="planning-dialog__header">
+          <h2>Partage de calendrier</h2>
+          <button type="button" className="planning-dialog__close" onClick={onClose} aria-label="Fermer">
+            <X size={16} strokeWidth={1.75} aria-hidden="true" />
+          </button>
+        </div>
+
+        {error && <p className="planning-dialog__error">{error}</p>}
+
+        <div className="planning-dialog__body">
+          <section className="share-panel__section">
+            <h3>Je partage mon calendrier avec</h3>
+            <div className="planning-field-row">
+              <select value={granteeId} onChange={(e) => setGranteeId(e.target.value)}>
+                <option value="">Choisir une personne…</option>
+                {pickable.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {displayName(u)}
+                  </option>
+                ))}
+              </select>
+              <button type="button" className="planning-btn planning-btn--primary" onClick={handleShare} disabled={!granteeId}>
+                Partager
+              </button>
+            </div>
+            <ul className="share-panel__list">
+              {(shares?.granted ?? []).map((s) => (
+                <li key={s.id}>
+                  <span>{displayName(s.grantee)}</span>
+                  <button type="button" onClick={() => handleRevoke(s.id)} aria-label="Révoquer">
+                    <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />
+                  </button>
+                </li>
+              ))}
+              {shares?.granted.length === 0 && <li className="planning-dialog__muted">Personne pour l'instant</li>}
+            </ul>
+          </section>
+
+          <section className="share-panel__section">
+            <h3>Calendriers partagés avec moi</h3>
+            <ul className="share-panel__list">
+              {(shares?.received ?? []).map((s) => (
+                <li key={s.id}>
+                  <span>{displayName(s.owner)}</span>
+                  <button type="button" onClick={() => handleRevoke(s.id)} aria-label="Ne plus afficher">
+                    <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />
+                  </button>
+                </li>
+              ))}
+              {shares?.received.length === 0 && <li className="planning-dialog__muted">Aucun</li>}
+            </ul>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}

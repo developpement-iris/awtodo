@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Watodo — Compte-rendu backend</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --text: #1a1a1f;
+    --text-muted: #5a5a63;
+    --border: #dcdce1;
+    --bg-alt: #f6f6f8;
+    --accent: #2f5fd6;
+    --ok: #276b3c;
+    --ok-bg: #e6f4ea;
+    --warn: #8a5a12;
+    --warn-bg: #fbf1de;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    color: var(--text);
+    max-width: 840px;
+    margin: 0 auto;
+    padding: 48px 24px 96px;
+    line-height: 1.55;
+  }
+  header {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 20px;
+    margin-bottom: 32px;
+  }
+  header p {
+    color: var(--text-muted);
+    margin: 4px 0 0;
+    font-size: 14px;
+  }
+  h1 { font-size: 26px; margin: 0; }
+  h2 {
+    font-size: 18px;
+    margin: 40px 0 12px;
+    padding-top: 8px;
+  }
+  h3 { font-size: 15px; margin: 20px 0 8px; }
+  p { margin: 8px 0; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0 20px;
+    font-size: 14px;
+  }
+  th, td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--text);
+  }
+  code {
+    background: var(--bg-alt);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 13px;
+    font-family: ui-monospace, Consolas, monospace;
+  }
+  ul { margin: 8px 0; padding-left: 20px; }
+  li { margin: 4px 0; }
+  .badge {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+  .badge--ok { background: var(--ok-bg); color: var(--ok); }
+  .badge--warn { background: var(--warn-bg); color: var(--warn); }
+  .summary-box {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px 20px;
+    margin: 16px 0;
+  }
+  .summary-box ul { margin: 0; }
+  footer {
+    margin-top: 56px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  @media print {
+    body { padding: 0; }
+    a { color: inherit; text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Watodo — Compte-rendu backend</h1>
+  <p>État au 3 août 2026 — 2 passes de développement (squelette + API en lecture seule)</p>
+</header>
+
+<h2>1. Stack et structure posées</h2>
+<p>Django 5.2 LTS + Django REST Framework, PostgreSQL en cible production (SQLite en dev), Celery/Redis en dépendance (pas encore câblés fonctionnellement). Environnement Python 3.14 dans un <code>.venv</code> dédié.</p>
+<p>Architecture en apps Django respectant la hiérarchie de dépendances définie dans <code>CLAUDE.md</code> : <code>common → accounts → projects → tasks / incidents → budgeting → integrations / notifications</code> (une app "basse" n'importe jamais une app "haute").</p>
+
+<table>
+  <thead>
+    <tr><th>App</th><th>Contenu</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>common</code></td><td><code>UUIDModel</code>, <code>TimeStampedModel</code>, <code>StatusLifecycleModel</code> (pattern manager actif / historique), <code>choices.py</code> (priorités partagées)</td></tr>
+    <tr><td><code>accounts</code></td><td><code>Team</code>, <code>User</code> (modèle custom, PK UUID, champ <code>azure_oid</code> pour le futur SSO)</td></tr>
+    <tr><td><code>projects</code></td><td><code>Project</code>, <code>ProjectMembership</code> (rôles multiples par projet, contrainte d'unicité sur rôle actif)</td></tr>
+    <tr><td><code>tasks</code></td><td><code>Task</code> (cycle de statut complet, motif de rejet)</td></tr>
+    <tr><td><code>incidents</code></td><td><code>Incident</code> (entité séparée de <code>Task</code>, cycle de statut propre)</td></tr>
+    <tr><td><code>budgeting</code></td><td><code>BudgetEntry</code> (schéma seul, pas de logique — hors périmètre v1)</td></tr>
+    <tr><td><code>integrations</code>, <code>notifications</code></td><td>Squelette vide, prêt à recevoir du code</td></tr>
+  </tbody>
+</table>
+
+<p>Settings éclatés en <code>base</code> / <code>dev</code> / <code>staging</code> / <code>production</code>, entièrement pilotés par variables d'environnement (<code>django-environ</code>) — aucune valeur AWS/RDS en dur dans le code.</p>
+
+<h2>2. Règles transverses respectées</h2>
+<div class="summary-box">
+<ul>
+  <li><strong>Aucune suppression physique</strong> : chaque modèle métier a un manager <code>objects</code> filtré sur les statuts actifs, et <code>all_objects</code> pour accéder à l'historique complet.</li>
+  <li><strong>PK UUID</strong> partout, pas d'auto-increment.</li>
+  <li><strong>Sécurité</strong> (section dédiée dans <code>CLAUDE.md</code>) : pas de SQL brut (<code>.raw()</code>/<code>.extra()</code> interdits), aucun secret en dur (vérifié), rate limiting DRF actif par défaut (20/min anonyme, 100/min authentifié).</li>
+</ul>
+</div>
+
+<h2>3. API (passe 2)</h2>
+<p>Endpoints <strong>en lecture seule</strong> exposés sous <code>/api/v1/</code> :</p>
+
+<table>
+  <thead>
+    <tr><th>Endpoint</th><th>Filtrage</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>GET /api/v1/projects/</code></td><td>—</td></tr>
+    <tr><td><code>GET /api/v1/tasks/?project=&lt;id&gt;</code></td><td>par projet</td></tr>
+    <tr><td><code>GET /api/v1/incidents/?project=&lt;id&gt;</code></td><td>par projet</td></tr>
+  </tbody>
+</table>
+
+<p>Serializers avec libellés français prêts à l'emploi (<code>status_display</code>, <code>priority_display</code>, etc.), <code>Task.assignee</code> imbriqué avec un <code>UserSerializer</code> minimal.</p>
+
+<h3>Authentification API</h3>
+<p><code>IsAuthenticated</code> par défaut (sûr), assoupli en <code>AllowAny</code> <strong>uniquement</strong> dans <code>config/settings/dev.py</code> (commenté « à remplacer avant staging ») pour permettre de tester le front sans SSO câblé. CORS ouvert uniquement sur <code>http://localhost:5173</code> en dev.</p>
+
+<h3>Hors périmètre à ce stade</h3>
+<ul>
+  <li>Création / édition (CRUD complet)</li>
+  <li>Transitions de statut (<code>services.py</code> toujours un stub)</li>
+  <li>SSO / JWT réel</li>
+  <li>Apps <code>integrations</code> et <code>notifications</code></li>
+</ul>
+
+<h2>4. Vérifications effectuées</h2>
+<table>
+  <thead>
+    <tr><th>Vérification</th><th>Résultat</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>python manage.py test apps</code></td><td><span class="badge badge--ok">11/11 tests verts</span></td></tr>
+    <tr><td><code>python manage.py makemigrations --check</code></td><td><span class="badge badge--ok">OK</span></td></tr>
+    <tr><td><code>python manage.py migrate</code></td><td><span class="badge badge--ok">OK</span></td></tr>
+    <tr><td><code>python manage.py check</code></td><td><span class="badge badge--ok">OK</span></td></tr>
+    <tr><td>5 migrations initiales appliquées</td><td><span class="badge badge--ok">accounts, projects, tasks, incidents, budgeting</span></td></tr>
+  </tbody>
+</table>
+
+<h2>5. Pour la suite</h2>
+<p>Une fois la charte graphique définie, il restera à construire les vues front pour <code>accounts</code> / <code>budgeting</code> / <code>incidents</code> au-delà du détail projet actuel, et éventuellement passer certains endpoints en CRUD si le besoin d'édition depuis le front se confirme.</p>
+
+<footer>
+  Watodo — document généré le 3 août 2026.
+</footer>
+
+</body>
+</html>

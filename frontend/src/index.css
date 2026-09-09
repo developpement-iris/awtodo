@@ -1,0 +1,73 @@
+@import "./theme/tokens.css";
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--color-text);
+  background: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.view-transition {
+  animation: view-fade-in 180ms ease both;
+}
+
+/* Pas de `transform` ici volontairement (fondu seul — CLAUDE.md autorise
+   "fondu et/ou léger déplacement"). Un `transform` animé ici, même
+   `translateY(0)` en fin d'animation avec `animation-fill-mode: both`,
+   ferait de ce wrapper le containing block de tout descendant en
+   `position: fixed` (drawers, dialogs) au lieu du viewport — c'est ce qui
+   causait le drawer/dialog "flottant", confiné à la zone de contenu au lieu
+   de couvrir tout l'écran (trouvé et corrigé le 2026-08-04). */
+@keyframes view-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Restauration initiale de l'identité (voir App.tsx > isRestoring) — fond
+   neutre le temps du chargement, pas de flash blanc/de contenu erroné. */
+.app-loading {
+  min-height: 100vh;
+  background: var(--color-bg);
+}

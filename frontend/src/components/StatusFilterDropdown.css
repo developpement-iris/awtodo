@@ -1,0 +1,112 @@
+.status-filter-dropdown {
+  position: relative;
+  display: inline-flex;
+  /* Taille figée à celle du bouton fermé : le panneau ouvert est en
+     position:absolute et ne doit jamais influencer cette taille — sans ça,
+     le conteneur s'effondre à 0 pendant la transition (le bouton, seul
+     élément en flux normal, disparaît le temps de basculer vers le panneau)
+     et fait "remonter" tout ce qui suit dans la barre d'outils. */
+  width: 40px;
+  height: 40px;
+}
+
+.status-filter-dropdown__trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  box-shadow: var(--shadow-resting);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.status-filter-dropdown__trigger:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.status-filter-dropdown__count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.status-filter-dropdown__panel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 20;
+  min-width: 220px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  padding: var(--space-2);
+  box-shadow: var(--shadow-overlay);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.status-filter-dropdown__option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  background: none;
+  border: none;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color var(--transition-fast);
+}
+
+.status-filter-dropdown__option:hover {
+  background: var(--tone-neutral-bg);
+}
+
+/* Aligné sur components/Checkbox.css (case carrée, accent brique) — le rang
+   entier reste le déclencheur (bouton role="checkbox"), pas d'input imbriqué. */
+.status-filter-dropdown__check {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--color-border);
+  background: var(--color-surface);
+  color: transparent;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.status-filter-dropdown__option:hover .status-filter-dropdown__check {
+  border-color: var(--color-accent);
+}
+
+.status-filter-dropdown__check--active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
