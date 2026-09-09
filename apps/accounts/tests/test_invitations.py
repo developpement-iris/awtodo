@@ -157,10 +157,15 @@ class AcceptInvitationTests(TestCase):
             accept_invitation(token=invitation.token, password="123")
 
 
+# Permission par défaut `IsAuthenticated` comme en staging/production (et non
+# l'`AllowAny` de dev) : c'est la seule config qui vérifie réellement que
+# `retrieve`/`accept` restent joignables par un invité anonyme via le
+# `get_permissions` de `InvitationViewSet`. Régression du lien d'activation
+# "expiré ou invalide" en prod, session du 2026-09-09.
 @override_settings(
     DEBUG=True,
     REST_FRAMEWORK={
-        "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
+        "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
         "DEFAULT_AUTHENTICATION_CLASSES": [
             "apps.accounts.authentication.DebugUserIdAuthentication",
             "rest_framework.authentication.SessionAuthentication",

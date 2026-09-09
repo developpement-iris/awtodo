@@ -202,11 +202,21 @@ class InvitationViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewse
     mécanisme de session tant que le SSO n'est pas fait). `list` est en
     revanche restreint (admin/chef_de_projet de l'organisation courante) et
     scopé à cette organisation — c'est la sous-section "Invitations" de
-    l'écran Administration, pas un annuaire public."""
+    l'écran Administration, pas un annuaire public.
+
+    ⚠️ En staging/production la permission par défaut est `IsAuthenticated`
+    (seul `config/settings/dev.py` l'assouplit) : sans le `get_permissions`
+    ci-dessous, `retrieve`/`accept` renverraient 403 à l'invité et le lien
+    d'activation afficherait "lien expiré ou invalide"."""
 
     queryset = Invitation.objects.all()
     serializer_class = InvitationSerializer
     lookup_field = "token"
+
+    def get_permissions(self):
+        if self.action in {"retrieve", "accept"}:
+            return [AllowAny()]
+        return super().get_permissions()
 
     def get_queryset(self):
         if self.action == "list":
