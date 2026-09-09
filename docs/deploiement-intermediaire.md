@@ -75,7 +75,15 @@ Fichiers ajoutés / modifiés :
 
 **Bug latent corrigé au passage (2026-09-09) :** `apps/accounts/models.py::default_organisation_id` (défaut de `User.organisation` / `Team.organisation`) faisait une requête SQL. Les system checks Django lancés par `migrate`/`collectstatic` instancient `User()` et évaluaient ce défaut **avant** que les migrations n'aient créé `accounts_organisation` → crash au 1ᵉʳ déploiement sur base neuve. Enrobé d'un `try/except (OperationalError, ProgrammingError)` → `None`. Reproduit et corrigé en local (`migrate` sur SQLite vierge).
 
-**Vérifié en local :** settings staging s'importent sans erreur (psycopg accepte les options), `/api/health/` répond `200 {"status":"ok"}`, `migrate` puis `collectstatic --settings=config.settings.staging` sur base vierge OK, suite de tests accounts/common verte. **Non vérifiable en local :** le build frontend dans l'environnement Render (présence de `npm`), la connexion Supabase réelle.
+**Vérifié en local :** settings staging s'importent sans erreur (psycopg accepte les options), `/api/health/` répond `200 {"status":"ok"}`, `migrate` puis `collectstatic --settings=config.settings.staging` sur base vierge OK, suite de tests accounts/common verte.
+
+**⚠️ Render n'applique PAS le `buildCommand` du `render.yaml`** (constaté 2026-09-09 : le service a été créé à la main, pas en mode Blueprint). Le `render.yaml` reste la référence de ce que doit contenir la commande, mais **elle doit être collée à la main dans Settings → Build Command**. Commande de référence à jour :
+```
+pip install -r requirements/staging.txt && npm --prefix frontend ci && VITE_API_BASE_URL=/api/v1 npm --prefix frontend run build && python manage.py migrate --no-input --settings=config.settings.staging && python manage.py bootstrap_admin --settings=config.settings.staging && python manage.py collectstatic --no-input --settings=config.settings.staging
+```
+`migrate` **avant** `collectstatic` ; `bootstrap_admin` **après** `migrate`.
+
+**Symptôme si `ALLOWED_HOSTS` incomplet :** la page de connexion s'affiche (fichiers servis par WhiteNoise, hors contrôle de host) mais tout appel API renvoie `400 DisallowedHost` → côté front un « Échec de la requête … (400) » générique. Corrigé par l'auto-ajout de `RENDER_EXTERNAL_HOSTNAME`. **Non vérifiable en local :** le build frontend dans l'environnement Render (présence de `npm`), la connexion Supabase réelle.
 
 ## Actions manuelles restantes (utilisateur)
 
@@ -85,9 +93,10 @@ Fichiers ajoutés / modifiés :
 3. **Render — renseigner les variables `sync: false`** (écran de création du blueprint, ou *Environment* après coup) :
    | Variable | Valeur |
    |---|---|
-   | `DJANGO_ALLOWED_HOSTS` | le domaine attribué, ex. `awtodo.onrender.com` (visible après la 1ʳᵉ création — si besoin, mettre une valeur provisoire puis corriger) |
-   | `CSRF_TRUSTED_ORIGINS` | `https://awtodo.onrender.com` |
-   | `FRONTEND_BASE_URL` | `https://awtodo.onrender.com` |
+   | `DJANGO_ALLOWED_HOSTS` | **optionnel** — `staging.py` ajoute déjà automatiquement `RENDER_EXTERNAL_HOSTNAME` (injecté par Render) à `ALLOWED_HOSTS` et `CSRF_TRUSTED_ORIGINS`. À renseigner seulement pour un domaine custom. Les valeurs collées avec `https://`/slash sont nettoyées. |
+   | `CSRF_TRUSTED_ORIGINS` | optionnel, même remarque |
+   | `FRONTEND_BASE_URL` | optionnel — défaut = `https://<RENDER_EXTERNAL_HOSTNAME>` |
+   | `ADMIN_USERNAME` / `ADMIN_EMAIL` / `ADMIN_PASSWORD` | compte admin d'amorçage (voir étape 5) |
    | `DATABASE_URL` | l'URI Supabase de l'étape 1 |
    | `EMAIL_*` / `DEFAULT_FROM_EMAIL` | optionnel (Mailtrap sandbox), sinon laisser vide → backend console |
    - `DJANGO_SECRET_KEY` est généré automatiquement par Render, ne rien saisir.

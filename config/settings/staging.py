@@ -15,8 +15,20 @@ DEBUG = False
 
 SECRET_KEY = env("DJANGO_SECRET_KEY")
 
-# Ex. "awtodo.onrender.com" (nom exact du service Render une fois créé).
-ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS")
+
+def _clean_host(value):
+    """Tolère une valeur collée avec le schéma ou un slash final
+    (`https://awtodo.onrender.com/`) au lieu du hostname nu attendu."""
+    return value.replace("https://", "").replace("http://", "").strip().strip("/")
+
+
+# `RENDER_EXTERNAL_HOSTNAME` est injecté automatiquement par Render (ex.
+# "awtodo.onrender.com") : le host est donc autorisé sans config manuelle.
+# `DJANGO_ALLOWED_HOSTS` reste accepté en plus (domaine custom, etc.).
+ALLOWED_HOSTS = [_clean_host(h) for h in env.list("DJANGO_ALLOWED_HOSTS", default=[]) if h.strip()]
+_render_host = env("RENDER_EXTERNAL_HOSTNAME", default="").strip()
+if _render_host and _render_host not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(_render_host)
 
 # Render termine le TLS sur son proxy et pose X-Forwarded-Proto.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
@@ -24,9 +36,14 @@ SECURE_SSL_REDIRECT = True
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 
-# Ex. ["https://awtodo.onrender.com"] — requis par Django pour l'admin et
-# toute requête POST cross-origin sur un domaine HTTPS.
-CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+# Requis par Django pour l'admin et toute requête POST cross-origin en HTTPS.
+CSRF_TRUSTED_ORIGINS = [
+    f"https://{_clean_host(o)}" for o in env.list("CSRF_TRUSTED_ORIGINS", default=[]) if o.strip()
+]
+if _render_host:
+    _render_origin = f"https://{_render_host}"
+    if _render_origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(_render_origin)
 
 
 # --- Base de données : Supabase (Postgres) --------------------------------
@@ -98,8 +115,11 @@ DEFAULT_FROM_EMAIL = env(
     "DEFAULT_FROM_EMAIL", default="Awtodo <no-reply@awtodo.local>"
 )
 
-# Même domaine que l'API maintenant que Django sert le front.
-FRONTEND_BASE_URL = env("FRONTEND_BASE_URL")
+# Même domaine que l'API (Django sert le front) : défaut = le host Render.
+FRONTEND_BASE_URL = env(
+    "FRONTEND_BASE_URL",
+    default=(f"https://{_render_host}" if _render_host else "http://localhost:8000"),
+)
 
 
 # --- Logs sur stdout (récupérés par Render) -----------------------------
