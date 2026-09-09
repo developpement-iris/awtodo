@@ -89,7 +89,7 @@ Fichiers ajoutés / modifiés :
    | `EMAIL_*` / `DEFAULT_FROM_EMAIL` | optionnel (Mailtrap sandbox), sinon laisser vide → backend console |
    - `DJANGO_SECRET_KEY` est généré automatiquement par Render, ne rien saisir.
    - `DJANGO_SETTINGS_MODULE` et `PYTHON_VERSION` sont déjà dans le blueprint.
-4. **Premier déploiement.** Render lance `buildCommand` puis `startCommand`. Surveiller les logs :
+4. **Premier déploiement.** Render lance `buildCommand` puis `startCommand`. Le `buildCommand` passe `--settings=config.settings.staging` explicitement à `collectstatic`/`migrate` (ne pas compter uniquement sur la var d'env au build). Vérifier quand même que `DJANGO_SETTINGS_MODULE=config.settings.staging` est bien présent dans *Environment* (utilisé au runtime par gunicorn). Surveiller les logs :
    - si `npm: command not found` au build → Node absent de l'image Python Render : basculer le service en *Docker* avec un Dockerfile (à écrire), ou builder `frontend/dist` en local et le commiter (retirer `frontend/dist` du `.gitignore`).
    - `migrate` s'exécute à chaque build ; les migrations Awtodo tournent sur une base Supabase vierge au 1ᵉʳ coup.
 5. **Créer un compte de départ.** Shell Render (*Shell* dans le dashboard) : `python manage.py createsuperuser` (admin Django) et/ou `python manage.py seed_demo_users` si on veut les comptes de démo.
