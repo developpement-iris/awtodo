@@ -71,6 +71,18 @@ export function InvitationsSection({ currentUser }: InvitationsSectionProps) {
     }
   }
 
+  async function handleCopyLink(invitation: Invitation) {
+    const url = `${window.location.origin}/invitations/${invitation.token}/`;
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast("Lien d'activation copié.");
+    } catch {
+      // Clipboard indisponible (contexte non sécurisé, permission refusée) :
+      // on affiche le lien pour un copier-coller manuel.
+      showToast(url);
+    }
+  }
+
   async function handleResend(invitation: Invitation) {
     setPendingToken(invitation.token);
     setError(null);
@@ -151,13 +163,18 @@ export function InvitationsSection({ currentUser }: InvitationsSectionProps) {
                 </td>
                 <td className="invitations-section__actions">
                   {invitation.status === "pending" && (
-                    <button
-                      type="button"
-                      onClick={() => handleResend(invitation)}
-                      disabled={pendingToken === invitation.token}
-                    >
-                      Renvoyer
-                    </button>
+                    <>
+                      <button type="button" onClick={() => handleCopyLink(invitation)}>
+                        Copier le lien
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleResend(invitation)}
+                        disabled={pendingToken === invitation.token}
+                      >
+                        Renvoyer
+                      </button>
+                    </>
                   )}
                 </td>
               </tr>

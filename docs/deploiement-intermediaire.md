@@ -69,6 +69,7 @@ Fichiers ajoutés / modifiés :
 | `config/health.py` + route `/api/health/` | Health check qui exécute un `SELECT 1` réel. Cible unique UptimeRobot. |
 | `config/spa.py` + fallback `re_path` dans `config/urls.py` | Renvoie `frontend/dist/index.html` sur toute route non-API/non-admin (routage client : `/docs/<token>`, invitations…). Inactif en dev (aucun `SPA_INDEX_FILE`). |
 | `requirements/staging.txt` | `-r base.txt` + `gunicorn` + `whitenoise`. |
+| `apps/accounts/management/commands/bootstrap_admin.py` | Crée/promeut un compte admin depuis `ADMIN_USERNAME`/`ADMIN_EMAIL`/`ADMIN_PASSWORD` (le *Shell* Render est payant). Lancé dans le `buildCommand` après `migrate`. |
 | `render.yaml` | Blueprint : 1 web service, `buildCommand` (pip + npm build + collectstatic + migrate), `startCommand` gunicorn, `healthCheckPath: /api/health/`, liste des env vars (secrets en `sync: false`). |
 | `.env.example` | Section de référence des variables Render (commentée). |
 
@@ -94,7 +95,7 @@ Fichiers ajoutés / modifiés :
 4. **Premier déploiement.** Render lance `buildCommand` puis `startCommand`. Le `buildCommand` passe `--settings=config.settings.staging` explicitement à `collectstatic`/`migrate` (ne pas compter uniquement sur la var d'env au build). Vérifier quand même que `DJANGO_SETTINGS_MODULE=config.settings.staging` est bien présent dans *Environment* (utilisé au runtime par gunicorn). Surveiller les logs :
    - si `npm: command not found` au build → Node absent de l'image Python Render : basculer le service en *Docker* avec un Dockerfile (à écrire), ou builder `frontend/dist` en local et le commiter (retirer `frontend/dist` du `.gitignore`).
    - `migrate` s'exécute à chaque build ; les migrations Awtodo tournent sur une base Supabase vierge au 1ᵉʳ coup.
-5. **Créer un compte de départ.** Shell Render (*Shell* dans le dashboard) : `python manage.py createsuperuser` (admin Django) et/ou `python manage.py seed_demo_users` si on veut les comptes de démo.
+5. **Compte admin de départ — sans shell** (le *Shell* Render est payant). Renseigner dans *Environment* : `ADMIN_USERNAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`. La commande `bootstrap_admin` (dans le `buildCommand`, après `migrate`) crée le compte au déploiement et le promeut `is_superuser` + `is_platform_admin` + `organisation_role=admin` + `account_status=active` (rattaché à l'organisation « Répar'Stores » créée par la migration `0005`). Idempotente : relancée à chaque déploiement, elle ne réécrit que les droits — le mot de passe n'est re-appliqué que si `ADMIN_FORCE_PASSWORD=1`. Après le 1ᵉʳ login, changer le mot de passe depuis l'app et retirer `ADMIN_PASSWORD` de Render (ou le laisser, sans effet). Ce compte peut ensuite inviter/administrer les autres via *Administration*.
 6. **Vérifier :** ouvrir `https://awtodo.onrender.com/api/health/` → doit répondre `{"status": "ok", "database": "ok"}`. Ouvrir la racine → le frontend doit se charger.
 7. **UptimeRobot — monitor.** uptimerobot.com > *Add New Monitor* > type **HTTP(s)** > URL `https://awtodo.onrender.com/api/health/` > *Monitoring Interval* **5 minutes** (le plan gratuit ne descend pas sous 5 min ; ça couvre le seuil de veille Render de 15 min et l'inactivité Supabase de 7 j). Un seul monitor suffit.
 
