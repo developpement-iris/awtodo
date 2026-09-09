@@ -1,0 +1,60 @@
+# Blueprint Render — phase de déploiement intermédiaire (voir
+# docs/deploiement-intermediaire.md). Un seul service : Django sert l'API
+# ET le build du frontend React (via WhiteNoise).
+#
+# Runtime natif Render (pas de Dockerfile) : l'environnement Python de Render
+# fournit aussi Node, ce qui permet de builder le frontend dans buildCommand.
+#
+# Les SECRETS (DJANGO_SECRET_KEY, DATABASE_URL, identifiants SMTP…) NE SONT
+# PAS dans ce fichier versionné : ils se saisissent dans le dashboard Render
+# (Environment). Les entrées ci-dessous avec `sync: false` doivent être
+# renseignées à la main à la création du service.
+
+services:
+  - type: web
+    name: awtodo
+    runtime: python
+    plan: free
+    region: frankfurt
+    branch: main
+    buildCommand: >-
+      pip install -r requirements/staging.txt &&
+      npm --prefix frontend ci &&
+      VITE_API_BASE_URL=/api/v1 npm --prefix frontend run build &&
+      python manage.py collectstatic --no-input &&
+      python manage.py migrate --no-input
+    startCommand: gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 60
+    healthCheckPath: /api/health/
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.staging
+      - key: PYTHON_VERSION
+        value: "3.12.6"
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_ALLOWED_HOSTS
+        # Renseigner avec le domaine réel une fois le service créé,
+        # ex. awtodo.onrender.com
+        sync: false
+      - key: CSRF_TRUSTED_ORIGINS
+        # ex. https://awtodo.onrender.com
+        sync: false
+      - key: FRONTEND_BASE_URL
+        # ex. https://awtodo.onrender.com
+        sync: false
+      - key: DATABASE_URL
+        # URI Supabase : Project Settings > Database > Connection string > URI
+        sync: false
+      # --- Email (optionnel, sinon backend console) ---
+      - key: EMAIL_BACKEND
+        sync: false
+      - key: EMAIL_HOST
+        sync: false
+      - key: EMAIL_PORT
+        sync: false
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: DEFAULT_FROM_EMAIL
+        sync: false

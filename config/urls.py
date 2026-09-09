@@ -1,5 +1,8 @@
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import include, path, re_path
+
+from config.health import health
+from config.spa import spa_index
 
 api_v1_patterns = [
     path("accounts/", include("apps.accounts.urls")),
@@ -14,6 +17,10 @@ api_v1_patterns = [
 ]
 
 urlpatterns = [
+    path("api/health/", health),
     path("admin/", admin.site.urls),
     path("api/v1/", include(api_v1_patterns)),
+    # Fallback SPA (staging : Django sert le build Vite). Toute route qui
+    # n'est ni l'API, ni l'admin, ni un statique renvoie index.html.
+    re_path(r"^(?!api/|admin/|static/).*$", spa_index),
 ]
