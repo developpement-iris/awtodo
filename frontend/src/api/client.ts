@@ -61,6 +61,23 @@ function authHeaders(): Record<string, string> {
   return debugUserId ? { "X-Debug-User-Id": debugUserId } : {};
 }
 
+// Rend lisible un corps d'erreur DRF : soit `{detail: "..."}`, soit un
+// dictionnaire d'erreurs par champ (`{password: ["..."]}`) que
+// `serializer.is_valid(raise_exception=True)` renvoie — jusqu'ici masqué
+// derrière le message générique "(400)".
+function errorMessage(payload: unknown, path: string, status: number): string {
+  const fallback = `Échec de la requête ${path} (${status})`;
+  if (!payload || typeof payload !== "object") return fallback;
+  const record = payload as Record<string, unknown>;
+  if (typeof record.detail === "string") return record.detail;
+  const parts: string[] = [];
+  for (const value of Object.values(record)) {
+    if (typeof value === "string") parts.push(value);
+    else if (Array.isArray(value)) parts.push(...value.filter((v): v is string => typeof v === "string"));
+  }
+  return parts.length > 0 ? parts.join(" ") : fallback;
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, { headers: authHeaders() });
   if (!response.ok) {
@@ -77,7 +94,7 @@ async function postJson<T>(path: string, body: Record<string, unknown> = {}): Pr
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
-    throw new Error(payload?.detail ?? `Échec de la requête ${path} (${response.status})`);
+    throw new Error(errorMessage(payload, path, response.status));
   }
   return response.json() as Promise<T>;
 }
@@ -90,7 +107,7 @@ async function patchJson<T>(path: string, body: Record<string, unknown> = {}): P
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
-    throw new Error(payload?.detail ?? `Échec de la requête ${path} (${response.status})`);
+    throw new Error(errorMessage(payload, path, response.status));
   }
   return response.json() as Promise<T>;
 }
@@ -104,7 +121,7 @@ async function deleteJson<T>(path: string): Promise<T> {
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
-    throw new Error(payload?.detail ?? `Échec de la requête ${path} (${response.status})`);
+    throw new Error(errorMessage(payload, path, response.status));
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
