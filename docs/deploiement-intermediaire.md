@@ -72,7 +72,9 @@ Fichiers ajoutés / modifiés :
 | `render.yaml` | Blueprint : 1 web service, `buildCommand` (pip + npm build + collectstatic + migrate), `startCommand` gunicorn, `healthCheckPath: /api/health/`, liste des env vars (secrets en `sync: false`). |
 | `.env.example` | Section de référence des variables Render (commentée). |
 
-**Vérifié en local :** settings staging s'importent sans erreur (psycopg accepte les options), `/api/health/` répond `200 {"status":"ok"}`. **Non vérifiable en local :** le build frontend dans l'environnement Render (présence de `npm`), la connexion Supabase réelle.
+**Bug latent corrigé au passage (2026-09-09) :** `apps/accounts/models.py::default_organisation_id` (défaut de `User.organisation` / `Team.organisation`) faisait une requête SQL. Les system checks Django lancés par `migrate`/`collectstatic` instancient `User()` et évaluaient ce défaut **avant** que les migrations n'aient créé `accounts_organisation` → crash au 1ᵉʳ déploiement sur base neuve. Enrobé d'un `try/except (OperationalError, ProgrammingError)` → `None`. Reproduit et corrigé en local (`migrate` sur SQLite vierge).
+
+**Vérifié en local :** settings staging s'importent sans erreur (psycopg accepte les options), `/api/health/` répond `200 {"status":"ok"}`, `migrate` puis `collectstatic --settings=config.settings.staging` sur base vierge OK, suite de tests accounts/common verte. **Non vérifiable en local :** le build frontend dans l'environnement Render (présence de `npm`), la connexion Supabase réelle.
 
 ## Actions manuelles restantes (utilisateur)
 

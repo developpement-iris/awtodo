@@ -21,8 +21,8 @@ services:
       pip install -r requirements/staging.txt &&
       npm --prefix frontend ci &&
       VITE_API_BASE_URL=/api/v1 npm --prefix frontend run build &&
-      python manage.py collectstatic --no-input --settings=config.settings.staging &&
-      python manage.py migrate --no-input --settings=config.settings.staging
+      python manage.py migrate --no-input --settings=config.settings.staging &&
+      python manage.py collectstatic --no-input --settings=config.settings.staging
     startCommand: gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 60
     healthCheckPath: /api/health/
     envVars:

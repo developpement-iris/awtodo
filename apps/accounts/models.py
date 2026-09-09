@@ -2,6 +2,7 @@ import uuid
 
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.db.utils import OperationalError, ProgrammingError
 
 from apps.common.models import StatusLifecycleModel, TimeStampedModel, UUIDModel
 
@@ -27,8 +28,17 @@ def default_organisation_id():
     `User`/`Team`/`Project` (évite d'imposer ce kwarg à chaque appel/test
     existant) sans affaiblir la contrainte NOT NULL en base — un appelant qui
     veut une organisation précise (ex. création d'une nouvelle organisation,
-    chantier 3.4) la passe explicitement et prime sur ce défaut."""
-    return Organisation.objects.order_by("created_at").values_list("id", flat=True).first()
+    chantier 3.4) la passe explicitement et prime sur ce défaut.
+
+    Le try/except couvre le cas où ce défaut est évalué alors que la table
+    n'existe pas encore : `manage.py migrate`/`collectstatic` lancent les
+    system checks Django (`check_user_model` instancie `User()`, ce qui
+    évalue ce défaut) *avant* que les migrations n'aient créé la table — ce
+    qui arrive sur une base neuve au premier déploiement."""
+    try:
+        return Organisation.objects.order_by("created_at").values_list("id", flat=True).first()
+    except (OperationalError, ProgrammingError):
+        return None
 
 
 ORGANISATION_ROLE_CHOICES = [
