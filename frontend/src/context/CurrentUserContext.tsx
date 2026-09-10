@@ -33,13 +33,6 @@ export function CurrentUserProvider({ children }: { children: ReactNode }) {
   const [usersLoaded, setUsersLoaded] = useState(false);
   const [authRestored, setAuthRestored] = useState(false);
 
-  useEffect(() => {
-    getUsers()
-      .then(setUsers)
-      .catch(() => undefined)
-      .finally(() => setUsersLoaded(true));
-  }, []);
-
   // Restauration d'une connexion réelle déjà en cours (token stocké) — un
   // token invalide/expiré est purgé silencieusement, l'utilisateur retombe
   // sur le sélecteur de test s'il en avait un.
@@ -58,6 +51,19 @@ export function CurrentUserProvider({ children }: { children: ReactNode }) {
       })
       .finally(() => setAuthRestored(true));
   }, []);
+
+  // La liste des utilisateurs n'est chargée qu'une fois le token restauré (et
+  // rechargée après une connexion) : en prod l'endpoint exige l'authentification
+  // (`IsAuthenticated`), un fetch au tout premier rendu partirait sans en-tête
+  // `Authorization` et échouerait en 401 — laissant `users` vide (sélecteur de
+  // partage de calendrier, palette de commandes… tous vides).
+  useEffect(() => {
+    if (!authRestored) return;
+    getUsers()
+      .then(setUsers)
+      .catch(() => setUsers([]))
+      .finally(() => setUsersLoaded(true));
+  }, [authRestored, authUser?.id]);
 
   function logout() {
     window.localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
