@@ -6,6 +6,7 @@ import {
   inviteProjectExternalMember,
   removeProjectMember,
 } from "../../api/client";
+import { Combobox } from "../../components/Combobox";
 import { useToast } from "../../context/ToastContext";
 import type { Project, ProjectMembership, ProjectRole, Team } from "../../types/watodo";
 import "./ProjectAdminTab.css";
@@ -176,19 +177,15 @@ export function ProjectAdminTab({ project, onUpdated }: ProjectAdminTabProps) {
               </td>
               <td>
                 {isManager ? (
-                  <select
-                    className="project-admin-tab__role-select"
-                    value={membership.role}
-                    onChange={(event) => handleRoleChange(membership, event.target.value as ProjectRole)}
-                    disabled={pendingMembershipId === membership.id}
-                    aria-label={`Rôle de ${name}`}
-                  >
-                    {ROLE_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                  <span className="project-admin-tab__role-select">
+                    <Combobox
+                      options={ROLE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                      value={membership.role}
+                      onChange={(value) => handleRoleChange(membership, value as ProjectRole)}
+                      disabled={pendingMembershipId === membership.id}
+                      clearable={false}
+                    />
+                  </span>
                 ) : (
                   membership.role_display
                 )}
@@ -219,14 +216,16 @@ export function ProjectAdminTab({ project, onUpdated }: ProjectAdminTabProps) {
             <div className="project-admin-tab__form">
               <h3>Ajouter un membre du groupe</h3>
               <div className="project-admin-tab__form-row">
-                <select value={groupSelection} onChange={(event) => setGroupSelection(event.target.value)}>
-                  <option value="">Choisir…</option>
-                  {addableFromGroup.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {`${user.first_name} ${user.last_name}`.trim() || user.username}
-                    </option>
-                  ))}
-                </select>
+                <Combobox
+                  options={addableFromGroup.map((user) => ({
+                    value: user.id,
+                    label: `${user.first_name} ${user.last_name}`.trim() || user.username,
+                  }))}
+                  value={groupSelection}
+                  onChange={setGroupSelection}
+                  placeholder="Choisir…"
+                  searchPlaceholder="Rechercher un nom…"
+                />
                 <button type="button" onClick={handleAddFromGroup} disabled={groupSubmitting || !groupSelection}>
                   Ajouter
                 </button>
@@ -248,13 +247,12 @@ export function ProjectAdminTab({ project, onUpdated }: ProjectAdminTabProps) {
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
               />
-              <select value={emailRole} onChange={(event) => setEmailRole(event.target.value as ProjectRole)}>
-                {ROLE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              <Combobox
+                options={ROLE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                value={emailRole}
+                onChange={(value) => setEmailRole(value as ProjectRole)}
+                clearable={false}
+              />
               <button type="button" onClick={handleAddByEmail} disabled={emailSubmitting || !email.trim()}>
                 Ajouter
               </button>

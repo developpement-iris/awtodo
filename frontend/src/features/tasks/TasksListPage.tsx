@@ -10,6 +10,7 @@ import {
   updateTaskDescription,
   updateTaskEstimatedHours,
 } from "../../api/client";
+import { Combobox } from "../../components/Combobox";
 import { InlineEditableText } from "../../components/InlineEditableText";
 import { LoadingTransition } from "../../components/LoadingTransition";
 import { SkeletonTable } from "../../components/Skeleton";
@@ -229,17 +230,17 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
         </div>
 
         {mode === "team" && myTeams.length > 1 && (
-          <select
-            className="tasks-list-page__team-select"
-            value={activeTeam}
-            onChange={(event) => setSelectedTeam(event.target.value)}
-          >
-            {myTeams.map((teamId) => (
-              <option key={teamId} value={teamId}>
-                {teamNameById.get(teamId) ?? teamId}
-              </option>
-            ))}
-          </select>
+          <span className="tasks-list-page__team-select">
+            <Combobox
+              options={myTeams.map((teamId) => ({
+                value: teamId,
+                label: teamNameById.get(teamId) ?? teamId,
+              }))}
+              value={activeTeam}
+              onChange={setSelectedTeam}
+              clearable={false}
+            />
+          </span>
         )}
 
         <StatusFilterDropdown options={TASK_STATUS_FILTER_OPTIONS} selected={statusFilter} onChange={setStatusFilter} />

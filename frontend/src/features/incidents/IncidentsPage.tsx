@@ -15,6 +15,7 @@ import {
   updateIncidentDescription,
   type IncidentCreatePayload,
 } from "../../api/client";
+import { Combobox } from "../../components/Combobox";
 import { LoadingTransition } from "../../components/LoadingTransition";
 import { SkeletonTable } from "../../components/Skeleton";
 import { StatusBadge } from "../../components/StatusBadge";
@@ -443,19 +444,19 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
             <label className="incidents-page__filter-label" htmlFor="incidents-project-filter">
               Projet
             </label>
-            <select
-              id="incidents-project-filter"
-              className="incidents-page__filter-select"
-              value={projectFilter}
-              onChange={(event) => setProjectFilter(event.target.value)}
-            >
-              <option value="">Tous les projets</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
+            <span className="incidents-page__filter-select">
+              <Combobox
+                id="incidents-project-filter"
+                options={[
+                  { value: "", label: "Tous les projets" },
+                  ...projects.map((project) => ({ value: project.id, label: project.name })),
+                ]}
+                value={projectFilter}
+                onChange={setProjectFilter}
+                placeholder="Tous les projets"
+                searchPlaceholder="Rechercher un projet…"
+              />
+            </span>
           </>
         )}
 

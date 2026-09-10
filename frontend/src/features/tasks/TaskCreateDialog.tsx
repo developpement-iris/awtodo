@@ -1,5 +1,6 @@
 import { motion } from "motion/react";
 import { useState } from "react";
+import { Combobox } from "../../components/Combobox";
 import { DatePickerField } from "../../components/DatePickerField";
 import type { Project, Task, User } from "../../types/watodo";
 import "./TaskCreateDialog.css";
@@ -78,16 +79,13 @@ export function TaskCreateDialog({
         <div className="task-create-dialog__grid">
           <label className="task-create-dialog__field">
             <span>Projet</span>
-            <select value={values.project} onChange={(event) => update("project", event.target.value)}>
-              <option value="" disabled>
-                Choisir un projet
-              </option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
+            <Combobox
+              options={projects.map((project) => ({ value: project.id, label: project.name }))}
+              value={values.project}
+              onChange={(value) => update("project", value)}
+              placeholder="Choisir un projet"
+              searchPlaceholder="Rechercher un projet…"
+            />
           </label>
 
           <label className="task-create-dialog__field">
@@ -111,30 +109,22 @@ export function TaskCreateDialog({
 
           <label className="task-create-dialog__field">
             <span>Type</span>
-            <select
+            <Combobox
+              options={TASK_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
               value={values.task_type}
-              onChange={(event) => update("task_type", event.target.value as Task["task_type"])}
-            >
-              {TASK_TYPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              onChange={(value) => update("task_type", value as Task["task_type"])}
+              clearable={false}
+            />
           </label>
 
           <label className="task-create-dialog__field">
             <span>Priorité</span>
-            <select
+            <Combobox
+              options={PRIORITY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
               value={values.priority}
-              onChange={(event) => update("priority", event.target.value as Task["priority"])}
-            >
-              {PRIORITY_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              onChange={(value) => update("priority", value as Task["priority"])}
+              clearable={false}
+            />
           </label>
 
           <label className="task-create-dialog__field">
@@ -155,14 +145,16 @@ export function TaskCreateDialog({
 
           <label className="task-create-dialog__field">
             <span>Assigné à</span>
-            <select value={values.assignee} onChange={(event) => update("assignee", event.target.value)}>
-              <option value="">Non assignée</option>
-              {users.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {displayName(user)}
-                </option>
-              ))}
-            </select>
+            <Combobox
+              options={[
+                { value: "", label: "Non assignée" },
+                ...users.map((user) => ({ value: user.id, label: displayName(user) })),
+              ]}
+              value={values.assignee}
+              onChange={(value) => update("assignee", value)}
+              placeholder="Non assignée"
+              searchPlaceholder="Rechercher un nom…"
+            />
           </label>
 
           <label className="task-create-dialog__field task-create-dialog__field--full">

@@ -1,26 +1,29 @@
-/* Checkbox unique du site — voir docs/charte-graphique.md > "Checkbox".
-   Tout aux jetons du thème, état coché sur l'accent brique (jamais une
-   couleur hors palette). Trois tailles via --checkbox-size. */
+/* Interrupteur oui/non unique du site — voir docs/charte-graphique.md >
+   "Interrupteur". Switch carré (coins à 2px), état activé sur l'accent
+   brique. Trois tailles via --switch-h (hauteur de la piste). */
 
-.checkbox {
+.switch {
   position: relative;
   display: inline-flex;
   flex-shrink: 0;
   vertical-align: middle;
-  --checkbox-size: 16px;
+  --switch-h: 18px;
+  --switch-w: 32px;
+  --switch-pad: 2px;
 }
 
-.checkbox--md {
-  --checkbox-size: 20px;
+.switch--md {
+  --switch-h: 22px;
+  --switch-w: 38px;
 }
 
-.checkbox--lg {
-  --checkbox-size: 24px;
+.switch--lg {
+  --switch-h: 26px;
+  --switch-w: 46px;
 }
 
-/* Input réel : couvre exactement la case, invisible mais cliquable et
-   focusable (on garde toute la sémantique native). */
-.checkbox__input {
+/* Input réel : couvre la piste, invisible mais cliquable et focusable. */
+.switch__input {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -30,46 +33,60 @@
   cursor: pointer;
 }
 
-.checkbox__input:disabled {
+.switch__input:disabled {
   cursor: not-allowed;
 }
 
-.checkbox__box {
-  display: grid;
-  place-items: center;
-  width: var(--checkbox-size);
-  height: var(--checkbox-size);
+.switch__track {
+  display: block;
+  width: var(--switch-w);
+  height: var(--switch-h);
+  padding: var(--switch-pad);
   border: 1.5px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: 2px;
   background: var(--color-surface);
-  color: transparent;
   transition:
     background-color var(--transition-fast),
-    border-color var(--transition-fast),
-    color var(--transition-fast);
+    border-color var(--transition-fast);
 }
 
-.checkbox__input:not(:disabled):hover + .checkbox__box {
+.switch__thumb {
+  display: block;
+  width: calc(var(--switch-h) - 2 * var(--switch-pad) - 3px);
+  height: calc(var(--switch-h) - 2 * var(--switch-pad) - 3px);
+  border-radius: 2px;
+  background: var(--color-text-muted);
+  transition:
+    transform var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.switch__input:not(:disabled):hover + .switch__track {
   border-color: var(--color-accent);
 }
 
-.checkbox__input:checked + .checkbox__box {
+.switch__input:checked + .switch__track {
   background: var(--color-accent);
   border-color: var(--color-accent);
-  color: var(--color-accent-contrast);
 }
 
-.checkbox__input:focus-visible + .checkbox__box {
+.switch__input:checked + .switch__track .switch__thumb {
+  background: var(--color-accent-contrast);
+  transform: translateX(calc(var(--switch-w) - var(--switch-h)));
+}
+
+.switch__input:focus-visible + .switch__track {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 
-.checkbox__input:disabled + .checkbox__box {
+.switch__input:disabled + .switch__track {
   opacity: 0.45;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .checkbox__box {
+  .switch__track,
+  .switch__thumb {
     transition: none;
   }
 }

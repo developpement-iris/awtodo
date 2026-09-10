@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { addTeamMember, createTeam, getTeams, getUsers, removeTeamMember, renameTeam } from "../../api/client";
+import { Combobox } from "../../components/Combobox";
 import { CreationCard } from "../../components/CreationCard";
 import { InlineEditableText } from "../../components/InlineEditableText";
 import { SkeletonCards } from "../../components/Skeleton";
@@ -153,20 +154,19 @@ export function GroupsSection({ currentUser }: GroupsSectionProps) {
 
                 {isManager && addableUsers.length > 0 && (
                   <div className="groups-section__add">
-                    <select
+                    <Combobox
+                      options={addableUsers.map((user) => ({
+                        value: user.id,
+                        label: `${user.first_name} ${user.last_name}`.trim() || user.username,
+                      }))}
                       value={addSelection[team.id] ?? ""}
-                      onChange={(event) =>
-                        setAddSelection((current) => ({ ...current, [team.id]: event.target.value }))
+                      onChange={(value) =>
+                        setAddSelection((current) => ({ ...current, [team.id]: value }))
                       }
                       disabled={pendingTeamId === team.id}
-                    >
-                      <option value="">Ajouter un membre…</option>
-                      {addableUsers.map((user) => (
-                        <option key={user.id} value={user.id}>
-                          {`${user.first_name} ${user.last_name}`.trim() || user.username}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="Ajouter un membre…"
+                      searchPlaceholder="Rechercher un nom…"
+                    />
                     <button
                       type="button"
                       onClick={() => handleAddMember(team)}

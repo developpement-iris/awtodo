@@ -1,6 +1,8 @@
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Checkbox } from "../../components/Checkbox";
+import { Combobox } from "../../components/Combobox";
+import { DateTimeField } from "../../components/DateTimeField";
 import {
   addEventParticipant,
   cancelEvent,
@@ -206,16 +208,11 @@ export function EventDialog({
             <div className="planning-field-row">
               <label className="planning-field">
                 <span>Début</span>
-                <input
-                  type="datetime-local"
-                  value={start}
-                  onChange={(e) => setStart(e.target.value)}
-                  required
-                />
+                <DateTimeField value={start} onChange={setStart} />
               </label>
               <label className="planning-field">
                 <span>Fin</span>
-                <input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} required />
+                <DateTimeField value={end} onChange={setEnd} />
               </label>
             </div>
 
@@ -255,15 +252,15 @@ export function EventDialog({
                   ))}
                   {detail.participants.length === 0 && <li className="planning-dialog__muted">Aucun participant</li>}
                 </ul>
-                <div className="planning-field-row">
-                  <select value={participantToAdd} onChange={(e) => setParticipantToAdd(e.target.value)}>
-                    <option value="">Ajouter un participant…</option>
-                    {pickable.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {displayName(u)}
-                      </option>
-                    ))}
-                  </select>
+                <div className="planning-field-row planning-field-row--combobox">
+                  <Combobox
+                    options={pickable.map((u) => ({ value: u.id, label: displayName(u) }))}
+                    value={participantToAdd}
+                    onChange={setParticipantToAdd}
+                    placeholder="Ajouter un participant…"
+                    searchPlaceholder="Rechercher un nom…"
+                    emptyLabel="Aucune personne à ajouter."
+                  />
                   <button
                     type="button"
                     className="planning-btn"

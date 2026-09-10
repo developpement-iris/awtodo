@@ -44,17 +44,23 @@
   color: var(--color-text-muted);
 }
 
+/* Positionnement (position: fixed + coordonnées) posé en inline par
+   AnchoredPanel — ici seulement l'apparence. */
 .combobox__panel {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  z-index: 20;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-overlay);
   overflow: hidden;
+}
+
+.combobox__panel [cmdk-root] {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .combobox__input {
@@ -74,7 +80,8 @@
 }
 
 .combobox__list {
-  max-height: 220px;
+  flex: 1;
+  max-height: 260px;
   overflow-y: auto;
   padding: var(--space-1);
 }

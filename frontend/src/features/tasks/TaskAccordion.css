@@ -121,13 +121,6 @@
 .task-accordion__assign-select {
   flex: 1;
   min-width: 0;
-  font-family: var(--font-sans);
-  font-size: 13px;
-  color: var(--color-text);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  padding: var(--space-2) var(--space-3);
 }
 
 .task-accordion__assign-submit {

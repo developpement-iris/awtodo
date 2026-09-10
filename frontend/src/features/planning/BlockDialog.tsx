@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import { useState } from "react";
 import { cancelBlock, updateBlock } from "../../api/client";
+import { DateTimeField } from "../../components/DateTimeField";
 import type { ScheduledBlock } from "../../types/watodo";
 import { isoToLocalInput, localInputToIso } from "./calendarMath";
 
@@ -72,11 +73,11 @@ export function BlockDialog({ block, onClose, onSaved }: BlockDialogProps) {
           <div className="planning-field-row">
             <label className="planning-field">
               <span>Début</span>
-              <input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} required />
+              <DateTimeField value={start} onChange={setStart} />
             </label>
             <label className="planning-field">
               <span>Fin</span>
-              <input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} required />
+              <DateTimeField value={end} onChange={setEnd} />
             </label>
           </div>
 

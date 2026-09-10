@@ -1,6 +1,7 @@
 import { Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getTeams, getUsers, setOrganisationRole } from "../../api/client";
+import { Combobox } from "../../components/Combobox";
 import { SkeletonTable } from "../../components/Skeleton";
 import { useToast } from "../../context/ToastContext";
 import type { OrganisationRole, Team, User } from "../../types/watodo";
@@ -104,19 +105,18 @@ export function MembersSection({ currentUser }: MembersSectionProps) {
                   )}
                 </td>
                 <td>
-                  <select
+                  <span
                     className="members-section__role-select"
-                    value={user.organisation_role}
-                    disabled={pendingUserId === user.id}
                     onClick={(event) => event.stopPropagation()}
-                    onChange={(event) => handleRoleChange(user, event.target.value as OrganisationRole)}
                   >
-                    {ROLE_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                    <Combobox
+                      options={ROLE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                      value={user.organisation_role}
+                      disabled={pendingUserId === user.id}
+                      clearable={false}
+                      onChange={(value) => handleRoleChange(user, value as OrganisationRole)}
+                    />
+                  </span>
                 </td>
                 <td></td>
               </tr>

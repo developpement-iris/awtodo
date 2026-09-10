@@ -1,6 +1,8 @@
 import { X } from "lucide-react";
 import { useState } from "react";
 import { Checkbox } from "../../components/Checkbox";
+import { Combobox } from "../../components/Combobox";
+import { DateTimeField } from "../../components/DateTimeField";
 import {
   cancelProjectPlanningEntry,
   createProjectPlanningEntry,
@@ -125,35 +127,36 @@ export function ProjectEntryDialog({
           <div className="planning-field-row">
             <label className="planning-field">
               <span>Type</span>
-              <select value={kind} onChange={(e) => setKind(e.target.value as ProjectPlanningKind)}>
-                {KIND_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              <Combobox
+                options={KIND_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                value={kind}
+                onChange={(v) => setKind(v as ProjectPlanningKind)}
+                clearable={false}
+              />
             </label>
             <label className="planning-field">
               <span>Assigné à</span>
-              <select value={assignee} onChange={(e) => setAssignee(e.target.value)}>
-                <option value="">Personne</option>
-                {members.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {displayName(u)}
-                  </option>
-                ))}
-              </select>
+              <Combobox
+                options={[
+                  { value: "", label: "Personne" },
+                  ...members.map((u) => ({ value: u.id, label: displayName(u) })),
+                ]}
+                value={assignee}
+                onChange={setAssignee}
+                placeholder="Personne"
+                searchPlaceholder="Rechercher un nom…"
+              />
             </label>
           </div>
 
           <div className="planning-field-row">
             <label className="planning-field">
               <span>Début</span>
-              <input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} required />
+              <DateTimeField value={start} onChange={setStart} />
             </label>
             <label className="planning-field">
               <span>Fin</span>
-              <input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} required />
+              <DateTimeField value={end} onChange={setEnd} />
             </label>
           </div>
 

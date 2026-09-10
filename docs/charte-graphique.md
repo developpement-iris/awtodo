@@ -309,21 +309,26 @@ Voir `CLAUDE.md` > Roadmap et `docs/modeles-et-api.md` > "Module Planning / Cale
 - **Panneau « À planifier »** : liste des tâches assignées à l'utilisateur non encore couvertes par un créneau, chaque item `useDraggable` — glisser sur la grille crée un `ScheduledBlock` (créneau d'1 h par défaut, ajustable ensuite). Pastille de priorité sur la gauche (`--priority-{niveau}-text`).
 - Tout aux jetons du thème, suit le clair/sombre, `@media (prefers-reduced-motion: reduce)` neutralise les transitions. Tout le texte en français. `describeRrule` rend une RRULE en phrase (« Toutes les 2 semaines, le mardi »).
 
-### Checkbox unique (implémenté — session du 2026-09-09)
+### Interrupteur (switch carré) — remplace la case à cocher (implémenté — session du 2026-09-09, refondu en switch le 2026-09-10)
 
-Composant unique `components/Checkbox.tsx` (+ `.css`) — remplace **toutes** les `<input type="checkbox">` natives du site (dialogs planning, `ProjectCreateDialog`, `SpecTab`, sélecteur de calendriers).
+Composant unique `components/Checkbox.tsx` (+ `.css`, export inchangé `Checkbox` / props inchangées `checked` · `onCheckedChange` · `disabled` · `size`). Rendu depuis le 2026-09-10 en **switch carré** (retour direct « remplacer les cases à cocher ») — piste + curseur qui glisse, coins à `2px` (façon `rounded-xs` du snippet Base UI fourni). Utilisé partout où l'ancienne case l'était (dialogs planning, `ProjectCreateDialog`, `SpecTab` sommaire, sélecteur de calendriers, listes de membres à cocher).
 
-- **Idée reprise d'un snippet Base UI fourni, mais réécrite aux conventions du repo** : pas de Tailwind, pas de lib de composants, et surtout **pas de bleu `sky`** — l'état coché est sur l'**accent brique** (`--color-accent`, clair/sombre), cohérent avec la règle « une couleur = un axe » (le `sky-600` du snippet aurait introduit une teinte hors palette sémantique).
-- Enveloppe un `<input type="checkbox">` réel (masqué en `opacity:0` mais couvrant la case → clavier/focus/sémantique de formulaire natifs conservés) + une case stylée (`.checkbox__box`, coche `lucide` `Check`). État coché via le sélecteur `:checked + .checkbox__box`.
-- **Trois tailles** (`size` prop → `--checkbox-size`) : `sm` ≈ 16px (défaut), `md` ≈ 20px, `lg` ≈ 24px — équivalent des `size-5`/`size-6` du snippet.
-- `disabled` → opacité 0.45 + `cursor: not-allowed` (la case reste visible, jamais masquée — même règle que le sommaire du cahier des charges). `:focus-visible` → contour accent.
-- **`StatusFilterDropdown`** (filtres Tâches/Incidents/Projets) : le rang reste un `<button role="checkbox">` (pas d'`<input>` imbriqué dans un bouton), mais sa pastille `__check` est restylée à l'identique de `.checkbox__box` (carré `--radius-sm`, accent brique quand actif) — rendu cohérent avec le reste.
+- Enveloppe toujours un `<input type="checkbox" role="switch">` réel (masqué en `opacity:0`, couvre la piste → clavier/focus/sémantique natifs). Piste `.switch__track` + curseur `.switch__thumb` ; état activé : `:checked + .switch__track` passe la piste sur `--color-accent` et translate le curseur (`translateX(--switch-w − --switch-h)`).
+- **Pas de bleu `sky`** (règle « une couleur = un axe ») — activé = accent brique, curseur en `--color-accent-contrast`.
+- Trois tailles (`size` → `--switch-h`/`--switch-w`) : `sm` 18×32 (défaut), `md` 22×38, `lg` 26×46. `disabled` → opacité 0.45. `:focus-visible` → contour accent. `prefers-reduced-motion` → pas de transition.
+- **`StatusFilterDropdown`** (filtres multi-critères Tâches/Incidents/Projets) **non touché** — c'est un sélecteur de filtre, pas une case oui/non ; il garde sa pastille carrée.
 
-### Combobox recherchable (implémenté — session du 2026-09-10)
+### Combobox — remplaçant unifié de tous les `<select>` (implémenté — session du 2026-09-10)
 
-Composant `components/Combobox.tsx` (+ `.css`) — sélecteur unique avec champ de recherche, pour remplacer les `<select>` natifs quand la liste de choix peut être longue (1ᵉʳ usage : sélecteur de personne du panneau de partage de calendrier, `SharePanel`).
+Composant `components/Combobox.tsx` (+ `.css`). **Tous les `<select>` natifs de l'app** ont été remplacés (participants d'événement, projet/priorité/type/rôle/groupe/version/assigné/filtres…). Plus aucun `<select>` ni `<input type="datetime-local">` dans `frontend/src`.
 
-- **Idée reprise d'un snippet Base UI fourni (Popover + Command), réécrite aux conventions du repo** : pas de Tailwind, pas de `@/components/base-ui/*`, pas de Radix Popover. S'appuie sur **`cmdk`** (déjà une dépendance, moteur de `CommandPalette`) pour la recherche/navigation clavier ; le « popover » est un simple `<div position:absolute>` sous le déclencheur.
-- Déclencheur = `<button role="combobox">` bordé façon input planning (`--color-border`, `--radius-sm`), chevron `lucide` `ChevronsUpDown`. Panneau : `Command.Input` + `Command.List` défilante (`max-height: 220px`), coche `Check` sur l'option sélectionnée en `--color-accent`. Fermeture au `pointerdown` extérieur et à `Échap`.
-- **Pas de portail** : les dialogues hôtes ont `overflow-y: auto` (rognerait un panneau `absolute`). Le dialogue qui accueille un Combobox porte donc `.planning-dialog--overflow-visible` (réservé aux dialogues courts sans défilement interne).
-- `hint` optionnel par option (2ᵉ ligne discrète — ex. « invitation en attente » pour un compte `pending`). `prefers-reduced-motion` respecté (animation d'ouverture désactivée).
+- **Idée reprise d'un snippet Base UI fourni (Popover + Command), réécrite aux conventions du repo** : pas de Tailwind, pas de `@/components/base-ui/*`, pas de Radix. S'appuie sur **`cmdk`** (déjà une dépendance, moteur de `CommandPalette`).
+- Déclencheur = `<button role="combobox">` bordé (`--color-border`, `--radius-sm`), chevron `ChevronsUpDown`. Panneau : `Command.List` défilante, coche `Check` sur l'option active en `--color-accent`.
+- **Champ de recherche conditionnel** : `Command.Input` affiché seulement au-delà de 7 options (prop `searchable` pour forcer). Un sélecteur de priorité (4 options) n'a donc pas de barre de recherche, un sélecteur de personne oui.
+- **prop `clearable`** (défaut `true`) : re-sélectionner l'option active revient à la valeur vide. Passer `clearable={false}` pour un choix obligatoire (type, priorité, rôle, version…). Les options « vides » explicites (« Aucun groupe », « Non assignée », « Tous les projets ») sont passées comme une option `{ value: "", label: … }`.
+- **Panneau rendu dans un portail** (`components/AnchoredPanel.tsx`, `createPortal` vers `document.body`, `position: fixed` calé sur le rect du déclencheur, bascule au-dessus si la place manque, ferme au `pointerdown` extérieur / `Échap`) — s'affranchit de l'`overflow` de tout dialogue parent. Remplace le `position: absolute` initial (qui imposait `.planning-dialog--overflow-visible`).
+- Les anciennes classes `.xxx__*-select` (posées sur le `<select>`) deviennent de simples enveloppes de largeur autour du `.combobox` — leur habillage (bordure, fond, padding) est retiré, le Combobox dessine le sien.
+
+### Champ date-heure — remplace `<input type="datetime-local">` (implémenté — session du 2026-09-10)
+
+Composant `components/DateTimeField.tsx` (+ `.css`) — déclencheur qui ouvre (même portail `AnchoredPanel`) un champ heure natif (`<input type="time" step>`) au-dessus d'un calendrier `react-day-picker` (mêmes classes que `DatePickerField`, extraites dans `components/dayPickerClassNames.ts`). Émet toujours `YYYY-MM-DDTHH:mm` — les 3 dialogues concernés (`BlockDialog`, `EventDialog`, `ProjectEntryDialog`) gardent leur conversion `localInputToIso` inchangée. Repris d'un snippet Base UI (Calendar + time input) réécrit aux conventions du repo.

@@ -1,6 +1,7 @@
 import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createProjectVersion, getProjectVersions } from "../../api/client";
+import { Combobox } from "../../components/Combobox";
 import { useToast } from "../../context/ToastContext";
 import type { Project, ProjectVersion } from "../../types/watodo";
 import { KanbanBoard } from "./KanbanBoard";
@@ -75,19 +76,17 @@ export function TasksTab({ project }: TasksTabProps) {
         </div>
 
         <div className="tasks-tab__version">
-          <select
-            className="tasks-tab__version-select"
-            value={versionId ?? ""}
-            onChange={(event) => setVersionId(event.target.value)}
-            aria-label="Version du projet"
-          >
-            {versions.map((version) => (
-              <option key={version.id} value={version.id}>
-                {version.label}
-                {version.is_current ? " · courante" : ""}
-              </option>
-            ))}
-          </select>
+          <span className="tasks-tab__version-select">
+            <Combobox
+              options={versions.map((version) => ({
+                value: version.id,
+                label: `${version.label}${version.is_current ? " · courante" : ""}`,
+              }))}
+              value={versionId ?? ""}
+              onChange={setVersionId}
+              clearable={false}
+            />
+          </span>
           {versionId && versionId !== project.current_version_id && (
             <span className="tasks-tab__version-note">Version passée — informationnel</span>
           )}

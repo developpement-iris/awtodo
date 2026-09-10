@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { createInvitation, getInvitations, getTeams, resendInvitation } from "../../api/client";
+import { Combobox } from "../../components/Combobox";
 import { SkeletonTable } from "../../components/Skeleton";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useToast } from "../../context/ToastContext";
@@ -122,14 +123,15 @@ export function InvitationsSection({ currentUser }: InvitationsSectionProps) {
             onChange={(event) => setLastName(event.target.value)}
           />
           {invitableTeams.length > 0 && (
-            <select value={teamId} onChange={(event) => setTeamId(event.target.value)}>
-              <option value="">Aucun groupe</option>
-              {invitableTeams.map((team) => (
-                <option key={team.id} value={team.id}>
-                  {team.name}
-                </option>
-              ))}
-            </select>
+            <Combobox
+              options={[
+                { value: "", label: "Aucun groupe" },
+                ...invitableTeams.map((team) => ({ value: team.id, label: team.name })),
+              ]}
+              value={teamId}
+              onChange={setTeamId}
+              placeholder="Aucun groupe"
+            />
           )}
           <button type="button" onClick={handleCreate} disabled={submitting || !email.trim()}>
             {submitting ? "Envoi…" : "Inviter"}

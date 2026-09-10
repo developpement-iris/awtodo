@@ -1,6 +1,7 @@
 import { motion } from "motion/react";
 import { useState } from "react";
 import { Checkbox } from "../../components/Checkbox";
+import { Combobox } from "../../components/Combobox";
 import { DatePickerField } from "../../components/DatePickerField";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 import type { Project, Team, User } from "../../types/watodo";
@@ -98,32 +99,28 @@ export function ProjectCreateDialog({
 
           <label className="project-create-dialog__field">
             <span>Type</span>
-            <select
+            <Combobox
+              options={[
+                { value: "individuel", label: "Individuel" },
+                { value: "collaboratif", label: "Collaboratif" },
+              ]}
               value={values.project_type}
-              onChange={(event) =>
-                update("project_type", event.target.value as Project["project_type"])
-              }
-            >
-              <option value="individuel">Individuel</option>
-              <option value="collaboratif">Collaboratif</option>
-            </select>
+              onChange={(value) => update("project_type", value as Project["project_type"])}
+              clearable={false}
+            />
           </label>
 
           <label className="project-create-dialog__field">
             <span>Priorité</span>
-            <select
+            <Combobox
+              options={[
+                { value: "", label: "Non définie" },
+                ...PRIORITY_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+              ]}
               value={values.priority}
-              onChange={(event) =>
-                update("priority", event.target.value as ProjectCreateFormValues["priority"])
-              }
-            >
-              <option value="">Non définie</option>
-              {PRIORITY_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              onChange={(value) => update("priority", value as ProjectCreateFormValues["priority"])}
+              placeholder="Non définie"
+            />
           </label>
 
           <label className="project-create-dialog__field">
@@ -153,10 +150,12 @@ export function ProjectCreateDialog({
           {needsTeam && (
             <label className="project-create-dialog__field">
               <span>Groupe</span>
-              <select
+              <Combobox
+                options={myTeams.map((team) => ({ value: team.id, label: team.name }))}
                 value={values.team}
-                onChange={(event) => {
-                  const teamId = event.target.value;
+                placeholder="Choisir un groupe"
+                searchPlaceholder="Rechercher un groupe…"
+                onChange={(teamId) => {
                   const team = myTeams.find((candidate) => candidate.id === teamId);
                   // Tout le groupe est ajouté par défaut au projet — décocher
                   // ci-dessous reste possible pour exclure quelqu'un au cas
@@ -165,16 +164,7 @@ export function ProjectCreateDialog({
                   const defaultMemberIds = selectableMembersOf(team, currentUser?.id).map((user) => user.id);
                   setValues((current) => ({ ...current, team: teamId, member_ids: defaultMemberIds }));
                 }}
-              >
-                <option value="" disabled>
-                  Choisir un groupe
-                </option>
-                {myTeams.map((team) => (
-                  <option key={team.id} value={team.id}>
-                    {team.name}
-                  </option>
-                ))}
-              </select>
+              />
             </label>
           )}
 

@@ -1,6 +1,7 @@
 import { ChevronUp } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
+import { Combobox } from "../../components/Combobox";
 import { InlineEditableText } from "../../components/InlineEditableText";
 import { InlineEditableTextarea } from "../../components/InlineEditableTextarea";
 import { StatusBadge } from "../../components/StatusBadge";
@@ -163,19 +164,16 @@ export function TaskAccordion({
             </p>
             {task.permissions.can_assign && (
               <div className="task-accordion__assign">
-                <select
-                  className="task-accordion__assign-select"
-                  value={assigneeSelection}
-                  onChange={(event) => setAssigneeSelection(event.target.value)}
-                  disabled={pending}
-                >
-                  <option value="">Choisir un membre…</option>
-                  {assignableUsers.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {displayName(user)}
-                    </option>
-                  ))}
-                </select>
+                <span className="task-accordion__assign-select">
+                  <Combobox
+                    options={assignableUsers.map((user) => ({ value: user.id, label: displayName(user) }))}
+                    value={assigneeSelection}
+                    onChange={setAssigneeSelection}
+                    disabled={pending}
+                    placeholder="Choisir un membre…"
+                    searchPlaceholder="Rechercher un nom…"
+                  />
+                </span>
                 <motion.button
                   type="button"
                   className="task-accordion__assign-submit"

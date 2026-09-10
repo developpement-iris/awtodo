@@ -68,11 +68,7 @@ export function SharePanel({ onClose, onChanged }: SharePanelProps) {
 
   return (
     <div className="planning-dialog__overlay" onClick={onClose}>
-      <div
-        className="planning-dialog planning-dialog--narrow planning-dialog--overflow-visible"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-      >
+      <div className="planning-dialog planning-dialog--narrow" onClick={(e) => e.stopPropagation()} role="dialog">
         <div className="planning-dialog__header">
           <h2>Partage de calendrier</h2>
           <button type="button" className="planning-dialog__close" onClick={onClose} aria-label="Fermer">

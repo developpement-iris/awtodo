@@ -1,5 +1,6 @@
 import { motion } from "motion/react";
 import { useState } from "react";
+import { Combobox } from "../../components/Combobox";
 import type { Incident, Project } from "../../types/watodo";
 import "./IncidentCreateDialog.css";
 
@@ -57,30 +58,23 @@ export function IncidentCreateDialog({
         <div className="incident-create-dialog__grid">
           <label className="incident-create-dialog__field">
             <span>Projet</span>
-            <select value={values.project} onChange={(event) => update("project", event.target.value)}>
-              <option value="" disabled>
-                Choisir un projet
-              </option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
+            <Combobox
+              options={projects.map((project) => ({ value: project.id, label: project.name }))}
+              value={values.project}
+              onChange={(value) => update("project", value)}
+              placeholder="Choisir un projet"
+              searchPlaceholder="Rechercher un projet…"
+            />
           </label>
 
           <label className="incident-create-dialog__field">
             <span>Priorité</span>
-            <select
+            <Combobox
+              options={PRIORITY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
               value={values.priority}
-              onChange={(event) => update("priority", event.target.value as Incident["priority"])}
-            >
-              {PRIORITY_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              onChange={(value) => update("priority", value as Incident["priority"])}
+              clearable={false}
+            />
           </label>
 
           <label className="incident-create-dialog__field incident-create-dialog__field--full">

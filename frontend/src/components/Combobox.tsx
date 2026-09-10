@@ -1,6 +1,7 @@
 import { Command } from "cmdk";
 import { Check, ChevronsUpDown } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
+import { AnchoredPanel } from "./AnchoredPanel";
 import "./Combobox.css";
 
 export interface ComboboxOption {
@@ -18,13 +19,21 @@ interface ComboboxProps {
   searchPlaceholder?: string;
   emptyLabel?: string;
   disabled?: boolean;
+  /** Affiche le champ de recherche. Par défaut : seulement au-delà de 7 options. */
+  searchable?: boolean;
+  /** Autorise le retour à la valeur vide en re-sélectionnant l'option active.
+   * `false` pour un choix obligatoire (type, priorité…). */
+  clearable?: boolean;
   id?: string;
 }
 
+const SEARCH_THRESHOLD = 7;
+
 /**
- * Sélecteur unique avec recherche (cmdk). Le panneau s'ouvre dans le flux,
- * sous le déclencheur — pas de portail : les dialogues qui l'accueillent ont
- * `overflow-y: auto`, un panneau en `position: absolute` y serait rogné.
+ * Sélecteur unique (cmdk), remplaçant unifié des `<select>` de l'app. Le
+ * panneau est rendu dans un portail (`AnchoredPanel`) — il s'affranchit de
+ * l'`overflow` des dialogues qui l'accueillent et bascule vers le haut au
+ * besoin.
  */
 export function Combobox({
   options,
@@ -34,36 +43,24 @@ export function Combobox({
   searchPlaceholder = "Rechercher…",
   emptyLabel = "Aucun résultat.",
   disabled = false,
+  searchable,
+  clearable = true,
   id,
 }: ComboboxProps) {
   const [open, setOpen] = useState(false);
-  const wrapperRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const fallbackId = useId();
   const listboxId = `${id ?? fallbackId}-listbox`;
-
-  useEffect(() => {
-    if (!open) return;
-    function handlePointerDown(event: PointerEvent) {
-      if (!wrapperRef.current?.contains(event.target as Node)) setOpen(false);
-    }
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [open]);
+  const showSearch = searchable ?? options.length > SEARCH_THRESHOLD;
 
   const selected = options.find((option) => option.value === value) ?? null;
 
   return (
-    <div className="combobox" ref={wrapperRef}>
+    <div className="combobox">
       <button
         type="button"
         id={id}
+        ref={triggerRef}
         className="combobox__trigger"
         role="combobox"
         aria-expanded={open}
@@ -79,18 +76,21 @@ export function Combobox({
       </button>
 
       {open && (
-        <div className="combobox__panel">
-          <Command loop label={placeholder}>
-            <Command.Input autoFocus placeholder={searchPlaceholder} className="combobox__input" />
+        <AnchoredPanel anchorRef={triggerRef} onClose={() => setOpen(false)} className="combobox__panel">
+          <Command loop label={placeholder} shouldFilter={showSearch}>
+            {showSearch && (
+              <Command.Input autoFocus placeholder={searchPlaceholder} className="combobox__input" />
+            )}
             <Command.List id={listboxId} className="combobox__list">
-              <Command.Empty className="combobox__empty">{emptyLabel}</Command.Empty>
+              {showSearch && <Command.Empty className="combobox__empty">{emptyLabel}</Command.Empty>}
+              {options.length === 0 && !showSearch && <div className="combobox__empty">{emptyLabel}</div>}
               {options.map((option) => (
                 <Command.Item
-                  key={option.value}
+                  key={option.value || "__empty__"}
                   value={`${option.label} ${option.hint ?? ""}`}
                   className="combobox__item"
                   onSelect={() => {
-                    onChange(option.value === value ? "" : option.value);
+                    onChange(clearable && option.value === value ? "" : option.value);
                     setOpen(false);
                   }}
                 >
@@ -109,7 +109,7 @@ export function Combobox({
               ))}
             </Command.List>
           </Command>
-        </div>
+        </AnchoredPanel>
       )}
     </div>
   );

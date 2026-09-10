@@ -1,15 +1,12 @@
-import { Check } from "lucide-react";
 import "./Checkbox.css";
 
 export type CheckboxSize = "sm" | "md" | "lg";
-
-const ICON_SIZE: Record<CheckboxSize, number> = { sm: 11, md: 14, lg: 16 };
 
 interface CheckboxProps {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
   disabled?: boolean;
-  /** sm ≈ 16px (défaut), md ≈ 20px, lg ≈ 24px. */
+  /** sm (défaut), md, lg. */
   size?: CheckboxSize;
   id?: string;
   className?: string;
@@ -18,10 +15,12 @@ interface CheckboxProps {
 }
 
 /**
- * Checkbox unique du site (voir docs/charte-graphique.md > "Checkbox").
- * Enveloppe un `<input type="checkbox">` réel (masqué visuellement mais garde
- * clavier/focus/sémantique de formulaire) et une case stylée aux jetons du
- * thème — état coché = `--color-accent` (brique), pas de couleur hors palette.
+ * Interrupteur oui/non unique du site (voir docs/charte-graphique.md >
+ * "Interrupteur"). Rendu en **switch carré** — remplace l'ancienne case à
+ * cocher (session du 2026-09-10, retour direct). Enveloppe un
+ * `<input type="checkbox">` réel (masqué mais garde clavier/focus/sémantique
+ * de formulaire) ; l'état activé glisse le curseur et passe la piste sur
+ * `--color-accent` (jamais une couleur hors palette).
  */
 export function Checkbox({
   checked,
@@ -34,10 +33,11 @@ export function Checkbox({
   "aria-labelledby": ariaLabelledBy,
 }: CheckboxProps) {
   return (
-    <span className={`checkbox checkbox--${size}${className ? ` ${className}` : ""}`}>
+    <span className={`switch switch--${size}${className ? ` ${className}` : ""}`}>
       <input
         type="checkbox"
-        className="checkbox__input"
+        role="switch"
+        className="switch__input"
         id={id}
         checked={checked}
         disabled={disabled}
@@ -45,8 +45,8 @@ export function Checkbox({
         aria-labelledby={ariaLabelledBy}
         onChange={(event) => onCheckedChange(event.target.checked)}
       />
-      <span className="checkbox__box" aria-hidden="true">
-        <Check size={ICON_SIZE[size]} strokeWidth={3} />
+      <span className="switch__track" aria-hidden="true">
+        <span className="switch__thumb" />
       </span>
     </span>
   );

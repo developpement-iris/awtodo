@@ -1,6 +1,7 @@
 import { ChevronUp } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
+import { Combobox } from "../../components/Combobox";
 import { InlineEditableTextarea } from "../../components/InlineEditableTextarea";
 import { StatusBadge } from "../../components/StatusBadge";
 import { incidentStatusIcon, incidentStatusTone, priorityTone } from "../../lib/badges";
@@ -134,21 +135,16 @@ export function IncidentAccordion({
 
         {incident.permissions.can_assign_project && onAssignProject && (
           <div className="incident-accordion__assign">
-            <select
-              className="incident-accordion__assign-select"
-              value={assignProjectId}
-              onChange={(event) => setAssignProjectId(event.target.value)}
-              disabled={pending}
-            >
-              <option value="" disabled>
-                Choisir un projet…
-              </option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
+            <span className="incident-accordion__assign-select">
+              <Combobox
+                options={projects.map((project) => ({ value: project.id, label: project.name }))}
+                value={assignProjectId}
+                onChange={setAssignProjectId}
+                disabled={pending}
+                placeholder="Choisir un projet…"
+                searchPlaceholder="Rechercher un projet…"
+              />
+            </span>
             <motion.button
               type="button"
               className="incident-accordion__action"

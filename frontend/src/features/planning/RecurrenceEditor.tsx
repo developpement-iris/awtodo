@@ -1,3 +1,4 @@
+import { Combobox } from "../../components/Combobox";
 import {
   WEEKDAY_LABELS,
   type RecurrenceForm,
@@ -33,16 +34,12 @@ export function RecurrenceEditor({ value, onChange }: RecurrenceEditorProps) {
     <div className="recurrence-editor">
       <label className="planning-field">
         <span>Récurrence</span>
-        <select
+        <Combobox
+          options={FREQ_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
           value={value.freq}
-          onChange={(e) => patch({ freq: e.target.value as RecurrenceFreq })}
-        >
-          {FREQ_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+          onChange={(v) => patch({ freq: v as RecurrenceFreq })}
+          clearable={false}
+        />
       </label>
 
       {value.freq !== "none" && (
