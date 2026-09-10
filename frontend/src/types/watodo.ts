@@ -525,6 +525,7 @@ export interface CalendarBundle {
     owner: CalendarUser;
     share_id: string;
     occurrences: CalendarEventOccurrence[];
+    blocks: ScheduledBlock[];
   }[];
 }
 

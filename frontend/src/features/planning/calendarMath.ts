@@ -9,6 +9,8 @@ export const SLOT_MINUTES = 30;
 /** Hauteur d'une heure dans la grille, en pixels. */
 export const HOUR_HEIGHT = 48;
 export const PX_PER_MINUTE = HOUR_HEIGHT / 60;
+/** Hauteur d'un cran de 30 min, en pixels — pas de snap du glisser-déposer. */
+export const SLOT_HEIGHT = SLOT_MINUTES * PX_PER_MINUTE;
 
 export function startOfDay(date: Date): Date {
   const d = new Date(date);
@@ -51,6 +53,19 @@ export function weekDays(weekStart: Date): Date[] {
 
 export function gridHours(): number[] {
   return Array.from({ length: GRID_END_HOUR - GRID_START_HOUR + 1 }, (_, i) => GRID_START_HOUR + i);
+}
+
+/** Marques de 30 min de la grille (minutes depuis minuit), bornes incluses —
+ * sert à dessiner les « crans » sur lesquels le glisser-déposer s'aligne. */
+export function gridSlots(): number[] {
+  const slots: number[] = [];
+  for (let m = GRID_START_HOUR * 60; m <= GRID_END_HOUR * 60; m += SLOT_MINUTES) slots.push(m);
+  return slots;
+}
+
+/** Aligne un décalage vertical en px sur le cran de 30 min le plus proche. */
+export function snapOffset(px: number): number {
+  return Math.round(px / SLOT_HEIGHT) * SLOT_HEIGHT;
 }
 
 /** Minutes depuis minuit -> position verticale en px dans la grille. */

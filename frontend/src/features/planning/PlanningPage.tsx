@@ -1,4 +1,12 @@
-import { DndContext, PointerSensor, useDraggable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import {
+  DndContext,
+  PointerSensor,
+  useDraggable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragMoveEvent,
+} from "@dnd-kit/core";
 import { CalendarPlus, ChevronLeft, ChevronRight, Share2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -77,6 +85,8 @@ export function PlanningPage() {
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [hiddenCalendars, setHiddenCalendars] = useState<Set<string>>(new Set());
+  // Cran de 30 min visé par le glissé en cours (aperçu dans la grille).
+  const [dropPreview, setDropPreview] = useState<{ dayIso: string; minutes: number } | null>(null);
   const [dialog, setDialog] = useState<
     | { kind: "create"; start: string; end: string }
     | { kind: "edit"; eventId: string }
@@ -145,11 +155,20 @@ export function PlanningPage() {
       ...bundle.events.map((occ) => eventToItem(occ)),
       ...bundle.blocks.map((block) => blockToItem(block)),
       ...bundle.project_entries.map((occ) => projectEntryToItem(occ)),
-      ...bundle.shared.flatMap((group) =>
-        group.occurrences.map((occ) =>
-          eventToItem(occ, { shared: true, color: colorByCalendar.get(group.owner.id) }),
-        ),
-      ),
+      ...bundle.shared.flatMap((group) => {
+        const color = colorByCalendar.get(group.owner.id);
+        return [
+          ...group.occurrences.map((occ) => eventToItem(occ, { shared: true, color })),
+          ...group.blocks.map((block) =>
+            blockToItem(block, {
+              shared: true,
+              color,
+              calendarId: group.owner.id,
+              ownerLabel: calendarUserLabel(group.owner),
+            }),
+          ),
+        ];
+      }),
     ];
   }, [bundle, colorByCalendar]);
 
@@ -175,7 +194,17 @@ export function PlanningPage() {
     });
   }
 
+  function handleDragMove(event: DragMoveEvent) {
+    const next = resolveDrop(event);
+    setDropPreview((prev) => {
+      if (prev === next) return prev;
+      if (prev && next && prev.dayIso === next.dayIso && prev.minutes === next.minutes) return prev;
+      return next;
+    });
+  }
+
   async function handleDragEnd(event: DragEndEvent) {
+    setDropPreview(null);
     const drop = resolveDrop(event);
     if (!drop) return;
     const data = event.active.data.current as
@@ -227,6 +256,11 @@ export function PlanningPage() {
     if (item.kind === "event" || item.kind === "shared") {
       setDialog({ kind: "edit", eventId: item.id });
     } else if (item.kind === "block") {
+      // Créneau d'un calendrier partagé : lecture seule, pas d'édition.
+      if (!item.editable) {
+        showToast(`${item.title} — ${item.subtitle ?? "créneau partagé"}`);
+        return;
+      }
       setDialog({ kind: "block", block: item.raw as ScheduledBlock });
     } else {
       showToast(`${item.title} — planning de projet`);
@@ -299,7 +333,12 @@ export function PlanningPage() {
 
       {error && <p className="planning-page__error">{error}</p>}
 
-      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+      <DndContext
+        sensors={sensors}
+        onDragMove={handleDragMove}
+        onDragEnd={handleDragEnd}
+        onDragCancel={() => setDropPreview(null)}
+      >
         <div className="planning-page__layout">
           <aside className="planning-side">
             <section className="planning-calendars">
@@ -358,6 +397,7 @@ export function PlanningPage() {
                 <WeekGrid
                   weekStart={startOfWeek(cursor)}
                   items={visibleItems}
+                  dropPreview={dropPreview}
                   onItemClick={handleItemClick}
                   onEmptyClick={(dayIso, minutes) => {
                     const start = isoAt(dayIso, minutes);

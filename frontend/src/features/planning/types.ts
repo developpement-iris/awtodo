@@ -50,18 +50,26 @@ export function eventToItem(
   };
 }
 
-export function blockToItem(block: ScheduledBlock): CalendarItem {
+export function blockToItem(
+  block: ScheduledBlock,
+  opts: { shared?: boolean; color?: string; ownerLabel?: string; calendarId?: string } = {},
+): CalendarItem {
+  const shared = opts.shared ?? false;
+  const base = block.task ? "Tâche planifiée" : "Incident planifié";
   return {
-    key: `block:${block.id}`,
+    key: `${shared ? "shared-block" : "block"}:${block.id}`,
     kind: "block",
     id: block.id,
     title: block.title,
-    subtitle: block.task ? "Tâche planifiée" : "Incident planifié",
+    subtitle: shared && opts.ownerLabel ? `${base} · ${opts.ownerLabel}` : base,
     start: block.start,
     end: block.end,
     allDay: false,
-    editable: true,
-    calendarId: "mine",
+    // Créneau d'un calendrier partagé : lecture seule (pas de déplacement, pas
+    // d'ouverture du dialogue d'édition — voir handleItemClick).
+    editable: !shared,
+    calendarId: shared ? (opts.calendarId ?? "mine") : "mine",
+    color: opts.color,
     raw: block,
   };
 }

@@ -9,9 +9,11 @@ import {
   formatHour,
   formatTimeRange,
   gridHours,
+  gridSlots,
   isSameDay,
   minutesToOffset,
   snapMinutes,
+  snapOffset,
   weekDays,
 } from "./calendarMath";
 import type { CalendarItem } from "./types";
@@ -31,6 +33,8 @@ interface DayColumnProps {
   day: Date;
   items: CalendarItem[];
   now: Date;
+  /** Minutes depuis minuit du cran survolé pendant un glissé (aperçu). */
+  previewMinutes: number | null;
   onItemClick: (item: CalendarItem) => void;
   onEmptyClick?: (dayIso: string, minutes: number) => void;
 }
@@ -61,12 +65,15 @@ function ItemBlock({
   // Deux activateurs frères (jamais imbriqués) : le bouton interne pour
   // « déplacer », la poignée du bas pour « redimensionner ». Le déplacement
   // translate tout le bloc ; le redimensionnement n'agit que sur la hauteur.
-  const resizeDelta = resize.isDragging ? (resize.transform?.y ?? 0) : 0;
+  // Le décalage vertical est aligné en direct sur les crans de 30 min (le
+  // drop l'était déjà via `snapMinutes` — ici c'est le retour visuel pendant
+  // le glissé qui « accroche » cran par cran).
+  const resizeDelta = resize.isDragging ? snapOffset(resize.transform?.y ?? 0) : 0;
   const style: React.CSSProperties = {
     top: `${Math.max(0, top)}px`,
     height: `${Math.max(18, height + resizeDelta)}px`,
     transform: move.transform
-      ? `translate3d(${move.transform.x}px, ${move.transform.y}px, 0)`
+      ? `translate3d(${move.transform.x}px, ${snapOffset(move.transform.y)}px, 0)`
       : undefined,
   };
   if (item.color) {
@@ -105,7 +112,7 @@ function ItemBlock({
   );
 }
 
-function DayColumn({ day, items, now, onItemClick, onEmptyClick }: DayColumnProps) {
+function DayColumn({ day, items, now, previewMinutes, onItemClick, onEmptyClick }: DayColumnProps) {
   const iso = toIsoDate(day);
   const { setNodeRef, isOver } = useDroppable({ id: `day:${iso}` });
   const isToday = isSameDay(day, now);
@@ -131,13 +138,20 @@ function DayColumn({ day, items, now, onItemClick, onEmptyClick }: DayColumnProp
       style={{ height: `${gridHeight}px` }}
       onClick={handleBackgroundClick}
     >
-      {gridHours().map((hour) => (
+      {gridSlots().map((minutes) => (
         <div
-          key={hour}
-          className="week-grid__hour-line"
-          style={{ top: `${minutesToOffset(hour * 60)}px` }}
+          key={minutes}
+          className={`week-grid__slot-line${minutes % 60 === 0 ? " week-grid__slot-line--hour" : ""}`}
+          style={{ top: `${minutesToOffset(minutes)}px` }}
         />
       ))}
+      {previewMinutes !== null && (
+        <div
+          className="week-grid__drop-preview"
+          style={{ top: `${minutesToOffset(previewMinutes)}px` }}
+          aria-hidden="true"
+        />
+      )}
       {nowOffset !== null && nowOffset >= 0 && nowOffset <= gridHeight && (
         <div className="week-grid__now" style={{ top: `${nowOffset}px` }} />
       )}
@@ -151,11 +165,13 @@ function DayColumn({ day, items, now, onItemClick, onEmptyClick }: DayColumnProp
 interface WeekGridProps {
   weekStart: Date;
   items: CalendarItem[];
+  /** Cible du glissé en cours : jour + cran de 30 min survolé. */
+  dropPreview?: { dayIso: string; minutes: number } | null;
   onItemClick: (item: CalendarItem) => void;
   onEmptyClick?: (dayIso: string, minutes: number) => void;
 }
 
-export function WeekGrid({ weekStart, items, onItemClick, onEmptyClick }: WeekGridProps) {
+export function WeekGrid({ weekStart, items, dropPreview, onItemClick, onEmptyClick }: WeekGridProps) {
   const days = useMemo(() => weekDays(weekStart), [weekStart]);
   const now = new Date();
 
@@ -211,6 +227,7 @@ export function WeekGrid({ weekStart, items, onItemClick, onEmptyClick }: WeekGr
             day={day}
             items={items}
             now={now}
+            previewMinutes={dropPreview && dropPreview.dayIso === toIsoDate(day) ? dropPreview.minutes : null}
             onItemClick={onItemClick}
             onEmptyClick={onEmptyClick}
           />

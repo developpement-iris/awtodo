@@ -345,12 +345,28 @@
   background: color-mix(in srgb, var(--color-accent) 8%, transparent);
 }
 
-.week-grid__hour-line {
+.week-grid__slot-line {
   position: absolute;
   left: 0;
   right: 0;
-  border-top: 1px solid var(--color-border);
+  border-top: 1px dashed color-mix(in srgb, var(--color-border) 55%, transparent);
+}
+
+.week-grid__slot-line--hour {
+  border-top-style: solid;
+  border-top-color: var(--color-border);
   opacity: 0.6;
+}
+
+.week-grid__drop-preview {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 24px; /* SLOT_HEIGHT = 30 min */
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  border-top: 2px solid var(--color-accent);
+  z-index: 2;
+  pointer-events: none;
 }
 
 .week-grid__now {

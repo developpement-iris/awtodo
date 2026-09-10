@@ -341,12 +341,23 @@ def get_calendar(*, actor, window_start, window_end, owner_ids=None, project_ids
             CalendarEvent.objects.filter(owner=share.owner).prefetch_related("participants__user")
         )
         shared_occs = expand_occurrences(shared_events, window_start, window_end)
+        # Créneaux tâches/incidents de l'`owner` — même superposition lecture
+        # seule que ses événements libres (le partage donne à voir tout son
+        # agenda, pas seulement ses rendez-vous).
+        shared_blocks = ScheduledBlock.objects.filter(owner=share.owner).select_related(
+            "task", "task__project", "incident", "incident__project"
+        )
         shared.append(
             {
                 "owner": _user_dict(share.owner),
                 "share_id": str(share.id),
                 "occurrences": [
                     _event_occurrence_dict(occ, actor=actor, read_only=True) for occ in shared_occs
+                ],
+                "blocks": [
+                    _block_dict(b)
+                    for b in shared_blocks
+                    if _overlaps(b.start, b.end, window_start, window_end)
                 ],
             }
         )

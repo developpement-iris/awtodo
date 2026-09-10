@@ -1,5 +1,5 @@
 import { AlertTriangle, BarChart3, CalendarDays, FolderKanban, ListChecks, LogOut, ShieldCheck, type LucideIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getIncidents, getProjects, getTasks } from "../../api/client";
 import awtodoLogo from "../../assets/awtodo-logo.png";
 import { Skeleton } from "../../components/Skeleton";
@@ -15,6 +15,18 @@ interface HomePageProps {
 }
 
 const URGENT_PRIORITIES = new Set(["haute", "critique"]);
+
+// Nombre d'éléments affichés dans le backlog quand il n'y a rien d'urgent —
+// on montre alors les échéances/dates les plus proches de maintenant.
+const BACKLOG_FALLBACK_COUNT = 5;
+
+type BacklogFallbackItem =
+  | { kind: "task"; id: string; distance: number; task: Task }
+  | { kind: "incident"; id: string; distance: number; incident: Incident };
+
+function shortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("fr-FR");
+}
 
 // Salutation dactylo (voir docs/charte-graphique.md > "Écran d'accueil —
 // panneau oblique") : tape, marque un temps plein, s'efface, marque un temps
@@ -126,9 +138,10 @@ interface QuickAccessTab {
 export function HomePage({ onNavigate }: HomePageProps) {
   const { currentUser, isAuthenticated, logout, clearCurrentUser } = useCurrentUser();
   const [projects, setProjects] = useState<Project[] | null>(null);
+  // Listes complètes (mes tâches assignées / incidents ouverts) — le filtrage
+  // "urgent" et le repli "échéances les plus proches" en sont dérivés.
   const [myTasks, setMyTasks] = useState<Task[] | null>(null);
-  const [totalTaskCount, setTotalTaskCount] = useState<number | null>(null);
-  const [activeIncidents, setActiveIncidents] = useState<Incident[] | null>(null);
+  const [openIncidents, setOpenIncidents] = useState<Incident[] | null>(null);
 
   useEffect(() => {
     getProjects()
@@ -139,32 +152,59 @@ export function HomePage({ onNavigate }: HomePageProps) {
   useEffect(() => {
     getIncidents()
       .then((data) =>
-        setActiveIncidents(
-          data.filter((incident) => incident.status !== "resolu" && URGENT_PRIORITIES.has(incident.priority)),
-        ),
+        setOpenIncidents(data.filter((incident) => incident.status !== "resolu" && incident.status !== "archive")),
       )
-      .catch(() => setActiveIncidents([]));
+      .catch(() => setOpenIncidents([]));
   }, []);
 
   useEffect(() => {
     if (!currentUser) {
       setMyTasks([]);
-      setTotalTaskCount(0);
       return;
     }
     getTasks({ assignee: currentUser.id })
-      .then((data) => {
-        setTotalTaskCount(data.length);
-        setMyTasks(data.filter((task) => URGENT_PRIORITIES.has(task.priority)));
-      })
-      .catch(() => {
-        setMyTasks([]);
-        setTotalTaskCount(0);
-      });
+      .then(setMyTasks)
+      .catch(() => setMyTasks([]));
   }, [currentUser]);
 
-  const hasUrgentItems = (myTasks?.length ?? 0) > 0 || (activeIncidents?.length ?? 0) > 0;
-  const backlogCount = (myTasks?.length ?? 0) + (activeIncidents?.length ?? 0);
+  const totalTaskCount = myTasks?.length ?? null;
+  const urgentTasks = useMemo(
+    () => myTasks?.filter((task) => URGENT_PRIORITIES.has(task.priority)) ?? null,
+    [myTasks],
+  );
+  const urgentIncidents = useMemo(
+    () => openIncidents?.filter((incident) => URGENT_PRIORITIES.has(incident.priority)) ?? null,
+    [openIncidents],
+  );
+
+  const hasUrgentItems = (urgentTasks?.length ?? 0) > 0 || (urgentIncidents?.length ?? 0) > 0;
+  const backlogLoaded = urgentTasks !== null && urgentIncidents !== null;
+
+  // Repli : aucun élément haute/critique → on montre les tâches (par échéance)
+  // et incidents (par date de signalement) dont la date est la plus proche de
+  // maintenant, passée ou à venir — les tâches sans échéance sont écartées
+  // (pas de date à comparer).
+  const backlogFallback = useMemo<BacklogFallbackItem[]>(() => {
+    if (!backlogLoaded || hasUrgentItems) return [];
+    const now = Date.now();
+    const distance = (iso: string) => Math.abs(new Date(iso).getTime() - now);
+    const taskItems: BacklogFallbackItem[] = (myTasks ?? [])
+      .filter((task) => task.deadline && task.status !== "archivee" && task.status !== "rejetee")
+      .map((task) => ({ kind: "task", id: task.id, distance: distance(task.deadline as string), task }));
+    const incidentItems: BacklogFallbackItem[] = (openIncidents ?? []).map((incident) => ({
+      kind: "incident",
+      id: incident.id,
+      distance: distance(incident.created_at),
+      incident,
+    }));
+    return [...taskItems, ...incidentItems]
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, BACKLOG_FALLBACK_COUNT);
+  }, [backlogLoaded, hasUrgentItems, myTasks, openIncidents]);
+
+  const backlogCount = hasUrgentItems
+    ? (urgentTasks?.length ?? 0) + (urgentIncidents?.length ?? 0)
+    : backlogFallback.length;
 
   // Pas d'onglets classeur (BinderTabs) sur l'accueil — cet écran n'a plus du
   // tout le chrome d'app (voir App.tsx, rendu hors AppShell comme LoginPage)
@@ -207,7 +247,7 @@ export function HomePage({ onNavigate }: HomePageProps) {
       key: "incidents",
       icon: AlertTriangle,
       name: "Incidents",
-      meta: activeIncidents === null ? <Skeleton width="30px" height="11px" /> : `${activeIncidents.length} actifs`,
+      meta: openIncidents === null ? <Skeleton width="30px" height="11px" /> : `${openIncidents.length} actifs`,
       description: "Signalement et suivi des incidents en cours",
       incident: true,
       onClick: () => onNavigate("incidents"),
@@ -273,20 +313,24 @@ export function HomePage({ onNavigate }: HomePageProps) {
             </p>
           )}
 
-          {(myTasks === null || activeIncidents === null) && (
+          {currentUser && !backlogLoaded && (
             <div className="home-page__postit-skeleton">
               <Skeleton height="40px" />
               <Skeleton height="40px" />
             </div>
           )}
 
-          {myTasks !== null && activeIncidents !== null && !hasUrgentItems && currentUser && (
+          {currentUser && backlogLoaded && !hasUrgentItems && backlogFallback.length === 0 && (
             <p className="home-page__postit-note">Rien d'urgent pour l'instant.</p>
+          )}
+
+          {currentUser && backlogLoaded && !hasUrgentItems && backlogFallback.length > 0 && (
+            <p className="home-page__postit-note">Rien d'urgent — les échéances les plus proches :</p>
           )}
 
           {hasUrgentItems && (
             <ul className="home-page__postit-list">
-              {myTasks?.map((task) => (
+              {urgentTasks?.map((task) => (
                 <li key={task.id}>
                   <button type="button" className="home-page__postit-item" onClick={() => onNavigate("tasks")}>
                     <span className="home-page__postit-item-title">{task.title}</span>
@@ -294,7 +338,7 @@ export function HomePage({ onNavigate }: HomePageProps) {
                   </button>
                 </li>
               ))}
-              {activeIncidents?.map((incident) => (
+              {urgentIncidents?.map((incident) => (
                 <li key={incident.id}>
                   <button
                     type="button"
@@ -310,6 +354,32 @@ export function HomePage({ onNavigate }: HomePageProps) {
                   </button>
                 </li>
               ))}
+            </ul>
+          )}
+
+          {currentUser && !hasUrgentItems && backlogFallback.length > 0 && (
+            <ul className="home-page__postit-list">
+              {backlogFallback.map((item) =>
+                item.kind === "task" ? (
+                  <li key={item.id}>
+                    <button type="button" className="home-page__postit-item" onClick={() => onNavigate("tasks")}>
+                      <span className="home-page__postit-item-title">{item.task.title}</span>
+                      <StatusBadge label={shortDate(item.task.deadline as string)} tone="neutral" />
+                    </button>
+                  </li>
+                ) : (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      className="home-page__postit-item"
+                      onClick={() => onNavigate("incidents", { incidentId: item.incident.id })}
+                    >
+                      <span className="home-page__postit-item-title">{item.incident.title}</span>
+                      <StatusBadge label={shortDate(item.incident.created_at)} tone="neutral" />
+                    </button>
+                  </li>
+                ),
+              )}
             </ul>
           )}
         </section>
@@ -329,7 +399,7 @@ export function HomePage({ onNavigate }: HomePageProps) {
           </div>
           <div className="home-page__stat">
             <span className="home-page__stat-value">
-              {myTasks === null || activeIncidents === null ? <Skeleton width="26px" height="24px" /> : backlogCount}
+              {!backlogLoaded ? <Skeleton width="26px" height="24px" /> : backlogCount}
             </span>
             <span className="home-page__stat-label">Backlog</span>
           </div>

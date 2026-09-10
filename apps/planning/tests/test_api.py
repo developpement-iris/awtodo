@@ -309,6 +309,21 @@ class PlanningApiTests(APITestCase):
         self.assertEqual(r.status_code, 204)
         self.assertEqual(self._calendar(self.member).data["shared"], [])
 
+    def test_shared_calendar_includes_owner_task_blocks(self):
+        task = self._task_for(self.mgr)
+        ScheduledBlock.objects.create(
+            owner=self.mgr, task=task, start="2026-06-12T14:00:00+02:00", end="2026-06-12T16:00:00+02:00"
+        )
+        self._as(self.mgr)
+        self.client.post("/api/v1/planning/shares/", {"grantee": str(self.member.id)}, format="json")
+
+        shared = self._calendar(self.member).data["shared"]
+        self.assertEqual(len(shared), 1)
+        self.assertEqual(len(shared[0]["blocks"]), 1)
+        self.assertEqual(shared[0]["blocks"][0]["task"]["id"], str(task.id))
+        # Le créneau ne fuite pas dans "mes" blocs à moi.
+        self.assertEqual(self._calendar(self.member).data["blocks"], [])
+
     def test_cannot_share_with_self(self):
         self._as(self.mgr)
         r = self.client.post("/api/v1/planning/shares/", {"grantee": str(self.mgr.id)}, format="json")

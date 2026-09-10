@@ -619,7 +619,7 @@ Scoping : `get_queryset()` filtre toujours par `owner` / participation / `projec
 
 | Méthode / chemin | Effet |
 |---|---|
-| `GET /planning/calendar/?from=<ISO>&to=<ISO>&owners=<uuid,…>&projects=<uuid,…>` | agrégat calendrier de l'utilisateur : `{ events, blocks, project_entries, shared }`, occurrences expansées. `from`/`to` requis (400 sinon), fenêtre ≤ `MAX_WINDOW_DAYS = 92` jours |
+| `GET /planning/calendar/?from=<ISO>&to=<ISO>&owners=<uuid,…>&projects=<uuid,…>` | agrégat calendrier de l'utilisateur : `{ events, blocks, project_entries, shared }`, occurrences expansées. `from`/`to` requis (400 sinon), fenêtre ≤ `MAX_WINDOW_DAYS = 92` jours. Chaque entrée de `shared` (un `CalendarShare` actif dont je suis `grantee`) porte `{ owner, share_id, occurrences, blocks }` : `occurrences` = les événements de l'`owner` (lecture seule), `blocks` = ses créneaux tâches/incidents dans la fenêtre (session du 2026-09-10 — le partage donne à voir tout l'agenda de l'`owner`, pas seulement ses rendez-vous ; côté frontend ces créneaux sont non déplaçables et n'ouvrent pas le dialogue d'édition) |
 | `GET/POST /planning/events/` | liste des séries dont l'utilisateur est owner ou participant actif / création (`title`, `start`, `end`, `all_day?`, `description?`, `location?`, `recurrence_rule?`) |
 | `GET/PATCH /planning/events/{id}/` | détail (+ `participants`, `audit_log`) / modification de la série (owner) |
 | `POST /planning/events/{id}/cancel/` | série → `annule` (owner) |

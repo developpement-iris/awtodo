@@ -1,4 +1,4 @@
-import type { DragEndEvent } from "@dnd-kit/core";
+import type { DragEndEvent, DragMoveEvent } from "@dnd-kit/core";
 import { GRID_START_HOUR, PX_PER_MINUTE, clampMinutes, snapMinutes } from "./calendarMath";
 
 export interface DropResult {
@@ -6,9 +6,10 @@ export interface DropResult {
   minutes: number;
 }
 
-/** Résout la cible d'un drop sur la grille semaine : jour survolé + minute
- * (snap 30 min) calculée à partir de la position finale du pointeur. */
-export function resolveDrop(event: DragEndEvent): DropResult | null {
+/** Résout la cible d'un drop (ou d'un survol) sur la grille semaine : jour
+ * survolé + minute (snap 30 min) calculée à partir de la position du pointeur.
+ * Utilisé à la fin du glissé ET en continu (`onDragMove`) pour l'aperçu. */
+export function resolveDrop(event: DragEndEvent | DragMoveEvent): DropResult | null {
   const overId = event.over ? String(event.over.id) : "";
   if (!overId.startsWith("day:")) return null;
   const dayIso = overId.slice(4);
