@@ -620,6 +620,25 @@
   width: 420px;
 }
 
+/* Laisse le panneau du Combobox (position: absolute) déborder du dialogue au
+   lieu d'être rogné par `overflow-y: auto`. Réservé aux dialogues courts qui
+   n'ont jamais besoin de défilement interne (partage de calendrier). */
+.planning-dialog--overflow-visible {
+  overflow: visible;
+}
+
+.planning-field-row--combobox {
+  align-items: start;
+}
+
+.planning-field-row--combobox > .combobox {
+  flex: 1;
+}
+
+.planning-field-row--combobox > .planning-btn {
+  flex: none;
+}
+
 .planning-dialog__header {
   display: flex;
   align-items: center;

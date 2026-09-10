@@ -1,6 +1,7 @@
 import { Trash2, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createCalendarShare, listCalendarShares, revokeCalendarShare } from "../../api/client";
+import { Combobox, type ComboboxOption } from "../../components/Combobox";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 import type { CalendarShareList } from "../../types/watodo";
 
@@ -50,14 +51,28 @@ export function SharePanel({ onClose, onChanged }: SharePanelProps) {
     }
   }
 
-  const alreadyGranted = new Set((shares?.granted ?? []).map((s) => s.grantee.id));
-  const pickable = users.filter(
-    (u) => u.id !== currentUser?.id && u.account_type === "interne" && !alreadyGranted.has(u.id),
-  );
+  // Le partage n'est lié à aucun groupe ni type de compte : on peut partager
+  // son calendrier avec n'importe quel utilisateur du site (interne ou externe
+  // invité sur un projet), pas seulement les membres de ses groupes.
+  const options = useMemo<ComboboxOption[]>(() => {
+    const alreadyGranted = new Set((shares?.granted ?? []).map((s) => s.grantee.id));
+    return users
+      .filter((u) => u.id !== currentUser?.id && !alreadyGranted.has(u.id))
+      .map((u) => ({
+        value: u.id,
+        label: displayName(u),
+        hint: u.account_status === "pending" ? "invitation en attente" : undefined,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label, "fr"));
+  }, [users, currentUser?.id, shares?.granted]);
 
   return (
     <div className="planning-dialog__overlay" onClick={onClose}>
-      <div className="planning-dialog planning-dialog--narrow" onClick={(e) => e.stopPropagation()} role="dialog">
+      <div
+        className="planning-dialog planning-dialog--narrow planning-dialog--overflow-visible"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+      >
         <div className="planning-dialog__header">
           <h2>Partage de calendrier</h2>
           <button type="button" className="planning-dialog__close" onClick={onClose} aria-label="Fermer">
@@ -70,15 +85,15 @@ export function SharePanel({ onClose, onChanged }: SharePanelProps) {
         <div className="planning-dialog__body">
           <section className="share-panel__section">
             <h3>Je partage mon calendrier avec</h3>
-            <div className="planning-field-row">
-              <select value={granteeId} onChange={(e) => setGranteeId(e.target.value)}>
-                <option value="">Choisir une personne…</option>
-                {pickable.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {displayName(u)}
-                  </option>
-                ))}
-              </select>
+            <div className="planning-field-row planning-field-row--combobox">
+              <Combobox
+                options={options}
+                value={granteeId}
+                onChange={setGranteeId}
+                placeholder="Choisir une personne…"
+                searchPlaceholder="Rechercher un nom…"
+                emptyLabel="Aucune personne à qui partager."
+              />
               <button type="button" className="planning-btn planning-btn--primary" onClick={handleShare} disabled={!granteeId}>
                 Partager
               </button>

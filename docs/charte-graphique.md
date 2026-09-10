@@ -307,3 +307,12 @@ Composant unique `components/Checkbox.tsx` (+ `.css`) — remplace **toutes** le
 - **Trois tailles** (`size` prop → `--checkbox-size`) : `sm` ≈ 16px (défaut), `md` ≈ 20px, `lg` ≈ 24px — équivalent des `size-5`/`size-6` du snippet.
 - `disabled` → opacité 0.45 + `cursor: not-allowed` (la case reste visible, jamais masquée — même règle que le sommaire du cahier des charges). `:focus-visible` → contour accent.
 - **`StatusFilterDropdown`** (filtres Tâches/Incidents/Projets) : le rang reste un `<button role="checkbox">` (pas d'`<input>` imbriqué dans un bouton), mais sa pastille `__check` est restylée à l'identique de `.checkbox__box` (carré `--radius-sm`, accent brique quand actif) — rendu cohérent avec le reste.
+
+### Combobox recherchable (implémenté — session du 2026-09-10)
+
+Composant `components/Combobox.tsx` (+ `.css`) — sélecteur unique avec champ de recherche, pour remplacer les `<select>` natifs quand la liste de choix peut être longue (1ᵉʳ usage : sélecteur de personne du panneau de partage de calendrier, `SharePanel`).
+
+- **Idée reprise d'un snippet Base UI fourni (Popover + Command), réécrite aux conventions du repo** : pas de Tailwind, pas de `@/components/base-ui/*`, pas de Radix Popover. S'appuie sur **`cmdk`** (déjà une dépendance, moteur de `CommandPalette`) pour la recherche/navigation clavier ; le « popover » est un simple `<div position:absolute>` sous le déclencheur.
+- Déclencheur = `<button role="combobox">` bordé façon input planning (`--color-border`, `--radius-sm`), chevron `lucide` `ChevronsUpDown`. Panneau : `Command.Input` + `Command.List` défilante (`max-height: 220px`), coche `Check` sur l'option sélectionnée en `--color-accent`. Fermeture au `pointerdown` extérieur et à `Échap`.
+- **Pas de portail** : les dialogues hôtes ont `overflow-y: auto` (rognerait un panneau `absolute`). Le dialogue qui accueille un Combobox porte donc `.planning-dialog--overflow-visible` (réservé aux dialogues courts sans défilement interne).
+- `hint` optionnel par option (2ᵉ ligne discrète — ex. « invitation en attente » pour un compte `pending`). `prefers-reduced-motion` respecté (animation d'ouverture désactivée).
