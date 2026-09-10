@@ -1,3 +1,5 @@
+from django.conf import settings
+from django.shortcuts import get_object_or_404
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
@@ -6,7 +8,7 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import Invitation, Organisation, Team, User
+from .models import Invitation, Organisation, PasswordResetRequest, Team, User
 from .serializers import (
     InvitationAcceptSerializer,
     InvitationCreateSerializer,
@@ -15,6 +17,9 @@ from .serializers import (
     OrganisationCreateSerializer,
     OrganisationRoleUpdateSerializer,
     OrganisationSerializer,
+    PasswordResetConfirmSerializer,
+    PasswordResetRequestSerializer,
+    PasswordResetTokenSerializer,
     TeamCreateSerializer,
     TeamMemberSerializer,
     TeamRenameSerializer,
@@ -27,11 +32,13 @@ from .services import (
     accept_invitation,
     add_team_member,
     authenticate_user,
+    confirm_password_reset,
     create_invitation,
     create_organisation,
     create_team,
     remove_team_member,
     rename_team,
+    request_password_reset,
     resend_invitation,
     set_organisation_role,
 )
@@ -75,6 +82,76 @@ class MeView(APIView):
         if not request.user or not request.user.is_authenticated:
             return Response({"detail": "Utilisateur non identifié."}, status=401)
         return Response(UserSerializer(request.user).data)
+
+
+class PasswordResetRequestView(APIView):
+    """Public par nature (voir `LoginView` ci-dessus, même raisonnement) — la
+    personne a justement perdu l'accès à son compte.
+
+    Deux modes selon `settings.PASSWORD_RESET_DIRECT_LINK` :
+    - `False` (défaut, cible) : toujours 200 avec un message générique, que
+      l'identifiant corresponde ou non (pas d'énumération de comptes), un
+      email part si un compte correspond.
+    - `True` (phase de test, pas d'ESP branché) : pas d'email ; si un compte
+      correspond, la réponse inclut `reset_path` (`/reset-password/<token>/`)
+      pour que le frontend y redirige directement. Assumé sans enjeu de
+      sécurité pour le nombre d'utilisateurs actuel (voir settings)."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            reset = request_password_reset(**serializer.validated_data)
+        except AccountValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
+
+        if getattr(settings, "PASSWORD_RESET_DIRECT_LINK", False):
+            if reset is None:
+                return Response({"detail": "Aucun compte ne correspond à cet identifiant."}, status=404)
+            return Response(
+                {"detail": "Choisissez un nouveau mot de passe.", "reset_path": f"/reset-password/{reset.token}/"}
+            )
+
+        return Response({"detail": "Si un compte correspond à cet identifiant, un email a été envoyé."})
+
+
+class PasswordResetTokenView(APIView):
+    """Lecture publique de l'état d'un lien de réinitialisation (voir
+    `InvitationViewSet.retrieve` pour le même raisonnement — la personne n'a
+    par définition pas de session utilisable). Sert à la page frontend à
+    afficher "lien valide"/"lien expiré" avant même de tenter une
+    soumission."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request, token):
+        reset = get_object_or_404(PasswordResetRequest, token=token)
+        return Response(PasswordResetTokenSerializer(reset).data)
+
+
+class PasswordResetConfirmView(APIView):
+    """⚠️ Comme `InvitationViewSet`, publique par construction : en
+    staging/production la permission par défaut est `IsAuthenticated`, sans
+    ce `permission_classes` explicite le lien reçu par email renverrait 403."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request, token):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            confirm_password_reset(token=token, **serializer.validated_data)
+        except AccountValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
+
+        return Response({"detail": "Mot de passe mis à jour."})
 
 
 class UserViewSet(ReadOnlyModelViewSet):

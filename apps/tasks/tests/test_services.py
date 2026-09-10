@@ -75,6 +75,24 @@ class CreateTaskTests(TaskServicesTestCase):
         with self.assertRaises(TaskPermissionError):
             create_task(actor=self.outsider, project=self.project, title="Titre", task_type="correction")
 
+    def test_task_on_individual_project_is_auto_assigned_to_creator(self):
+        solo = User.objects.create_user(username="solo")
+        individual = Project.objects.create(name="Projet perso", project_type="individuel")
+        ProjectVersion.objects.create(project=individual, label="v1", is_current=True)
+        ProjectMembership.objects.create(project=individual, user=solo, role="chef_de_projet")
+
+        task = create_task(actor=solo, project=individual, title="Ma tâche", task_type="correction")
+
+        self.assertEqual(task.assignee, solo)
+        self.assertEqual(task.status, "assignee")
+
+    def test_lecteur_cannot_create_task(self):
+        reader = User.objects.create_user(username="reader-task")
+        ProjectMembership.objects.create(project=self.project, user=reader, role="lecteur")
+
+        with self.assertRaises(TaskPermissionError):
+            create_task(actor=reader, project=self.project, title="Titre", task_type="correction")
+
 
 class ValidateTaskTests(TaskServicesTestCase):
     def test_manager_validates_without_assignee(self):

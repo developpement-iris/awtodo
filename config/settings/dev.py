@@ -29,6 +29,13 @@ DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="Awtodo <no-reply@awtodo.
 # (5173) ; à ajuster dans `.env` si le front tourne ailleurs.
 FRONTEND_BASE_URL = env("FRONTEND_BASE_URL", default="http://localhost:5173")
 
+# Phase de test : "mot de passe oublié" ne passe pas par un email (pas de
+# fournisseur transactionnel branché), l'endpoint renvoie directement le
+# lien de réinitialisation et le frontend y redirige. Voir base.py pour le
+# détail. `env.bool` : reste surchargeable via `.env` si on veut tester le
+# vrai flux email en local avec une sandbox.
+PASSWORD_RESET_DIRECT_LINK = env.bool("PASSWORD_RESET_DIRECT_LINK", default=True)
+
 # API ouverte en dev uniquement, pour pouvoir tester le frontend sans SSO
 # câblé. À remplacer par le SSO/JWT réel avant staging — ne jamais copier
 # ce réglage dans base.py/staging.py/production.py.

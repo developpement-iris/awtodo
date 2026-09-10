@@ -10,7 +10,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.projects.services import accessible_projects
+from apps.projects.services import contributor_projects
 
 from . import services
 from .models import (
@@ -227,7 +227,7 @@ class ProjectPlanningViewSet(_PlanningExceptionMixin, viewsets.GenericViewSet):
     serializer_class = ProjectEntryCreateSerializer
 
     def _project(self, request, project_id):
-        return get_object_or_404(accessible_projects(request.user), id=project_id)
+        return get_object_or_404(contributor_projects(request.user), id=project_id)
 
     def _entry(self, project, entry_id):
         return get_object_or_404(ProjectPlanningEntry.all_objects, id=entry_id, project=project)

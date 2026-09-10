@@ -4,7 +4,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.common.views import ListOnlyFilterMixin
-from apps.projects.services import accessible_projects
+from apps.projects.services import contributor_projects
 
 from .filters import IncidentFilterSet
 from .models import Incident
@@ -47,8 +47,10 @@ class IncidentViewSet(ListOnlyFilterMixin, mixins.ListModelMixin, mixins.Retriev
         if self.action == "list":
             # Liste "par projet" par défaut : les incidents non-affectés
             # (team-only) ne s'y mélangent jamais — ils ne sont listés que via
-            # `inbox()`, qui a son propre scoping dédié.
-            return base.filter(project__in=accessible_projects(self.request.user))
+            # `inbox()`, qui a son propre scoping dédié. `contributor_projects`
+            # (pas `accessible_projects`) : un projet où l'utilisateur n'a
+            # qu'un droit de lecture ne remonte pas ses incidents.
+            return base.filter(project__in=contributor_projects(self.request.user))
         # `retrieve` et les actions de détail (start/resolve/archive/comments/
         # assign-project) doivent aussi résoudre un incident non-affecté pour
         # un membre autorisé de son groupe — sinon `self.get_object()` 404
@@ -57,7 +59,7 @@ class IncidentViewSet(ListOnlyFilterMixin, mixins.ListModelMixin, mixins.Retriev
         # de `services.py` (403) ; cette portée ne gère que l'existence (404),
         # même convention que `accessible_projects`.
         return base.filter(
-            Q(project__in=accessible_projects(self.request.user))
+            Q(project__in=contributor_projects(self.request.user))
             | Q(project__isnull=True, team__in=accessible_inbox_teams(self.request.user))
         )
 

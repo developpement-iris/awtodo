@@ -50,11 +50,24 @@ export function ProjectDetailView({ project: initialProject, onBack }: ProjectDe
   const { showToast } = useToast();
   const [project, setProject] = useState(initialProject);
   const [tab, setTab] = useState<Tab>("tasks");
-  // L'onglet Documentation est réservé au chef de projet (rédaction + gestion
-  // du lien public) — voir CLAUDE.md > Roadmap (session 2026-09-03).
-  const visibleTabs = TABS.filter(
-    (item) => item.id !== "documentation" || project.permissions.can_edit_documentation,
-  );
+  // Un membre `lecteur` (voir docs/organisation-et-comptes.md > "Rôle
+  // Lecteur") ne voit que Tâches / Cahier des charges / Bloc-notes, tout en
+  // lecture seule. `can_contribute` (faux pour un lecteur) masque le reste.
+  const contributorOnlyTabs: Tab[] = [
+    "maintenance",
+    "planning",
+    "documentation",
+    "stats",
+    "budgeting",
+    "administration",
+  ];
+  const visibleTabs = TABS.filter((item) => {
+    // L'onglet Documentation est en plus réservé au chef de projet (rédaction
+    // + gestion du lien public) — voir CLAUDE.md > Roadmap (session 2026-09-03).
+    if (item.id === "documentation" && !project.permissions.can_edit_documentation) return false;
+    if (!project.permissions.can_contribute && contributorOnlyTabs.includes(item.id)) return false;
+    return true;
+  });
   const [lifecycleSubmitting, setLifecycleSubmitting] = useState(false);
   const [lifecycleError, setLifecycleError] = useState<string | null>(null);
   const [idCopied, setIdCopied] = useState(false);

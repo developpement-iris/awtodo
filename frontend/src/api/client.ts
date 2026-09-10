@@ -22,6 +22,7 @@ import type {
   LoginResponse,
   Notification,
   Organisation,
+  PasswordResetToken,
   Project,
   ProjectMembership,
   ProjectUserStats,
@@ -151,6 +152,7 @@ export interface ProjectCreatePayload {
   project_type: Project["project_type"];
   description?: string;
   deadline?: string;
+  already_in_production?: boolean;
   priority?: Exclude<Project["priority"], null>;
   team?: string;
   member_ids?: string[];
@@ -293,6 +295,24 @@ export function getInvitationByToken(token: string): Promise<Invitation> {
 
 export function acceptInvitation(token: string, password: string): Promise<Invitation> {
   return postJson<Invitation>(`/accounts/invitations/${token}/accept/`, { password });
+}
+
+// Réinitialisation de mot de passe — voir docs/organisation-et-comptes.md >
+// "Réinitialisation de mot de passe". En mode "email" (cible), la réponse
+// est un message générique (pas d'énumération de comptes). En mode "lien
+// direct" (phase de test, `PASSWORD_RESET_DIRECT_LINK` côté backend), la
+// réponse inclut `reset_path` si un compte correspond — le frontend y
+// redirige directement — ou renvoie un 404 sinon.
+export function requestPasswordReset(identifier: string): Promise<{ detail: string; reset_path?: string }> {
+  return postJson<{ detail: string; reset_path?: string }>("/accounts/password-reset/request/", { identifier });
+}
+
+export function getPasswordResetToken(token: string): Promise<PasswordResetToken> {
+  return getJson<PasswordResetToken>(`/accounts/password-reset/${token}/`);
+}
+
+export function confirmPasswordReset(token: string, password: string): Promise<{ detail: string }> {
+  return postJson<{ detail: string }>(`/accounts/password-reset/${token}/confirm/`, { password });
 }
 
 // Authentification par mot de passe — voir docs/organisation-et-comptes.md >

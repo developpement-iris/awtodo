@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { requestPasswordReset } from "../../api/client";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 import { useToast } from "../../context/ToastContext";
 import "./LoginPage.css";
@@ -120,6 +121,16 @@ export function LoginPage({ onSuccess, onCancel }: LoginPageProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // "Mot de passe oublié" — reste dans la même carte plutôt qu'un routage
+  // séparé (l'écran de connexion n'a pas de mécanisme de navigation interne,
+  // voir App.tsx : LoginPage est atteinte hors de l'état `Route`). Le lien
+  // reçu par email pointe vers `ResetPasswordPage` (App.tsx, pattern d'URL
+  // publique comme `/invitations/<token>/`).
+  const [mode, setMode] = useState<"login" | "forgot">("login");
+  const [resetIdentifier, setResetIdentifier] = useState("");
+  const [resetSubmitting, setResetSubmitting] = useState(false);
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
+
   // Mode démo (voir CLAUDE.md — mécanisme d'identification temporaire) :
   // même liste/filtre que le sélecteur de UserMenu, dupliqué ici plutôt que
   // factorisé — rendu très différent (page pleine vs menu déroulant),
@@ -145,6 +156,36 @@ export function LoginPage({ onSuccess, onCancel }: LoginPageProps) {
     onSuccess();
   }
 
+  async function handleRequestReset(event: React.FormEvent) {
+    event.preventDefault();
+    setResetSubmitting(true);
+    setError(null);
+    try {
+      const response = await requestPasswordReset(resetIdentifier);
+      if (response.reset_path) {
+        // Mode "lien direct" (phase de test — voir PASSWORD_RESET_DIRECT_LINK
+        // côté backend) : pas d'email, on va directement à l'écran de choix
+        // du nouveau mot de passe.
+        window.location.assign(response.reset_path);
+        return;
+      }
+      // Mode email (cible) : message générique, ne dit jamais si l'identifiant
+      // correspondait à un compte réel.
+      setResetMessage(response.detail);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "La demande a échoué.");
+    } finally {
+      setResetSubmitting(false);
+    }
+  }
+
+  function backToLogin() {
+    setMode("login");
+    setResetIdentifier("");
+    setResetMessage(null);
+    setError(null);
+  }
+
   return (
     <div className="login-page">
       <div className="login-page__panel-left" />
@@ -161,65 +202,117 @@ export function LoginPage({ onSuccess, onCancel }: LoginPageProps) {
       </div>
 
       <div className="login-page__stage">
-        <form className="login-page__card" onSubmit={handleSubmit}>
-          <h1 className="login-page__card-title">Bon retour</h1>
-          <p className="login-page__card-subtitle">Connectez-vous pour accéder à vos projets.</p>
+        {mode === "login" ? (
+          <form className="login-page__card" onSubmit={handleSubmit}>
+            <h1 className="login-page__card-title">Bon retour</h1>
+            <p className="login-page__card-subtitle">Connectez-vous pour accéder à vos projets.</p>
 
-          {error && <p className="login-page__error">{error}</p>}
+            {error && <p className="login-page__error">{error}</p>}
 
-          <label className="login-page__field">
-            <span>Identifiant</span>
-            <input
-              type="text"
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              autoFocus
-              disabled={submitting}
-            />
-          </label>
+            <label className="login-page__field">
+              <span>Identifiant</span>
+              <input
+                type="text"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                autoFocus
+                disabled={submitting}
+              />
+            </label>
 
-          <label className="login-page__field">
-            <span>Mot de passe</span>
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              disabled={submitting}
-            />
-          </label>
+            <label className="login-page__field">
+              <span>Mot de passe</span>
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                disabled={submitting}
+              />
+            </label>
 
-          <button type="submit" className="login-page__submit" disabled={submitting || !username || !password}>
-            {submitting ? "Connexion…" : "Se connecter"}
-          </button>
-
-          <div className="login-page__divider">ou</div>
-
-          <button
-            type="button"
-            className="login-page__sso"
-            onClick={() => showToast("Pas encore disponible.")}
-          >
-            <span className="login-page__sso-logo">
-              <span />
-              <span />
-              <span />
-              <span />
-            </span>
-            Continuer avec Microsoft
-          </button>
-
-          {onCancel && (
-            <button type="button" className="login-page__cancel" onClick={onCancel} disabled={submitting}>
-              Annuler
+            <button
+              type="button"
+              className="login-page__forgot"
+              onClick={() => {
+                setMode("forgot");
+                setError(null);
+              }}
+            >
+              Mot de passe oublié ?
             </button>
-          )}
 
-          <p className="login-page__hint">
-            Pas encore de compte ? Utilisez le lien reçu par email pour l'activer.
-          </p>
-        </form>
+            <button type="submit" className="login-page__submit" disabled={submitting || !username || !password}>
+              {submitting ? "Connexion…" : "Se connecter"}
+            </button>
 
-        {selectableUsers.length > 0 && (
+            <div className="login-page__divider">ou</div>
+
+            <button
+              type="button"
+              className="login-page__sso"
+              onClick={() => showToast("Pas encore disponible.")}
+            >
+              <span className="login-page__sso-logo">
+                <span />
+                <span />
+                <span />
+                <span />
+              </span>
+              Continuer avec Microsoft
+            </button>
+
+            {onCancel && (
+              <button type="button" className="login-page__cancel" onClick={onCancel} disabled={submitting}>
+                Annuler
+              </button>
+            )}
+
+            <p className="login-page__hint">
+              Pas encore de compte ? Utilisez le lien reçu par email pour l'activer.
+            </p>
+          </form>
+        ) : (
+          <form className="login-page__card" onSubmit={handleRequestReset}>
+            <h1 className="login-page__card-title">Mot de passe oublié</h1>
+            <p className="login-page__card-subtitle">
+              Indiquez votre identifiant ou votre email, nous vous envoyons un lien pour choisir un nouveau mot de
+              passe.
+            </p>
+
+            {error && <p className="login-page__error">{error}</p>}
+
+            {resetMessage ? (
+              <p className="login-page__hint">{resetMessage}</p>
+            ) : (
+              <>
+                <label className="login-page__field">
+                  <span>Identifiant ou email</span>
+                  <input
+                    type="text"
+                    value={resetIdentifier}
+                    onChange={(event) => setResetIdentifier(event.target.value)}
+                    autoFocus
+                    disabled={resetSubmitting}
+                  />
+                </label>
+
+                <button
+                  type="submit"
+                  className="login-page__submit"
+                  disabled={resetSubmitting || !resetIdentifier}
+                >
+                  {resetSubmitting ? "Envoi…" : "Envoyer le lien"}
+                </button>
+              </>
+            )}
+
+            <button type="button" className="login-page__cancel" onClick={backToLogin}>
+              Retour à la connexion
+            </button>
+          </form>
+        )}
+
+        {mode === "login" && selectableUsers.length > 0 && (
           <div className="login-page__demo">
             <p className="login-page__demo-title">Mode démo — continuer en tant que</p>
             <ul className="login-page__demo-list">

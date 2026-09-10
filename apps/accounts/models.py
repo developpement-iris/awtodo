@@ -1,8 +1,10 @@
 import uuid
+from datetime import timedelta
 
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.db.utils import OperationalError, ProgrammingError
+from django.utils import timezone
 
 from apps.common.models import StatusLifecycleModel, TimeStampedModel, UUIDModel
 
@@ -175,3 +177,44 @@ class Invitation(UUIDModel, TimeStampedModel):
 
     def __str__(self):
         return f"Invitation {self.email} ({self.status})"
+
+
+# Durée de vie du lien de réinitialisation — délibérément beaucoup plus
+# courte que l'invitation (pas de délai stocké là-bas, voir Invitation
+# ci-dessus) : un lien de reset donne accès à un compte déjà actif, pas
+# seulement à son activation initiale, le risque en cas de fuite est donc
+# plus élevé (email intercepté, boîte mail partagée...).
+PASSWORD_RESET_TOKEN_LIFETIME = timedelta(hours=1)
+
+
+class PasswordResetRequest(UUIDModel, TimeStampedModel):
+    """Voir docs/organisation-et-comptes.md > "Réinitialisation de mot de
+    passe". Même schéma qu'`Invitation` (token UUID + statut), sans les
+    champs propres à l'invitation (email/organisation/team/project/invited_by
+    n'ont pas de sens ici — la personne a déjà un compte). Pas de
+    StatusLifecycleModel, même raisonnement que pour `Invitation` : un cycle
+    de vie métier précis (`pending → used/expired`), pas un simple
+    actif/archivé, jamais listé "par défaut sans les terminaux" dans l'UI."""
+
+    STATUS_CHOICES = [
+        ("pending", "En attente"),
+        ("used", "Utilisée"),
+        ("expired", "Expirée"),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="password_reset_requests")
+    token = models.UUIDField(default=uuid.uuid4, unique=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"Réinitialisation {self.user} ({self.status})"
+
+    @property
+    def is_expired(self):
+        """Calculé à la volée à partir de `created_at`, pas d'un statut
+        balayé périodiquement (rien ne fait expirer `Invitation` non plus,
+        voir plus haut) — reste vrai même si `status` est encore `pending`
+        en base, source de vérité unique pour l'API ET pour la validation
+        (`services.confirm_password_reset`)."""
+        return timezone.now() > self.created_at + PASSWORD_RESET_TOKEN_LIFETIME

@@ -22,6 +22,12 @@ class Project(UUIDModel, TimeStampedModel, StatusLifecycleModel):
     project_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default="collaboratif")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="actif")
     deadline = models.DateField(null=True, blank=True)
+    # "Déjà en production" : le projet suit quelque chose de déjà en ligne
+    # (maintenance / évolutions), il n'a pas de date de livraison cible.
+    # Choisi à la création, incompatible avec `deadline` (validé dans
+    # `create_project`). Pas d'écran d'édition après coup pour l'instant,
+    # comme `project_type`.
+    already_in_production = models.BooleanField(default=False)
     priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, null=True, blank=True)
     team = models.ForeignKey(
         "accounts.Team", null=True, blank=True, on_delete=models.PROTECT, related_name="projects"
@@ -126,7 +132,17 @@ class ProjectMembership(UUIDModel, TimeStampedModel, StatusLifecycleModel):
     ROLE_CHOICES = [
         ("chef_de_projet", "Chef de projet"),
         ("membre", "Membre"),
+        # Lecture seule (session du 2026-09-10) : voit le projet, ses tâches et
+        # son cahier des charges / bloc-notes, ne peut rien créer/modifier/
+        # commenter/actionner et n'a accès ni au budget, ni aux incidents, ni
+        # au planning, ni aux statistiques. Voir docs/organisation-et-comptes.md
+        # > "Rôle Lecteur".
+        ("lecteur", "Lecteur"),
     ]
+    # Rôles qui peuvent agir sur le projet (exclut `lecteur`) — source de
+    # vérité unique, utilisée par `apps.projects.services` (contributor_projects,
+    # is_project_contributor) et réexportée aux apps qui en dépendent.
+    CONTRIBUTOR_ROLES = frozenset({"chef_de_projet", "membre"})
     STATUS_CHOICES = [
         ("active", "Active"),
         ("removed", "Retirée"),

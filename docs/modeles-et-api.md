@@ -8,11 +8,12 @@ Détail des modèles de données et des endpoints. Référencé depuis CLAUDE.md
 - Nom, description, type (`individuel` / `collaboratif`)
 - **Statut : `actif` / `clôturé` (implémenté — session du 06/08/2026).** Remplace le placeholder `actif`/`archivé` jamais construit côté UI jusqu'ici — `clôturé` est le terme métier retenu (action délibérée d'un chef de projet marquant le projet comme terminé), pas un renommage cosmétique. Toujours aucune suppression physique : un projet clôturé reste consultable, avec ses tâches/versions/historique intacts.
 - Catégorisation : deadline et/ou priorité pour la roadmap
+- **`already_in_production`** (booléen, défaut `False`, choisi à la création — session du 2026-09-10) : le projet suit quelque chose de déjà en ligne (maintenance/évolutions), **pas de date de livraison cible**. Incompatible avec `deadline` (`create_project` rejette les deux à la fois). Pas d'écran d'édition après coup, comme `project_type`.
 - **`team`** (FK vers `Team`/Groupe) : obligatoire si `collaboratif`, interdit (null) si `individuel` — voir section "Groupes"
 
 ### ProjectMembership
 - Utilisateur × Projet × Rôle
-- Rôles possibles : `chef_de_projet`, `membre`
+- Rôles possibles : `chef_de_projet`, `membre`, `lecteur` (lecture seule — session du 2026-09-10, voir `docs/organisation-et-comptes.md` > "Rôle Lecteur")
 - **Un projet peut avoir plusieurs chefs de projet simultanément**
 - **Contrainte (projets collaboratifs uniquement) :** l'utilisateur doit déjà être membre du `Team`/Groupe attribué au projet — voir section "Groupes"
 
@@ -49,6 +50,7 @@ Trois flux de création possibles, chacun aboutissant à un statut initial diff�
 | Chef de projet | Crée + attribue directement à un membre | `assignée` |
 | Chef de projet | Crée sans attribuer | `disponible` |
 | Membre / développeur | Crée une tâche | `en_attente_validation` |
+| N'importe qui | Crée une tâche sur un projet **`individuel`** sans assigné explicite (session du 2026-09-10) | `assignée` au créateur — une seule personne travaille sur un projet individuel, toute tâche lui revient. Un assigné fourni explicitement via l'API est respecté ; le reste des règles ci-dessus s'applique ensuite (le créateur d'un projet individuel est chef de projet). |
 
 Transitions :
 
@@ -143,7 +145,7 @@ Le SSO/gestion de comptes est volontairement mis en dernier dans la roadmap — 
 
 | Endpoint | Rôle requis | Effet |
 |---|---|---|
-| `POST /api/v1/projects/` | tout utilisateur authentifié | crée le projet (nom, description, type `individuel`/`collaboratif`, catégorisation deadline/priorité optionnelle) ; **le créateur devient automatiquement `chef_de_projet`** via une `ProjectMembership` créée dans le même service — jamais de projet sans au moins un chef de projet |
+| `POST /api/v1/projects/` | tout utilisateur authentifié | crée le projet (nom, description, type `individuel`/`collaboratif`, `deadline`/`priority` optionnels, `already_in_production` optionnel — exclusif de `deadline`) ; **le créateur devient automatiquement `chef_de_projet`** via une `ProjectMembership` créée dans le même service — jamais de projet sans au moins un chef de projet |
 
 **Règle d'implémentation :** comme pour les tâches, la logique (création du projet + création de la `ProjectMembership` du créateur) est une seule fonction dans `services.py` (`apps/projects/services.py`), pas répartie entre serializer et vue.
 
@@ -305,7 +307,7 @@ Nouveau modèle dans `apps/incidents` :
 
 ### Écran Statistiques (global, sidebar)
 
-- `GET /api/v1/tasks/global-stats/` (`apps.tasks.services.get_global_task_stats`) — `projects_total`/`projects_active`/`projects_closed` (sur `accessible_projects(actor)`, cohérent avec le scoping déjà acté) + `tasks_done`/`tasks_in_progress` (sur `Task.all_objects.filter(project__in=accessible_projects(actor))`).
+- `GET /api/v1/tasks/global-stats/` (`apps.tasks.services.get_global_task_stats`) — `projects_total`/`projects_active`/`projects_closed` + `tasks_done`/`tasks_in_progress`, sur **`contributor_projects(actor)`** (session du 2026-09-10 — un projet où l'acteur n'a qu'un droit de lecture n'entre pas dans ses stats globales, comme l'onglet Statistiques d'un projet lui est masqué).
 - **Budgets** : `GET /api/v1/budgeting/summary/` (voir section "Budgétisation" ci-dessous) — restreint aux projets où l'acteur est `chef_de_projet`, conforme à la demande ("accès aux budgets des projets sur lesquels l'user est chef de projet").
 - **Visibilité (actée à l'origine, confirmée à l'implémentation) :** les statistiques globales sont visibles par tout utilisateur authentifié (scopées à `accessible_projects`, pas une vue "admin"). Les statistiques d'un projet donné sont visibles par tout membre de ce projet ; le tableau par membre distingue seulement la **largeur** des données (tous les membres vs soi-même), pas l'accès à l'écran.
 
@@ -395,7 +397,8 @@ Référence de design : composants réels **Watermelon UI** `widget-5` (évoluti
 - Conséquence naturelle : les comptes `externe` (voir section "Comptes et invitations") héritent de cette même règle sans logique dédiée — ils n'ont par construction de `ProjectMembership` que sur leur(s) projet(s) d'invitation.
 
 **Précisions actées à l'implémentation :**
-- **`apps.projects.services.accessible_projects(user)`** : fonction unique (`Project.objects.none()` pour un utilisateur anonyme, `Project.objects.active()` pour `is_platform_admin`, sinon `Project.objects.active().filter(memberships__user=user, memberships__status="active").distinct()`) — seule source de vérité pour la portée, réutilisée telle quelle par `ProjectViewSet.get_queryset()`, `TaskViewSet.get_queryset()` (`.filter(project__in=accessible_projects(...))`) et `IncidentViewSet.get_queryset()`. `apps.tasks`/`apps.incidents` important `apps.projects.services` : sens de dépendance autorisé (voir hiérarchie des apps).
+- **`apps.projects.services.accessible_projects(user)`** : fonction unique (`Project.all_objects.none()` pour un utilisateur anonyme, `Project.all_objects.all()` pour `is_platform_admin`, sinon `Project.all_objects.filter(memberships__user=user, memberships__status="active").distinct()`) — seule source de vérité pour la portée, réutilisée telle quelle par `ProjectViewSet.get_queryset()` et `TaskViewSet.get_queryset()`. `apps.tasks`/`apps.incidents` important `apps.projects.services` : sens de dépendance autorisé (voir hiérarchie des apps).
+- **`contributor_projects(user)` (session du 2026-09-10)** : même chose mais **exclut** les appartenances `lecteur` (`memberships__role__in={"chef_de_projet","membre"}`). Portée des écrans dont un lecteur est écarté : `IncidentViewSet`, `BudgetLineViewSet`, `DocSpaceViewSet`, planning, et les statistiques globales. Voir `docs/organisation-et-comptes.md` > "Rôle Lecteur" pour le détail de la séparation *voir* / *contribuer* et les helpers `is_project_member` (toute appartenance) vs `is_project_contributor` (base des gardes en écriture).
 - **404 obtenu "gratuitement"** : en scopant `get_queryset()` plutôt qu'en ajoutant une vérification explicite dans `retrieve()`, le comportement DRF standard de `get_object()` (404 si l'objet ne fait pas partie du queryset filtré) donne directement le bon code — pas de logique à dupliquer entre liste et détail. Conséquence non demandée mais cohérente : les actions (`validate`/`claim`/`start`/...), qui appellent toutes `self.get_object()`, renvoient elles aussi 404 pour un non-membre plutôt que 403 (avant, elles renvoyaient 403 via `TaskPermissionError`) — ne cache pas moins d'information qu'avant, juste plus tôt dans le pipeline.
 - **Tension notée précédemment, non résolue en tant que telle mais devenue sans objet pour les incidents non-affectés (session du 07/08/2026)** : l'autorisation d'action sur un incident *rattaché à un projet* (`_is_member_via_project`, voir "Boîte de réception des incidents non-affectés" ci-dessus) reste basée sur le `Team` du projet (plus large qu'une `ProjectMembership`), alors que le scoping de liste/détail reste strictement basé sur `ProjectMembership`. Ce cas limite existait déjà et n'a pas été retouché ici (portée hors de cette passe). Ce qui a changé : un incident peut désormais être rattaché **directement** à un groupe (`incident.team`, sans passer par un projet) — pour ce cas-là, autorisation et scoping (`accessible_inbox_teams`) suivent tous les deux la même `TeamMembership`, donc aucun écart équivalent ne s'y introduit. En pratique, les flux d'ajout de membre (onglet Administration du projet, sélection à la création) créent systématiquement une `ProjectMembership`, donc l'écart résiduel (incidents *rattachés à un projet*) ne se manifeste que si quelqu'un est ajouté à un `Team` après coup sans jamais passer par l'onglet Administration du projet.
 - Tests dédiés : `apps/projects/tests/test_scoping.py` (liste/détail projet+tâche+incident, `is_platform_admin`, `organisation_role=admin` sans exception, compte `externe`, utilisateur anonyme) et vérification directe de `accessible_projects()` hors HTTP.

@@ -181,3 +181,14 @@ SPECTACULAR_SETTINGS = {
 # Restrictif par défaut ; assoupli en dev, à renseigner via env pour un
 # frontend déployé en staging/production.
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
+
+# Réinitialisation de mot de passe en "lien direct" (voir
+# docs/organisation-et-comptes.md > "Réinitialisation de mot de passe" >
+# mode test). `True` = pas d'email envoyé, l'endpoint /password-reset/request/
+# renvoie directement le chemin `/reset-password/<token>/` pour que le
+# frontend y redirige. Réservé à la phase de test (pas de fournisseur
+# transactionnel branché) — assumé sans enjeu de sécurité tant que le
+# nombre d'utilisateurs se compte sur les doigts d'une main. Faux par
+# défaut : dès qu'un vrai ESP sera câblé en production, l'email reprend la
+# main sans rien changer d'autre. Activé dans `dev.py` et `staging.py`.
+PASSWORD_RESET_DIRECT_LINK = env.bool("PASSWORD_RESET_DIRECT_LINK", default=False)

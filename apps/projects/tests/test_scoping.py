@@ -111,6 +111,35 @@ class ProjectListScopingApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 404)
 
+    def test_lecteur_sees_project_and_tasks_but_not_incidents(self):
+        reader = User.objects.create_user(username="lecteur-scope")
+        ProjectMembership.objects.create(project=self.project, user=reader, role="lecteur")
+        task = Task.objects.create(
+            project=self.project, version=_version(self.project), title="Tâche lue", task_type="correction"
+        )
+        incident = Incident.objects.create(project=self.project, title="Incident caché")
+
+        projects_ids = [item["id"] for item in self.client.get("/api/v1/projects/", **self.as_user(reader)).json()]
+        tasks_ids = [item["id"] for item in self.client.get("/api/v1/tasks/", **self.as_user(reader)).json()]
+        incidents_ids = [item["id"] for item in self.client.get("/api/v1/incidents/", **self.as_user(reader)).json()]
+
+        self.assertIn(str(self.project.id), projects_ids)
+        self.assertIn(str(task.id), tasks_ids)
+        self.assertNotIn(str(incident.id), incidents_ids)
+
+    def test_lecteur_cannot_create_task_via_api(self):
+        reader = User.objects.create_user(username="lecteur-notask")
+        ProjectMembership.objects.create(project=self.project, user=reader, role="lecteur")
+
+        response = self.client.post(
+            "/api/v1/tasks/",
+            {"project": str(self.project.id), "title": "Interdit", "task_type": "correction"},
+            format="json",
+            **self.as_user(reader),
+        )
+
+        self.assertEqual(response.status_code, 403)
+
     def test_externe_account_sees_only_its_invited_project(self):
         # Reproduit l'état obtenu après acceptation d'une invitation externe
         # (voir CLAUDE.md > "Comptes et invitations") : une ProjectMembership

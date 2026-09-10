@@ -53,6 +53,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             "status",
             "status_display",
             "deadline",
+            "already_in_production",
             "priority",
             "priority_display",
             "team",
@@ -102,6 +103,7 @@ class ProjectCreateSerializer(serializers.Serializer):
     description = serializers.CharField(required=False, allow_blank=True, default="")
     project_type = serializers.ChoiceField(choices=Project.TYPE_CHOICES)
     deadline = serializers.DateField(required=False, allow_null=True)
+    already_in_production = serializers.BooleanField(required=False, default=False)
     priority = serializers.ChoiceField(choices=PRIORITY_CHOICES, required=False, allow_null=True)
     team = serializers.PrimaryKeyRelatedField(queryset=Team.objects.all(), required=False, allow_null=True)
     member_ids = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), many=True, required=False)

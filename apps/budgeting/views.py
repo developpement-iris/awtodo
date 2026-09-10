@@ -3,7 +3,7 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from apps.projects.services import accessible_projects
+from apps.projects.services import contributor_projects
 
 from .models import BudgetLine
 from .serializers import BudgetLineCreateSerializer, BudgetLineSerializer, BudgetSummarySerializer
@@ -26,18 +26,18 @@ class BudgetLineViewSet(viewsets.GenericViewSet):
 
     def get_queryset(self):
         # Scope `self.get_object()` (utilisé par `remove`) aux lignes des
-        # projets accessibles à l'acteur — 404 plutôt qu'un 403 qui
-        # révélerait l'existence d'une ligne sur un projet hors de portée,
-        # cohérent avec "Scoping des listes par appartenance".
-        return BudgetLine.objects.filter(project__in=accessible_projects(self.request.user))
+        # projets où l'acteur contribue — `contributor_projects`, pas
+        # `accessible_projects` : le budget est masqué à un membre `lecteur`.
+        # 404 plutôt qu'un 403 qui révélerait l'existence d'une ligne hors de
+        # portée, cohérent avec "Scoping des listes par appartenance".
+        return BudgetLine.objects.filter(project__in=contributor_projects(self.request.user))
 
     @action(detail=False, methods=["get", "post"], url_path="projects/(?P<project_id>[^/.]+)/lines")
     def lines(self, request, project_id=None):
-        # Résolu via `accessible_projects` : 404 (pas 403) si l'acteur n'a
-        # pas de `ProjectMembership` sur ce projet, cohérent avec "Scoping
-        # des listes par appartenance" — la garde de rôle fine (membre vs
-        # chef de projet) vit ensuite dans le service.
-        project = get_object_or_404(accessible_projects(request.user), pk=project_id)
+        # 404 (pas 403) si l'acteur n'a pas d'appartenance contributrice sur
+        # ce projet — la garde de rôle fine (membre vs chef de projet) vit
+        # ensuite dans le service.
+        project = get_object_or_404(contributor_projects(request.user), pk=project_id)
 
         if request.method == "GET":
             try:

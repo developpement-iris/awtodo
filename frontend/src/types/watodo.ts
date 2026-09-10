@@ -41,6 +41,13 @@ export interface Invitation {
   accepted_at: string | null;
 }
 
+export interface PasswordResetToken {
+  id: string;
+  status: "pending" | "used" | "expired";
+  status_display: string;
+  is_expired: boolean;
+}
+
 export interface Organisation {
   id: string;
   name: string;
@@ -59,10 +66,12 @@ export interface Team {
   can_manage: boolean;
 }
 
+export type ProjectRole = "chef_de_projet" | "membre" | "lecteur";
+
 export interface ProjectMembership {
   id: string;
   user: User;
-  role: "chef_de_projet" | "membre";
+  role: ProjectRole;
   role_display: string;
 }
 
@@ -70,6 +79,10 @@ export interface ProjectMembership {
 // vérité pour ces règles (apps/*/services.py côté backend) — le frontend ne
 // recalcule jamais lui-même une condition de rôle/statut, il lit ces flags.
 export interface ProjectPermissions {
+  // `false` pour un membre `lecteur` — le frontend s'en sert pour masquer les
+  // onglets Budget/Incidents/Planning/Statistiques et toutes les affordances
+  // de création/édition.
+  can_contribute: boolean;
   can_edit_spec: boolean;
   can_edit_notepad: boolean;
   can_manage_members: boolean;
@@ -168,6 +181,7 @@ export interface Project {
   status: ProjectStatus;
   status_display: string;
   deadline: string | null;
+  already_in_production: boolean;
   priority: "basse" | "moyenne" | "haute" | "critique" | null;
   priority_display: string | null;
   team: string | null;

@@ -9,7 +9,12 @@ from apps.common.audit import record_changes
 from apps.common.choices import PRIORITY_CHOICES
 from apps.common.permissions import check_permission
 from apps.projects.models import ProjectMembership
-from apps.projects.services import accessible_projects, get_current_version
+from apps.projects.services import (
+    contributor_projects,
+    get_current_version,
+    is_project_contributor,
+    is_project_manager,
+)
 
 from .models import Task, TaskComment
 from .signals import task_assigned, task_commented, task_completed
@@ -37,18 +42,22 @@ def _require_actor(actor):
         raise TaskPermissionError("Utilisateur non identifié.")
 
 
+# Délèguent à `apps.projects.services` (import autorisé, `tasks` est plus bas
+# dans la hiérarchie) plutôt que de requêter `ProjectMembership` en direct —
+# une seule définition de "peut contribuer" (exclut `lecteur`, filtre
+# `status="active"`) et "est chef de projet", partagée avec `apps.projects`.
 def _is_member(user, project):
-    return ProjectMembership.objects.filter(project=project, user=user).exists()
+    return is_project_contributor(user, project)
 
 
 def _is_manager(user, project):
-    return ProjectMembership.objects.filter(project=project, user=user, role="chef_de_projet").exists()
+    return is_project_manager(user, project)
 
 
 def _require_member(actor, project):
     _require_actor(actor)
     if not _is_member(actor, project):
-        raise TaskPermissionError("Seul un membre du projet peut effectuer cette action.")
+        raise TaskPermissionError("Seul un membre du projet (hors lecture seule) peut effectuer cette action.")
 
 
 def _require_manager(actor, project):
@@ -108,7 +117,10 @@ def _ensure_can_assign(actor, task):
 
 
 def _ensure_can_start(actor, task):
-    _require_actor(actor)
+    # `_require_member` (= contributeur) en plus du contrôle d'assigné : ferme
+    # le cas d'un assigné rétrogradé en `lecteur` après coup, qui resterait
+    # sinon `task.assignee_id == actor.id`.
+    _require_member(actor, task.project)
     if task.assignee_id != getattr(actor, "id", None):
         raise TaskPermissionError("Seul l'assigné actuel peut démarrer cette tâche.")
     if task.status != "assignee":
@@ -116,7 +128,7 @@ def _ensure_can_start(actor, task):
 
 
 def _ensure_can_complete(actor, task):
-    _require_actor(actor)
+    _require_member(actor, task.project)
     is_assignee = task.assignee_id == getattr(actor, "id", None)
     if not is_assignee and not _is_manager(actor, task.project):
         raise TaskPermissionError("Seul l'assigné actuel ou un chef de projet peut clôturer cette tâche.")
@@ -183,7 +195,9 @@ def get_project_user_stats(*, actor, project):
     if _is_manager(actor, project):
         users = [
             membership.user
-            for membership in ProjectMembership.objects.filter(project=project, status="active").select_related("user")
+            for membership in ProjectMembership.objects.filter(
+                project=project, status="active", role__in=ProjectMembership.CONTRIBUTOR_ROLES
+            ).select_related("user")
         ]
     else:
         users = [actor]
@@ -292,12 +306,13 @@ def get_project_task_insights(*, actor, project):
 
 def get_global_task_stats(*, actor):
     """Écran Statistiques globales (sidebar, voir docs/modeles-et-api.md) —
-    vision macroscopique sur les projets accessibles à l'utilisateur courant
-    (même portée que `accessible_projects`, pas une règle de visibilité à
-    part)."""
+    vision macroscopique sur les projets où l'utilisateur *contribue*
+    (`contributor_projects`, pas `accessible_projects`) : un projet où il n'a
+    qu'un droit de lecture n'entre pas dans ses statistiques globales, comme
+    l'onglet Statistiques d'un projet lui est masqué."""
     _require_actor(actor)
 
-    projects = accessible_projects(actor)
+    projects = contributor_projects(actor)
     tasks_qs = Task.all_objects.filter(project__in=projects)
 
     return {
@@ -341,6 +356,14 @@ def create_task(
     estimated_hours=None,
 ):
     _require_member(actor, project)
+
+    # Projet individuel : une seule personne travaille dessus, toute tâche
+    # lui revient — auto-assignée au créateur (session du 2026-09-10), plutôt
+    # que de passer par "disponible" / "en attente de validation" qui n'ont
+    # de sens qu'à plusieurs. Un assigné explicitement fourni (cas rare sur
+    # un projet individuel, mais possible via l'API) reste respecté.
+    if project.project_type == "individuel" and assignee is None:
+        assignee = actor
 
     if _is_manager(actor, project):
         status = "assignee" if assignee else "disponible"

@@ -115,6 +115,13 @@ DEFAULT_FROM_EMAIL = env(
     "DEFAULT_FROM_EMAIL", default="Awtodo <no-reply@awtodo.local>"
 )
 
+# Phase de test : pas de fournisseur transactionnel branché — "mot de passe
+# oublie" ne passe pas par un email, l'endpoint renvoie directement le lien
+# de reinitialisation et le frontend y redirige. Voir base.py + 
+# docs/organisation-et-comptes.md > "Reinitialisation de mot de passe".
+# A repasser a False (ou retirer) quand un vrai ESP sera en place.
+PASSWORD_RESET_DIRECT_LINK = env.bool("PASSWORD_RESET_DIRECT_LINK", default=True)
+
 # Même domaine que l'API (Django sert le front) : défaut = le host Render.
 FRONTEND_BASE_URL = env(
     "FRONTEND_BASE_URL",

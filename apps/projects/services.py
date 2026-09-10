@@ -30,17 +30,18 @@ def accessible_projects(user):
     """Projets visibles par `user` — voir CLAUDE.md > "Scoping des listes par
     appartenance". Un utilisateur ne voit que les projets où il a une
     `ProjectMembership` active ; `is_platform_admin` voit tout (y compris
-    `organisation_role=admin`, qui ne bénéficie d'aucune exception). Base
-    commune à `ProjectViewSet`, `TaskViewSet` et `IncidentViewSet` (via
-    `project__in=...`) — une seule règle de portée, pas une par app.
+    `organisation_role=admin`, qui ne bénéficie d'aucune exception).
+
+    **Inclut les membres `lecteur`** (session du 2026-09-10) : un lecteur voit
+    le projet, son détail et ses tâches. Pour le scoping des écrans dont un
+    lecteur est exclu (budget, incidents, planning, documentation, stats
+    globales), utiliser `contributor_projects` ci-dessous, pas cette fonction.
 
     Statut-agnostique délibérément (`all_objects`, pas `.active()`) : un
     projet clôturé reste consultable (voir docs/modeles-et-api.md > "Clôture
     de projet") — c'est `ProjectFilterSet`/`ProjectViewSet` qui décide quels
     statuts apparaissent dans la liste par défaut (voir "Filtre d'état
-    généralisé"), pas la portée par appartenance elle-même. Une tâche/un
-    incident d'un projet clôturé reste visible dans les listes tâches/
-    incidents scopées via `project__in=accessible_projects(...)`."""
+    généralisé"), pas la portée par appartenance elle-même."""
     if user is None or not getattr(user, "is_authenticated", False):
         return Project.all_objects.none()
     if getattr(user, "is_platform_admin", False):
@@ -48,12 +49,42 @@ def accessible_projects(user):
     return Project.all_objects.filter(memberships__user=user, memberships__status="active").distinct()
 
 
+def contributor_projects(user):
+    """Comme `accessible_projects`, mais **exclut les appartenances `lecteur`**
+    — portée des écrans qu'un lecteur ne voit pas (budget, incidents,
+    planning, documentation, statistiques globales). Un `is_platform_admin`
+    voit toujours tout."""
+    if user is None or not getattr(user, "is_authenticated", False):
+        return Project.all_objects.none()
+    if getattr(user, "is_platform_admin", False):
+        return Project.all_objects.all()
+    return Project.all_objects.filter(
+        memberships__user=user,
+        memberships__status="active",
+        memberships__role__in=ProjectMembership.CONTRIBUTOR_ROLES,
+    ).distinct()
+
+
 def is_project_member(user, project):
-    """Utilisé aussi bien pour le scoping des listes/détails (voir CLAUDE.md >
-    "Scoping des listes par appartenance") que pour les flags de permission."""
+    """Toute appartenance active, `lecteur` compris — pour le scoping des
+    listes/détails (voir CLAUDE.md > "Scoping des listes par appartenance").
+    Pour savoir si l'utilisateur peut *agir* sur le projet, utiliser
+    `is_project_contributor`."""
     if user is None or not getattr(user, "is_authenticated", False):
         return False
-    return ProjectMembership.objects.filter(project=project, user=user).exists()
+    return ProjectMembership.objects.filter(project=project, user=user, status="active").exists()
+
+
+def is_project_contributor(user, project):
+    """Appartenance active avec un rôle qui peut agir (`chef_de_projet` ou
+    `membre`, pas `lecteur`) — base de toutes les fonctions de garde en
+    écriture. Aussi importée telle quelle par `apps.tasks`/`apps.incidents`
+    (autorisées à dépendre de `apps.projects`)."""
+    if user is None or not getattr(user, "is_authenticated", False):
+        return False
+    return ProjectMembership.objects.filter(
+        project=project, user=user, status="active", role__in=ProjectMembership.CONTRIBUTOR_ROLES
+    ).exists()
 
 
 def is_project_manager(user, project):
@@ -63,13 +94,24 @@ def is_project_manager(user, project):
     besoin de la même règle sans dupliquer la requête `ProjectMembership`."""
     if user is None or not getattr(user, "is_authenticated", False):
         return False
-    return ProjectMembership.objects.filter(project=project, user=user, role="chef_de_projet").exists()
+    return ProjectMembership.objects.filter(
+        project=project, user=user, status="active", role="chef_de_projet"
+    ).exists()
 
 
 def _require_member(actor, project):
+    """Toute appartenance active — `lecteur` compris. À réserver aux actions
+    de pure lecture qu'un lecteur a le droit de faire (lire le cahier des
+    charges). Toute action en écriture passe par `_require_contributor`."""
     _require_actor(actor)
     if not is_project_member(actor, project):
         raise ProjectPermissionError("Seul un membre du projet peut effectuer cette action.")
+
+
+def _require_contributor(actor, project):
+    _require_actor(actor)
+    if not is_project_contributor(actor, project):
+        raise ProjectPermissionError("Seul un membre du projet (hors lecture seule) peut effectuer cette action.")
 
 
 def _require_manager(actor, project):
@@ -85,7 +127,7 @@ def _require_manager(actor, project):
 
 
 def _ensure_can_edit_notes(actor, project):
-    _require_member(actor, project)
+    _require_contributor(actor, project)
 
 
 def _ensure_can_manage_members(actor, project):
@@ -158,6 +200,11 @@ def can_manage_project_planning(user, project):
 
 def get_project_permissions(user, project):
     return {
+        # `false` pour un membre `lecteur` : le frontend s'en sert pour masquer
+        # entièrement les onglets Budget/Incidents/Planning/Statistiques et
+        # toutes les affordances de création/édition (voir
+        # docs/organisation-et-comptes.md > "Rôle Lecteur").
+        "can_contribute": is_project_contributor(user, project),
         "can_edit_spec": can_edit_spec(user, project),
         "can_edit_notepad": can_edit_notepad(user, project),
         "can_manage_members": can_manage_members(user, project),
@@ -202,8 +249,24 @@ def create_project_version(*, actor, project, label):
     return ProjectVersion.objects.create(project=project, label=label.strip(), is_current=True, created_by=actor)
 
 
-def create_project(*, actor, name, project_type, description="", deadline=None, priority=None, team=None, member_ids=None):
+def create_project(
+    *,
+    actor,
+    name,
+    project_type,
+    description="",
+    deadline=None,
+    priority=None,
+    team=None,
+    member_ids=None,
+    already_in_production=False,
+):
     _require_actor(actor)
+
+    if already_in_production and deadline is not None:
+        raise ProjectValidationError(
+            "Un projet déjà en production n'a pas de date d'échéance — l'un ou l'autre, pas les deux."
+        )
 
     if project_type == "collaboratif":
         if team is None:
@@ -236,6 +299,7 @@ def create_project(*, actor, name, project_type, description="", deadline=None, 
         description=description,
         project_type=project_type,
         deadline=deadline,
+        already_in_production=already_in_production,
         priority=priority,
         team=team,
         organisation=actor.organisation,
@@ -282,8 +346,20 @@ def add_project_member(*, actor, project, user=None, email=None, role="membre"):
     elif user.organisation_id != project.organisation_id:
         raise ProjectValidationError("Cet utilisateur n'appartient pas à la même organisation que le projet.")
 
-    membership, _ = ProjectMembership.objects.get_or_create(project=project, user=user, role=role)
-    return membership
+    # `get_or_create` sur `(project, user, role)` : sans ce garde-fou, ajouter
+    # quelqu'un déjà membre avec un rôle différent (ex. `lecteur` sur un
+    # `membre`) créerait une 2ᵉ ligne d'appartenance active — incohérent.
+    # Changer le rôle passe par `change_project_member_role`, pas par un
+    # nouvel ajout.
+    existing = ProjectMembership.objects.filter(project=project, user=user, status="active").first()
+    if existing is not None:
+        if existing.role == role:
+            return existing
+        raise ProjectValidationError(
+            "Cette personne est déjà membre du projet — modifiez son rôle plutôt que de l'ajouter à nouveau."
+        )
+
+    return ProjectMembership.objects.create(project=project, user=user, role=role)
 
 
 def change_project_member_role(*, actor, membership, role):

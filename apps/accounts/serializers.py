@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import ORGANISATION_ROLE_CHOICES, Invitation, Organisation, Team, TeamMembership, User
+from .models import ORGANISATION_ROLE_CHOICES, Invitation, Organisation, PasswordResetRequest, Team, TeamMembership, User
 from .services import can_manage_team
 
 
@@ -135,4 +135,28 @@ class InvitationAcceptSerializer(serializers.Serializer):
 
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField()
+    password = serializers.CharField(write_only=True)
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    """Identifiant OU email — voir `services.request_password_reset`."""
+
+    identifier = serializers.CharField()
+
+
+class PasswordResetTokenSerializer(serializers.ModelSerializer):
+    """Volontairement minimal : n'expose ni `user` ni aucune donnée
+    personnelle — le lien est public le temps que la personne choisisse son
+    nouveau mot de passe, juste assez pour que la page affiche "lien valide"
+    ou "lien expiré/déjà utilisé" avant soumission."""
+
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+    is_expired = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = PasswordResetRequest
+        fields = ["id", "status", "status_display", "is_expired"]
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True)

@@ -6,10 +6,11 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.mail import send_mail
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.html import escape
 
-from .models import Invitation, Organisation, Team, TeamMembership, User
+from .models import PASSWORD_RESET_TOKEN_LIFETIME, Invitation, Organisation, PasswordResetRequest, Team, TeamMembership, User
 
 
 class AccountPermissionError(Exception):
@@ -370,3 +371,122 @@ def resend_invitation(*, actor, invitation):
 
     _send_invitation_email(new_invitation)
     return new_invitation
+
+
+def _send_password_reset_email(reset):
+    # Même raisonnement que `_send_invitation_email` (email synchrone, backend
+    # console/sandbox uniquement pour l'instant — voir sa docstring pour le
+    # détail complet, non répété ici). Couleurs `#191033`/`#2C1B63`/`#EDEBF7`
+    # reprises telles quelles de `_send_invitation_email` — reste de l'ancienne
+    # palette cyan/violet-galaxie (v3), jamais mise à jour vers la palette
+    # brique/brun actuelle même dans l'email d'invitation. Pas corrigé ici non
+    # plus : cohérence entre les deux emails transactionnels priorisée sur la
+    # correction d'un détail de marque hors du périmètre de cette passe.
+    reset_url = f"{settings.FRONTEND_BASE_URL}/reset-password/{reset.token}/"
+    hours = int(PASSWORD_RESET_TOKEN_LIFETIME.total_seconds() // 3600)
+
+    text_body = (
+        "Vous avez demandé la réinitialisation de votre mot de passe Awtodo.\n"
+        f"Choisissez un nouveau mot de passe : {reset_url}\n"
+        f"Ce lien expire dans {hours} heure(s). Si vous n'êtes pas à l'origine de cette demande, ignorez cet email."
+    )
+    html_body = (
+        '<div style="font-family: sans-serif; color: #191033; max-width: 480px;">'
+        '<h1 style="font-size: 18px; margin: 0 0 16px;">Awtodo</h1>'
+        "<p>Vous avez demandé la réinitialisation de votre mot de passe.</p>"
+        f'<p><a href="{reset_url}" style="display: inline-block; background: #2C1B63; '
+        'color: #EDEBF7; text-decoration: none; padding: 12px 24px; border-radius: 6px; '
+        'font-weight: 600;">Choisir un nouveau mot de passe</a></p>'
+        '<p style="font-size: 12px; color: #4B4270;">'
+        f"Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur : {reset_url}<br>"
+        f"Ce lien expire dans {hours} heure(s). Si vous n'êtes pas à l'origine de cette demande, ignorez cet email."
+        "</p>"
+        "</div>"
+    )
+
+    send_mail(
+        subject="Réinitialisation de votre mot de passe Awtodo",
+        message=text_body,
+        from_email=None,
+        recipient_list=[reset.user.email],
+        fail_silently=True,
+        html_message=html_body,
+    )
+
+
+def request_password_reset(*, identifier):
+    """Public par nature (voir `authenticate_user`/`accept_invitation` pour le
+    même raisonnement) — la personne a justement perdu l'accès à son compte,
+    il n'y a pas d'acteur à authentifier.
+
+    `identifier` : identifiant OU email, comme le login (voir
+    `LoginPage.tsx`) — recherché sur les deux champs plutôt que de forcer
+    l'utilisateur à se souvenir lequel il utilise d'habitude.
+
+    **Pas d'énumération de comptes** : retourne toujours `None` silencieusement
+    si aucun compte actif ne correspond (pas d'`AccountValidationError` sur ce
+    cas précis) — la vue appelante renvoie le même message générique dans les
+    deux cas, seul le fait qu'un email parte réellement varie. Un compte
+    `pending` n'est délibérément pas concerné : il n'a pas encore de mot de
+    passe à réinitialiser, c'est le flux d'invitation (`accept_invitation`)
+    qui s'applique.
+
+    Toute demande de reset encore `pending` pour cet utilisateur est marquée
+    `expired` avant d'en créer une nouvelle (même pattern que
+    `resend_invitation`) — un seul lien valide à la fois, les anciens emails
+    reçus ne fonctionnent plus une fois une nouvelle demande faite."""
+    if not identifier or not identifier.strip():
+        raise AccountValidationError("Identifiant ou email requis.")
+    identifier = identifier.strip()
+
+    user = User.objects.filter(
+        Q(username__iexact=identifier) | Q(email__iexact=identifier), account_status="active"
+    ).first()
+    if user is None:
+        return None
+
+    with transaction.atomic():
+        PasswordResetRequest.objects.filter(user=user, status="pending").update(status="expired")
+        reset = PasswordResetRequest.objects.create(user=user)
+
+    # Mode "lien direct" (phase de test, pas d'ESP branché — voir
+    # `PASSWORD_RESET_DIRECT_LINK` dans les settings) : on n'envoie pas
+    # d'email, la vue renvoie le chemin de réinitialisation et le frontend y
+    # redirige. Le jeton est quand même créé/tourné comme d'habitude.
+    if not getattr(settings, "PASSWORD_RESET_DIRECT_LINK", False):
+        _send_password_reset_email(reset)
+    return reset
+
+
+def confirm_password_reset(*, token, password=None):
+    """Public, même raisonnement que `accept_invitation` (aucune session
+    utilisable à ce stade). Idempotence stricte comme les invitations : une
+    demande déjà `used`/`expired` ne peut pas resservir, et `is_expired`
+    (calculé sur `created_at`, voir models.py) est revérifié ici même si le
+    `status` stocké est encore `pending` — c'est la vérification qui fait foi,
+    pas un balayage périodique qui mettrait `status` à jour tout seul."""
+    try:
+        reset = PasswordResetRequest.objects.select_related("user").get(token=token)
+    except PasswordResetRequest.DoesNotExist:
+        raise AccountValidationError("Lien de réinitialisation introuvable.")
+    if reset.status != "pending":
+        raise AccountValidationError("Ce lien de réinitialisation n'est plus valide.")
+    if reset.is_expired:
+        raise AccountValidationError("Ce lien de réinitialisation a expiré.")
+
+    if not password:
+        raise AccountValidationError("Un mot de passe est requis.")
+    try:
+        validate_password(password, user=reset.user)
+    except DjangoValidationError as exc:
+        raise AccountValidationError(" ".join(exc.messages))
+
+    with transaction.atomic():
+        user = reset.user
+        user.set_password(password)
+        user.save(update_fields=["password"])
+
+        reset.status = "used"
+        reset.used_at = timezone.now()
+        reset.save(update_fields=["status", "used_at"])
+    return reset

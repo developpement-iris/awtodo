@@ -2,8 +2,7 @@ from apps.accounts.models import Team, TeamMembership
 from apps.accounts.services import can_manage_team
 from apps.common.audit import record_changes
 from apps.common.permissions import check_permission
-from apps.projects.models import ProjectMembership
-from apps.projects.services import is_project_manager
+from apps.projects.services import is_project_contributor, is_project_manager
 
 from .models import Incident, IncidentComment
 from .signals import incident_commented, incident_resolved
@@ -31,11 +30,14 @@ def _require_actor(actor):
 
 def _is_member_via_project(user, project):
     """Membre du groupe attribué au projet (collaboratif) ; à défaut de groupe
-    (projet individuel), membre du projet lui-même — même logique d'appartenance
-    que pour les tâches, faute de groupe à vérifier."""
+    (projet individuel), contributeur du projet lui-même. Un membre `lecteur`
+    n'a **pas** accès aux incidents (session du 2026-09-10) — d'où
+    `is_project_contributor`, pas `is_project_member` ; côté projet
+    collaboratif la question ne se pose pas, un lecteur n'est pas dans le
+    groupe."""
     if project.team_id:
         return TeamMembership.objects.filter(team=project.team, user=user, status="active").exists()
-    return ProjectMembership.objects.filter(project=project, user=user).exists()
+    return is_project_contributor(user, project)
 
 
 def _is_member_via_team(user, team):

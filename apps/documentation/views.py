@@ -8,7 +8,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.projects.services import accessible_projects
+from apps.projects.services import contributor_projects
 
 from . import services
 from .models import DocSpace
@@ -36,7 +36,7 @@ class DocSpaceViewSet(viewsets.GenericViewSet):
     serializer_class = DocPageCreateSerializer
 
     def _project(self, request, project_id):
-        return get_object_or_404(accessible_projects(request.user), id=project_id)
+        return get_object_or_404(contributor_projects(request.user), id=project_id)
 
     def handle_exception(self, exc):
         if isinstance(exc, services.DocsPermissionError):

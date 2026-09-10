@@ -196,6 +196,25 @@
   box-shadow: 0 0 0 3px rgba(143, 64, 64, 0.12);
 }
 
+.login-page__forgot {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: -6px 0 var(--space-4);
+  color: var(--login-ink-muted);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  text-align: right;
+  cursor: pointer;
+  transition: color 0.12s ease;
+}
+
+.login-page__forgot:hover {
+  color: var(--login-accent);
+}
+
 .login-page__submit {
   width: 100%;
   padding: var(--space-3);

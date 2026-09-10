@@ -5,8 +5,12 @@ from apps.projects.models import Project, ProjectMembership
 from apps.projects.services import (
     ProjectPermissionError,
     ProjectValidationError,
+    contributor_projects,
     create_project,
+    get_project_permissions,
     get_spec_sections,
+    is_project_contributor,
+    is_project_member,
     update_project_notepad,
     update_spec_section,
 )
@@ -52,6 +56,58 @@ class CreateProjectTests(TestCase):
     def test_unauthenticated_actor_is_rejected(self):
         with self.assertRaises(ProjectPermissionError):
             create_project(actor=None, name="Projet solo", project_type="individuel")
+
+    def test_already_in_production_project_has_no_deadline(self):
+        project = create_project(
+            actor=self.user, name="Outil déjà live", project_type="individuel", already_in_production=True
+        )
+
+        self.assertTrue(project.already_in_production)
+        self.assertIsNone(project.deadline)
+
+    def test_already_in_production_with_deadline_is_rejected(self):
+        with self.assertRaises(ProjectValidationError):
+            create_project(
+                actor=self.user,
+                name="Contradiction",
+                project_type="individuel",
+                already_in_production=True,
+                deadline="2027-01-01",
+            )
+
+
+class ProjectLecteurRoleTests(TestCase):
+    def setUp(self):
+        self.chef = User.objects.create_user(username="chef-lect")
+        self.reader = User.objects.create_user(username="lecteur-1")
+        self.project = Project.objects.create(name="Projet observé", project_type="individuel")
+        ProjectMembership.objects.create(project=self.project, user=self.chef, role="chef_de_projet")
+        ProjectMembership.objects.create(project=self.project, user=self.reader, role="lecteur")
+
+    def test_lecteur_is_member_but_not_contributor(self):
+        self.assertTrue(is_project_member(self.reader, self.project))
+        self.assertFalse(is_project_contributor(self.reader, self.project))
+
+    def test_lecteur_can_read_spec_sections(self):
+        sections = get_spec_sections(actor=self.reader, project=self.project)
+        self.assertEqual(len(sections), 12)
+
+    def test_lecteur_cannot_edit_spec_or_notepad(self):
+        with self.assertRaises(ProjectPermissionError):
+            update_project_notepad(actor=self.reader, project=self.project, notepad_content="Nope")
+        with self.assertRaises(ProjectPermissionError):
+            update_spec_section(actor=self.reader, project=self.project, section_key="contexte", content="Nope")
+
+    def test_lecteur_permissions_flags_are_all_false_except_none(self):
+        perms = get_project_permissions(self.reader, self.project)
+        self.assertFalse(perms["can_contribute"])
+        self.assertFalse(perms["can_edit_spec"])
+        self.assertFalse(perms["can_edit_notepad"])
+        self.assertFalse(perms["can_manage_members"])
+
+    def test_lecteur_project_not_in_contributor_projects(self):
+        self.assertNotIn(self.project, contributor_projects(self.reader))
+        self.assertIn(self.project, contributor_projects(self.chef))
 
 
 class UpdateProjectNotepadTests(TestCase):

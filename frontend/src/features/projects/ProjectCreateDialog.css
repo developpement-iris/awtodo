@@ -52,6 +52,14 @@
   grid-column: 1 / -1;
 }
 
+.project-create-dialog__field--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 13px;
+  color: var(--color-text);
+}
+
 .project-create-dialog__field input,
 .project-create-dialog__field select,
 .project-create-dialog__field textarea {

@@ -7,6 +7,7 @@ import { LoginPage } from "./features/auth/LoginPage";
 import { HomePage } from "./features/home/HomePage";
 import { PublicDocsPage } from "./features/docs/PublicDocsPage";
 import { InvitationAcceptPage } from "./features/invitations/InvitationAcceptPage";
+import { ResetPasswordPage } from "./features/auth/ResetPasswordPage";
 import { ProjectDetailView } from "./features/projects/ProjectDetailView";
 import { ProjectsGrid } from "./features/projects/ProjectsGrid";
 import { GlobalStatsPage } from "./features/stats/GlobalStatsPage";
@@ -25,6 +26,12 @@ import type { Project } from "./types/watodo";
 // un match d'URL au chargement, en dehors de l'état de navigation habituel,
 // plutôt qu'ajouter une dépendance de routing pour une seule page publique.
 const INVITATION_PATH_PATTERN = /^\/invitations\/([^/]+)\/?$/;
+// Réinitialisation de mot de passe — même contournement que l'invitation
+// ci-dessus, même raison (la personne a justement perdu l'accès à son
+// compte, pas de session possible pour l'atteindre via la navigation
+// interne habituelle). Voir docs/organisation-et-comptes.md >
+// "Réinitialisation de mot de passe".
+const RESET_PASSWORD_PATH_PATTERN = /^\/reset-password\/([^/]+)\/?$/;
 // Documentation publique d'un projet — voir CLAUDE.md > Stack technique >
 // Auth : seule exception à « la connexion est la porte d'entrée obligatoire ».
 // Le match est fait AVANT toute garde d'authentification (le lecteur n'a pas
@@ -130,6 +137,11 @@ function App() {
   const invitationToken = window.location.pathname.match(INVITATION_PATH_PATTERN)?.[1];
   if (invitationToken) {
     return <InvitationAcceptPage token={invitationToken} />;
+  }
+
+  const resetPasswordToken = window.location.pathname.match(RESET_PASSWORD_PATH_PATTERN)?.[1];
+  if (resetPasswordToken) {
+    return <ResetPasswordPage token={resetPasswordToken} />;
   }
 
   // Restauration initiale (liste des utilisateurs + reprise d'un token

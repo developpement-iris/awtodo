@@ -25,6 +25,7 @@ export interface ProjectCreateFormValues {
   description: string;
   project_type: Project["project_type"];
   deadline: string;
+  already_in_production: boolean;
   priority: Exclude<Project["priority"], null> | "";
   team: string;
   member_ids: string[];
@@ -51,6 +52,7 @@ export function ProjectCreateDialog({
     description: "",
     project_type: "individuel",
     deadline: "",
+    already_in_production: false,
     priority: "",
     team: "",
     member_ids: [],
@@ -126,7 +128,26 @@ export function ProjectCreateDialog({
 
           <label className="project-create-dialog__field">
             <span>Échéance</span>
-            <DatePickerField value={values.deadline} onChange={(value) => update("deadline", value)} />
+            <DatePickerField
+              value={values.already_in_production ? "" : values.deadline}
+              onChange={(value) => update("deadline", value)}
+              disabled={values.already_in_production}
+            />
+          </label>
+
+          <label className="project-create-dialog__field project-create-dialog__field--full project-create-dialog__field--inline">
+            <Checkbox
+              checked={values.already_in_production}
+              onCheckedChange={(checked) =>
+                setValues((current) => ({
+                  ...current,
+                  already_in_production: checked,
+                  deadline: checked ? "" : current.deadline,
+                }))
+              }
+              aria-label="Déjà en production"
+            />
+            <span>Déjà en production (pas de date d'échéance)</span>
           </label>
 
           {needsTeam && (

@@ -292,7 +292,11 @@ export function KanbanBoard({ project, versionId }: KanbanBoardProps) {
                   onReject={setRejectingTask}
                   onRename={handleRename}
                   pendingTaskId={pendingTaskId}
-                  onCreate={status === "en_attente_validation" ? () => setCreatingTask(true) : undefined}
+                  onCreate={
+                    status === "en_attente_validation" && project.permissions.can_contribute
+                      ? () => setCreatingTask(true)
+                      : undefined
+                  }
                   dropDisabled={activeDragTask !== null && !isDropAllowed(activeDragTask, status)}
                 />
               ))}

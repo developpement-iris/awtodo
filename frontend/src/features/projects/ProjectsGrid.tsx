@@ -27,7 +27,11 @@ function buildCreatePayload(values: ProjectCreateFormValues): ProjectCreatePaylo
     project_type: values.project_type,
   };
   if (values.description.trim()) payload.description = values.description.trim();
-  if (values.deadline) payload.deadline = values.deadline;
+  if (values.already_in_production) {
+    payload.already_in_production = true;
+  } else if (values.deadline) {
+    payload.deadline = values.deadline;
+  }
   if (values.priority) payload.priority = values.priority;
   if (values.team) payload.team = values.team;
   if (values.member_ids.length > 0) payload.member_ids = values.member_ids;

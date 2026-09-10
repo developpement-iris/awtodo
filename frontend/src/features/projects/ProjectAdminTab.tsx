@@ -6,10 +6,15 @@ import {
   inviteProjectExternalMember,
   removeProjectMember,
 } from "../../api/client";
-import { StatusBadge } from "../../components/StatusBadge";
 import { useToast } from "../../context/ToastContext";
-import type { Project, ProjectMembership, Team } from "../../types/watodo";
+import type { Project, ProjectMembership, ProjectRole, Team } from "../../types/watodo";
 import "./ProjectAdminTab.css";
+
+const ROLE_OPTIONS: { value: ProjectRole; label: string }[] = [
+  { value: "chef_de_projet", label: "Chef de projet" },
+  { value: "membre", label: "Membre" },
+  { value: "lecteur", label: "Lecteur (lecture seule)" },
+];
 
 // Même logique que UserMenu.tsx (initiales) — duplication volontaire d'un
 // petit bloc plutôt qu'une abstraction partagée pour deux usages, cohérent
@@ -34,6 +39,7 @@ export function ProjectAdminTab({ project, onUpdated }: ProjectAdminTabProps) {
   const [groupSelection, setGroupSelection] = useState("");
   const [groupSubmitting, setGroupSubmitting] = useState(false);
   const [email, setEmail] = useState("");
+  const [emailRole, setEmailRole] = useState<ProjectRole>("membre");
   const [emailSubmitting, setEmailSubmitting] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteFirstName, setInviteFirstName] = useState("");
@@ -71,9 +77,10 @@ export function ProjectAdminTab({ project, onUpdated }: ProjectAdminTabProps) {
     setEmailSubmitting(true);
     setError(null);
     try {
-      onUpdated(await addProjectMember(project.id, { email: email.trim() }));
+      onUpdated(await addProjectMember(project.id, { email: email.trim(), role: emailRole }));
       setEmail("");
-      showToast("Membre ajouté.");
+      setEmailRole("membre");
+      showToast(emailRole === "lecteur" ? "Accès en lecture accordé." : "Membre ajouté.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "L'ajout a échoué.");
     } finally {
@@ -104,8 +111,8 @@ export function ProjectAdminTab({ project, onUpdated }: ProjectAdminTabProps) {
     }
   }
 
-  async function handleRoleToggle(membership: ProjectMembership) {
-    const nextRole = membership.role === "chef_de_projet" ? "membre" : "chef_de_projet";
+  async function handleRoleChange(membership: ProjectMembership, nextRole: ProjectRole) {
+    if (nextRole === membership.role) return;
     setPendingMembershipId(membership.id);
     setError(null);
     try {
@@ -168,19 +175,27 @@ export function ProjectAdminTab({ project, onUpdated }: ProjectAdminTabProps) {
                 </div>
               </td>
               <td>
-                <StatusBadge label={membership.role_display} tone="neutral" />
+                {isManager ? (
+                  <select
+                    className="project-admin-tab__role-select"
+                    value={membership.role}
+                    onChange={(event) => handleRoleChange(membership, event.target.value as ProjectRole)}
+                    disabled={pendingMembershipId === membership.id}
+                    aria-label={`Rôle de ${name}`}
+                  >
+                    {ROLE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  membership.role_display
+                )}
               </td>
               {isManager && (
                 <td className="project-admin-tab__actions">
                   <div className="project-admin-tab__actions-inner">
-                    <button
-                      type="button"
-                      className="project-admin-tab__action"
-                      onClick={() => handleRoleToggle(membership)}
-                      disabled={pendingMembershipId === membership.id}
-                    >
-                      {membership.role === "chef_de_projet" ? "Rétrograder" : "Promouvoir"}
-                    </button>
                     <button
                       type="button"
                       className="project-admin-tab__action project-admin-tab__action--danger"
@@ -221,14 +236,25 @@ export function ProjectAdminTab({ project, onUpdated }: ProjectAdminTabProps) {
 
           <div className="project-admin-tab__form">
             <h3>Ajouter un membre existant de l'organisation</h3>
-            <p className="project-admin-tab__hint">Recherche par email, même hors du groupe rattaché au projet.</p>
-            <div className="project-admin-tab__form-row">
+            <p className="project-admin-tab__hint">
+              Recherche par email, même hors du groupe rattaché au projet. Le rôle <strong>Lecteur</strong> donne un
+              accès en lecture seule (tâches, cahier des charges, bloc-notes) — pas d'accès au budget, aux incidents,
+              au planning ni aux statistiques.
+            </p>
+            <div className="project-admin-tab__form-row project-admin-tab__form-row--stacked">
               <input
                 type="email"
                 placeholder="email@organisation.com"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
               />
+              <select value={emailRole} onChange={(event) => setEmailRole(event.target.value as ProjectRole)}>
+                {ROLE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
               <button type="button" onClick={handleAddByEmail} disabled={emailSubmitting || !email.trim()}>
                 Ajouter
               </button>
