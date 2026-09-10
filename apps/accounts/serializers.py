@@ -43,8 +43,12 @@ class UserSerializer(serializers.ModelSerializer):
 
     def get_teams(self, obj):
         # `team_memberships` (reverse FK) n'est pas filtré par statut par
-        # défaut — filtrage explicite ici, seules les TeamMembership actives
-        # comptent comme appartenance réelle au groupe.
+        # défaut — seules les TeamMembership actives comptent. `_active_memberships`
+        # (préchargé par les viewsets qui sérialisent `UserSerializer` en
+        # masse — voir `Prefetch(... "_active_memberships")`) évite un
+        # `SELECT` par utilisateur dans les listes ; requête ponctuelle sinon.
+        if hasattr(obj, "_active_memberships"):
+            return [m.team_id for m in obj._active_memberships]
         return list(obj.team_memberships.filter(status="active").values_list("team_id", flat=True))
 
 

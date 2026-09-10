@@ -1,4 +1,6 @@
+import contextvars
 import re
+from contextlib import contextmanager
 
 from django.conf import settings
 from django.contrib.auth import authenticate
@@ -24,6 +26,46 @@ class AccountValidationError(Exception):
 def _require_actor(actor):
     if actor is None or not getattr(actor, "is_authenticated", False):
         raise AccountPermissionError("Utilisateur non identifié.")
+
+
+# --- Cache d'appartenances aux groupes (pendant la sérialisation d'une
+# liste) — pendant `apps.projects.services.prefetched_project_roles`, voir sa
+# docstring pour le raisonnement. Ici : les incidents d'un projet
+# *collaboratif* voient leur autorisation passer par le groupe du projet
+# (`TeamMembership`), pas par la `ProjectMembership` — d'où ce cache parallèle.
+_TEAM_CACHE: contextvars.ContextVar = contextvars.ContextVar("team_memberships_cache", default=None)
+
+
+def active_team_ids_for(user, team_ids):
+    """`set(team_id)` où `user` est membre actif, en une requête."""
+    if user is None or not getattr(user, "is_authenticated", False):
+        return set()
+    return set(
+        TeamMembership.objects.filter(
+            user=user, team_id__in=list(team_ids), status="active"
+        ).values_list("team_id", flat=True)
+    )
+
+
+@contextmanager
+def prefetched_team_memberships(user, team_ids):
+    token = _TEAM_CACHE.set((getattr(user, "id", None), active_team_ids_for(user, team_ids)))
+    try:
+        yield
+    finally:
+        _TEAM_CACHE.reset(token)
+
+
+def is_active_team_member(user, team):
+    """Membre actif de `team`. Consulte `_TEAM_CACHE` si un bloc
+    `prefetched_team_memberships` est actif pour le bon utilisateur, sinon
+    requête `.exists()` comme avant."""
+    if user is None or not getattr(user, "is_authenticated", False):
+        return False
+    cached = _TEAM_CACHE.get()
+    if cached is not None and cached[0] == getattr(user, "id", None):
+        return team.id in cached[1]
+    return TeamMembership.objects.filter(team=team, user=user, status="active").exists()
 
 
 def authenticate_user(*, username, password):

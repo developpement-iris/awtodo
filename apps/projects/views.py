@@ -1,13 +1,14 @@
-from django.db.models import Count, Q
+from django.db.models import Count, Prefetch, Q
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.accounts.models import TeamMembership
 from apps.accounts.services import AccountPermissionError, AccountValidationError, create_invitation
 from apps.common.views import ListOnlyFilterMixin
 
 from .filters import ProjectFilterSet
-from .models import Project, ProjectVersion
+from .models import Project, ProjectMembership, ProjectVersion
 from .serializers import (
     NON_REJECTED_TASK_STATUSES,
     ProjectCreateSerializer,
@@ -32,6 +33,7 @@ from .services import (
     create_project,
     create_project_version,
     get_spec_sections,
+    prefetched_project_roles,
     remove_project_member,
     reopen_project,
     update_project_notepad,
@@ -54,10 +56,51 @@ class ProjectViewSet(
     filterset_class = ProjectFilterSet
 
     def get_queryset(self):
-        return accessible_projects(self.request.user).annotate(
-            tasks_total=Count("tasks", filter=Q(tasks__status__in=NON_REJECTED_TASK_STATUSES), distinct=True),
-            tasks_done=Count("tasks", filter=Q(tasks__status="archivee"), distinct=True),
+        base = accessible_projects(self.request.user)
+        if self.action != "list":
+            # Détail / actions : le serializer a des chemins de repli (voir
+            # `hasattr` dans ProjectSerializer). Surtout, les `@action` qui
+            # modifient un membre/une version puis re-sérialisent le même
+            # objet ne doivent pas voir un `prefetch_related(to_attr=...)`
+            # figé d'avant la modification.
+            return base
+        return (
+            base.select_related("team")
+            .prefetch_related(
+                # `get_members` / `get_current_version_id` du serializer lisent
+                # ces attributs préchargés au lieu de requêter par projet.
+                Prefetch(
+                    "memberships",
+                    queryset=ProjectMembership.objects.select_related("user").prefetch_related(
+                        # `UserSerializer.get_teams` de chaque membre — sinon
+                        # un SELECT par membre par projet.
+                        Prefetch(
+                            "user__team_memberships",
+                            queryset=TeamMembership.objects.filter(status="active"),
+                            to_attr="_active_memberships",
+                        )
+                    ),
+                    to_attr="_prefetched_members",
+                ),
+                Prefetch(
+                    "versions",
+                    queryset=ProjectVersion.objects.filter(is_current=True),
+                    to_attr="_current_versions",
+                ),
+            )
+            .annotate(
+                tasks_total=Count("tasks", filter=Q(tasks__status__in=NON_REJECTED_TASK_STATUSES), distinct=True),
+                tasks_done=Count("tasks", filter=Q(tasks__status="archivee"), distinct=True),
+            )
         )
+
+    def list(self, request, *args, **kwargs):
+        # Sérialisation de la liste enroulée dans le cache d'appartenances
+        # (voir apps/projects/services.py) : le bloc `permissions` de chaque
+        # projet se calcule alors sans requête par ligne.
+        objects = list(self.filter_queryset(self.get_queryset()))
+        with prefetched_project_roles(request.user, [p.id for p in objects]):
+            return Response(self.get_serializer(objects, many=True).data)
 
     def create(self, request, *args, **kwargs):
         serializer = ProjectCreateSerializer(data=request.data)

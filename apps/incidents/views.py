@@ -3,8 +3,9 @@ from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.accounts.services import prefetched_team_memberships
 from apps.common.views import ListOnlyFilterMixin
-from apps.projects.services import contributor_projects
+from apps.projects.services import contributor_projects, prefetched_project_roles
 
 from .filters import IncidentFilterSet
 from .models import Incident
@@ -43,7 +44,9 @@ class IncidentViewSet(ListOnlyFilterMixin, mixins.ListModelMixin, mixins.Retriev
     def get_queryset(self):
         # `all_objects`, pas `.active()` — voir TaskViewSet.get_queryset()
         # pour la même raison (le filtre par défaut vit dans le FilterSet).
-        base = Incident.all_objects.select_related("project", "team")
+        # `project__team` + `assigned_to` : le serializer et `_is_incident_admin`
+        # les lisent sans requête supplémentaire.
+        base = Incident.all_objects.select_related("project", "project__team", "team", "assigned_to")
         if self.action == "list":
             # Liste "par projet" par défaut : les incidents non-affectés
             # (team-only) ne s'y mélangent jamais — ils ne sont listés que via
@@ -68,6 +71,27 @@ class IncidentViewSet(ListOnlyFilterMixin, mixins.ListModelMixin, mixins.Retriev
             return IncidentDetailSerializer
         return super().get_serializer_class()
 
+    def list(self, request, *args, **kwargs):
+        # Caches d'appartenances autour de la sérialisation (voir
+        # apps/projects/services.py et apps/accounts/services.py) : le bloc
+        # `permissions` d'un incident dépend soit du rôle sur `incident.project`
+        # (projet individuel), soit de l'appartenance au groupe du projet
+        # (projet collaboratif) — les deux résolus une seule fois pour la page.
+        objects = list(self.filter_queryset(self.get_queryset()))
+        project_ids = {i.project_id for i in objects if i.project_id}
+        team_ids = {i.project.team_id for i in objects if i.project_id and i.project.team_id}
+        with prefetched_project_roles(request.user, project_ids), prefetched_team_memberships(request.user, team_ids):
+            return Response(self.get_serializer(objects, many=True).data)
+
+    @action(detail=False, methods=["get"])
+    def inbox(self, request):
+        queryset = Incident.all_objects.filter(
+            project__isnull=True, team__in=accessible_inbox_teams(request.user)
+        ).select_related("team")
+        objects = list(self.filter_queryset(queryset))
+        with prefetched_team_memberships(request.user, {i.team_id for i in objects}):
+            return Response(self.get_serializer(objects, many=True).data)
+
     def create(self, request, *args, **kwargs):
         serializer = IncidentCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -86,14 +110,6 @@ class IncidentViewSet(ListOnlyFilterMixin, mixins.ListModelMixin, mixins.Retriev
             return Response({"detail": str(exc)}, status=400)
 
         return Response(self.get_serializer(incident).data, status=201)
-
-    @action(detail=False, methods=["get"])
-    def inbox(self, request):
-        queryset = Incident.all_objects.filter(
-            project__isnull=True, team__in=accessible_inbox_teams(request.user)
-        ).select_related("team")
-        queryset = self.filter_queryset(queryset)
-        return Response(self.get_serializer(queryset, many=True).data)
 
     @action(detail=True, methods=["post"], url_path="assign-project")
     def assign_project(self, request, pk=None):

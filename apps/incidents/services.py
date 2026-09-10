@@ -1,5 +1,5 @@
-from apps.accounts.models import Team, TeamMembership
-from apps.accounts.services import can_manage_team
+from apps.accounts.models import Team
+from apps.accounts.services import can_manage_team, is_active_team_member
 from apps.common.audit import record_changes
 from apps.common.permissions import check_permission
 from apps.projects.services import is_project_contributor, is_project_manager
@@ -36,12 +36,12 @@ def _is_member_via_project(user, project):
     collaboratif la question ne se pose pas, un lecteur n'est pas dans le
     groupe."""
     if project.team_id:
-        return TeamMembership.objects.filter(team=project.team, user=user, status="active").exists()
+        return is_active_team_member(user, project.team)
     return is_project_contributor(user, project)
 
 
 def _is_member_via_team(user, team):
-    return TeamMembership.objects.filter(team=team, user=user, status="active").exists()
+    return is_active_team_member(user, team)
 
 
 def _is_authorized_member(user, incident):

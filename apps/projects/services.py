@@ -1,9 +1,64 @@
+import contextvars
+from contextlib import contextmanager
+
 from django.utils import timezone
 
 from apps.accounts.models import TeamMembership, User
 from apps.common.permissions import check_permission
 
 from .models import Project, ProjectMembership, ProjectVersion, SpecSection
+
+
+# --- Cache d'appartenances pour la sérialisation d'une liste --------------
+# Le bloc `permissions` renvoyé sur chaque ligne d'une liste (projets, tâches,
+# incidents) est calculé par ~10 fonctions de garde qui appellent toutes
+# `is_project_member/contributor/manager` — soit ~10 `SELECT EXISTS` par ligne
+# si on n'y prend pas garde (mesuré : ~1000 requêtes pour 100 tâches).
+#
+# `prefetched_project_roles(user, project_ids)` résout en UNE requête les
+# rôles de `user` sur tous les projets d'une page, et les trois helpers
+# ci-dessous consultent ce cache pendant le bloc. **En dehors de ce bloc,
+# comportement strictement inchangé** : le chemin "un seul objet" (détail,
+# ré-sérialisation après mutation, fonctions de garde des actions) requête
+# comme avant, aucune signature ne change.
+_ROLES_CACHE: contextvars.ContextVar = contextvars.ContextVar("project_roles_cache", default=None)
+
+
+def project_roles_for(user, project_ids):
+    """`{project_id: frozenset(rôles actifs de `user`)}` en une seule requête.
+    Un projet absent du dict = aucune appartenance active."""
+    if user is None or not getattr(user, "is_authenticated", False):
+        return {}
+    acc: dict = {}
+    for pid, role in ProjectMembership.objects.filter(
+        user=user, project_id__in=list(project_ids), status="active"
+    ).values_list("project_id", "role"):
+        acc.setdefault(pid, set()).add(role)
+    return {pid: frozenset(roles) for pid, roles in acc.items()}
+
+
+@contextmanager
+def prefetched_project_roles(user, project_ids):
+    """À enrouler autour de la sérialisation d'une liste (voir les `list()`
+    des viewsets). Hors de ce bloc, `_cached_roles` renvoie `None` et les
+    helpers requêtent normalement."""
+    token = _ROLES_CACHE.set((getattr(user, "id", None), project_roles_for(user, project_ids)))
+    try:
+        yield
+    finally:
+        _ROLES_CACHE.reset(token)
+
+
+def _cached_roles(user, project):
+    """Rôles de `user` sur `project` si un cache est actif ET concerne le bon
+    utilisateur, sinon `None` (→ requête)."""
+    cached = _ROLES_CACHE.get()
+    if cached is None:
+        return None
+    cached_user_id, roles_map = cached
+    if cached_user_id != getattr(user, "id", None):
+        return None
+    return roles_map.get(project.id, frozenset())
 
 
 class ProjectPermissionError(Exception):
@@ -72,6 +127,9 @@ def is_project_member(user, project):
     `is_project_contributor`."""
     if user is None or not getattr(user, "is_authenticated", False):
         return False
+    roles = _cached_roles(user, project)
+    if roles is not None:
+        return len(roles) > 0
     return ProjectMembership.objects.filter(project=project, user=user, status="active").exists()
 
 
@@ -82,6 +140,9 @@ def is_project_contributor(user, project):
     (autorisées à dépendre de `apps.projects`)."""
     if user is None or not getattr(user, "is_authenticated", False):
         return False
+    roles = _cached_roles(user, project)
+    if roles is not None:
+        return bool(roles & ProjectMembership.CONTRIBUTOR_ROLES)
     return ProjectMembership.objects.filter(
         project=project, user=user, status="active", role__in=ProjectMembership.CONTRIBUTOR_ROLES
     ).exists()
@@ -94,6 +155,9 @@ def is_project_manager(user, project):
     besoin de la même règle sans dupliquer la requête `ProjectMembership`."""
     if user is None or not getattr(user, "is_authenticated", False):
         return False
+    roles = _cached_roles(user, project)
+    if roles is not None:
+        return "chef_de_projet" in roles
     return ProjectMembership.objects.filter(
         project=project, user=user, status="active", role="chef_de_projet"
     ).exists()

@@ -74,7 +74,12 @@ class ProjectSerializer(serializers.ModelSerializer):
     def get_current_version_id(self, obj):
         # Évite un aller-retour séparé pour connaître la version par défaut à
         # afficher (sélecteur de version, voir docs/modeles-et-api.md).
-        current = obj.versions.filter(is_current=True).first()
+        # `_current_versions` préchargé par `ProjectViewSet.get_queryset()`
+        # dans la liste ; requête ponctuelle sinon (détail, après création).
+        if hasattr(obj, "_current_versions"):
+            current = obj._current_versions[0] if obj._current_versions else None
+        else:
+            current = obj.versions.filter(is_current=True).first()
         return str(current.id) if current else None
 
     def get_team_name(self, obj):
@@ -94,7 +99,13 @@ class ProjectSerializer(serializers.ModelSerializer):
         return obj.tasks.filter(status="archivee").count()
 
     def get_members(self, obj):
-        memberships = ProjectMembership.objects.filter(project=obj).select_related("user")
+        # `_prefetched_members` posé par `ProjectViewSet.get_queryset()` dans
+        # la liste ; requête ponctuelle sinon. Même portée qu'avant (manager
+        # `all_objects` — inchangé, y compris les adhésions `removed`).
+        if hasattr(obj, "_prefetched_members"):
+            memberships = obj._prefetched_members
+        else:
+            memberships = ProjectMembership.objects.filter(project=obj).select_related("user")
         return ProjectMembershipSerializer(memberships, many=True).data
 
 

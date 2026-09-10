@@ -1,11 +1,12 @@
+from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from apps.accounts.models import User
+from apps.accounts.models import TeamMembership, User
 from apps.common.views import ListOnlyFilterMixin
-from apps.projects.services import accessible_projects
+from apps.projects.services import accessible_projects, prefetched_project_roles
 
 from .filters import TaskFilterSet
 from .models import Task
@@ -67,10 +68,30 @@ class TaskViewSet(ListOnlyFilterMixin, mixins.ListModelMixin, mixins.RetrieveMod
         # ressort de `TaskFilterSet.filter_status`, pas du queryset de base —
         # sinon une tâche archivée/rejetée resterait invisible même en la
         # demandant explicitement via `?status=archivee`.
-        return (
-            Task.all_objects.filter(project__in=accessible_projects(self.request.user))
-            .select_related("project", "assignee")
+        qs = Task.all_objects.filter(project__in=accessible_projects(self.request.user)).select_related(
+            "project", "assignee", "version"
         )
+        if self.action == "list":
+            # `UserSerializer.get_teams` (assigné) ferait sinon un SELECT par
+            # tâche — préchargé une fois ici.
+            qs = qs.prefetch_related(
+                Prefetch(
+                    "assignee__team_memberships",
+                    queryset=TeamMembership.objects.filter(status="active"),
+                    to_attr="_active_memberships",
+                )
+            )
+        return qs
+
+    def list(self, request, *args, **kwargs):
+        # Cache d'appartenances autour de la sérialisation (voir
+        # apps/projects/services.py) — le bloc `permissions` de chaque tâche
+        # dépend du rôle de l'acteur sur `task.project`, résolu une seule fois
+        # pour tous les projets de la page.
+        objects = list(self.filter_queryset(self.get_queryset()))
+        project_ids = {t.project_id for t in objects}
+        with prefetched_project_roles(request.user, project_ids):
+            return Response(self.get_serializer(objects, many=True).data)
 
     def create(self, request, *args, **kwargs):
         serializer = TaskCreateSerializer(data=request.data)
