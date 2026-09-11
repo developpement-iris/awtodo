@@ -6,6 +6,7 @@ import { SectionSidebar } from "../../components/SectionSidebar";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useToast } from "../../context/ToastContext";
 import { projectStatusIcon, projectStatusTone } from "../../lib/badges";
+import { CommunicationTab } from "../communication/CommunicationTab";
 import { IncidentsPage } from "../incidents/IncidentsPage";
 import { TasksTab } from "../tasks/TasksTab";
 import type { Project } from "../../types/watodo";
@@ -25,6 +26,7 @@ type Tab =
   | "maintenance"
   | "planning"
   | "documentation"
+  | "communication"
   | "stats"
   | "budgeting"
   | "administration";
@@ -36,6 +38,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "maintenance", label: "Incidents" },
   { id: "planning", label: "Planning" },
   { id: "documentation", label: "Documentation" },
+  { id: "communication", label: "Communication" },
   { id: "stats", label: "Statistiques" },
   { id: "budgeting", label: "Budgétisation" },
   { id: "administration", label: "Administration" },
@@ -57,6 +60,7 @@ export function ProjectDetailView({ project: initialProject, onBack }: ProjectDe
     "maintenance",
     "planning",
     "documentation",
+    "communication",
     "stats",
     "budgeting",
     "administration",
@@ -179,6 +183,7 @@ export function ProjectDetailView({ project: initialProject, onBack }: ProjectDe
           {tab === "maintenance" && <IncidentsPage scopedProject={project} />}
           {tab === "planning" && <ProjectPlanningTab project={project} />}
           {tab === "documentation" && <DocumentationTab project={project} />}
+          {tab === "communication" && <CommunicationTab project={project} />}
           {tab === "stats" && <StatsTab project={project} />}
           {tab === "budgeting" && <BudgetingTab project={project} />}
           {tab === "administration" && <ProjectAdminTab project={project} onUpdated={setProject} />}

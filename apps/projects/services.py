@@ -226,6 +226,18 @@ def _ensure_can_manage_project_planning(actor, project):
     _require_manager(actor, project)
 
 
+def _ensure_can_manage_project_communication(actor, project):
+    # Configuration des canaux de communication (adresses mail, canaux Teams,
+    # connexion Office 365) — réservée au chef de projet. Voir apps.communication.
+    _require_manager(actor, project)
+
+
+def _ensure_can_send_project_communication(actor, project):
+    # Rédiger et envoyer une communication — ouvert à tout contributeur
+    # (chef de projet ou membre), pas aux lecteurs.
+    _require_contributor(actor, project)
+
+
 def can_edit_spec(user, project):
     return _check(_ensure_can_edit_notes, user, project)
 
@@ -262,6 +274,14 @@ def can_manage_project_planning(user, project):
     return _check(_ensure_can_manage_project_planning, user, project)
 
 
+def can_manage_project_communication(user, project):
+    return _check(_ensure_can_manage_project_communication, user, project)
+
+
+def can_send_project_communication(user, project):
+    return _check(_ensure_can_send_project_communication, user, project)
+
+
 def get_project_permissions(user, project):
     return {
         # `false` pour un membre `lecteur` : le frontend s'en sert pour masquer
@@ -278,6 +298,8 @@ def get_project_permissions(user, project):
         "can_manage_budget": can_manage_budget(user, project),
         "can_edit_documentation": can_edit_documentation(user, project),
         "can_manage_project_planning": can_manage_project_planning(user, project),
+        "can_manage_project_communication": can_manage_project_communication(user, project),
+        "can_send_project_communication": can_send_project_communication(user, project),
     }
 
 

@@ -37,6 +37,13 @@ class Incident(UUIDModel, TimeStampedModel, StatusLifecycleModel):
     priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default="moyenne")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="signale")
     external_reference_id = models.CharField(max_length=100, null=True, blank=True, db_index=True)
+    # Personne à l'origine du signalement, transmise par l'outil de ticketing
+    # externe (l'intégration n'est pas encore branchée — champs prévus pour
+    # elle). Sert à tenir cette personne informée par mail via le module
+    # `apps.communication` (câblage reporté au déploiement AWS). Texte libre :
+    # l'auteur n'est pas forcément un compte Awtodo.
+    author_name = models.CharField(max_length=200, blank=True, default="")
+    author_email = models.EmailField(blank=True, default="")
 
     class Meta:
         default_manager_name = "all_objects"

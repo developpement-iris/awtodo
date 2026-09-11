@@ -34,6 +34,8 @@ class IncidentSerializer(serializers.ModelSerializer):
             "external_reference_id",
             "assigned_to",
             "assigned_to_name",
+            "author_name",
+            "author_email",
             "created_at",
             "permissions",
         ]
@@ -77,6 +79,10 @@ class IncidentCreateSerializer(serializers.Serializer):
     external_reference_id = serializers.CharField(
         required=False, allow_null=True, allow_blank=True, max_length=100
     )
+    # Renseignés par l'intégration ticketing (auteur du signalement côté outil
+    # externe) — jamais par le formulaire manuel "Signaler un incident".
+    author_name = serializers.CharField(required=False, allow_blank=True, default="", max_length=200)
+    author_email = serializers.EmailField(required=False, allow_blank=True, default="")
 
 
 class IncidentAssignProjectSerializer(serializers.Serializer):

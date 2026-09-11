@@ -97,6 +97,13 @@ export function IncidentAccordion({
           </p>
         )}
 
+        {incident.author_name && (
+          <p className="incident-accordion__ref">
+            Signalé par : <span>{incident.author_name}</span>
+            {incident.author_email && ` (${incident.author_email})`}
+          </p>
+        )}
+
         <div className="incident-accordion__actions">
           {incident.permissions.can_start && (
             <motion.button

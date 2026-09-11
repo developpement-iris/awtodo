@@ -6,6 +6,10 @@ import type {
   CalendarEventDetail,
   CalendarShare,
   CalendarShareList,
+  CommunicationChannel,
+  CommunicationChannelType,
+  CommunicationMessage,
+  O365Connection,
   ProjectPlanningBundle,
   ProjectPlanningOccurrence,
   ScheduledBlock,
@@ -103,6 +107,19 @@ async function postJson<T>(path: string, body: Record<string, unknown> = {}): Pr
 async function patchJson<T>(path: string, body: Record<string, unknown> = {}): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(errorMessage(payload, path, response.status));
+  }
+  return response.json() as Promise<T>;
+}
+
+async function putJson<T>(path: string, body: Record<string, unknown> = {}): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "PUT",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(body),
   });
@@ -785,4 +802,74 @@ export function createCalendarShare(granteeId: string): Promise<CalendarShare> {
 
 export function revokeCalendarShare(shareId: string): Promise<void> {
   return postJson<void>(`/planning/shares/${shareId}/revoke/`, {});
+}
+
+// --- Communication de projet ---------------------------------------------
+// Voir docs/modeles-et-api.md > "Module Communication".
+
+export function getO365Connection(): Promise<O365Connection> {
+  return getJson<O365Connection>("/communication/o365/");
+}
+
+export function updateO365Connection(
+  payload: Partial<{
+    tenant_id: string;
+    client_id: string;
+    client_secret: string;
+    sender_mailbox: string;
+    is_enabled: boolean;
+  }>,
+): Promise<O365Connection> {
+  return putJson<O365Connection>("/communication/o365/", payload);
+}
+
+export function getProjectCommunicationChannels(projectId: string): Promise<CommunicationChannel[]> {
+  return getJson<CommunicationChannel[]>(`/communication/projects/${projectId}/channels/`);
+}
+
+export function createProjectCommunicationChannel(
+  projectId: string,
+  payload: {
+    channel_type: CommunicationChannelType;
+    label: string;
+    email?: string;
+    teams_webhook_url?: string;
+    notify_incident_created?: boolean;
+  },
+): Promise<CommunicationChannel> {
+  return postJson<CommunicationChannel>(`/communication/projects/${projectId}/channels/`, payload);
+}
+
+export function updateProjectCommunicationChannel(
+  projectId: string,
+  channelId: string,
+  payload: Partial<{
+    label: string;
+    email: string;
+    teams_webhook_url: string;
+    notify_incident_created: boolean;
+  }>,
+): Promise<CommunicationChannel> {
+  return patchJson<CommunicationChannel>(
+    `/communication/projects/${projectId}/channels/${channelId}/`,
+    payload,
+  );
+}
+
+export function archiveProjectCommunicationChannel(
+  projectId: string,
+  channelId: string,
+): Promise<void> {
+  return deleteJson<void>(`/communication/projects/${projectId}/channels/${channelId}/`);
+}
+
+export function getProjectCommunicationMessages(projectId: string): Promise<CommunicationMessage[]> {
+  return getJson<CommunicationMessage[]>(`/communication/projects/${projectId}/messages/`);
+}
+
+export function composeProjectCommunicationMessage(
+  projectId: string,
+  payload: { subject: string; body: string; channel_ids: string[] },
+): Promise<CommunicationMessage> {
+  return postJson<CommunicationMessage>(`/communication/projects/${projectId}/messages/`, payload);
 }

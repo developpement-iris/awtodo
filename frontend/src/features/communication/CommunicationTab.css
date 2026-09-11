@@ -1,0 +1,299 @@
+.communication-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  max-width: 720px;
+}
+
+.communication-tab__intro {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--color-text-muted);
+}
+
+.communication-tab__error {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--tone-error-text) 12%, transparent);
+  color: var(--tone-error-text);
+  font-size: 0.85rem;
+}
+
+.communication-tab__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.communication-tab__section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.communication-tab__section-header h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  color: var(--color-text);
+}
+
+.communication-tab__section-header h3 svg {
+  color: var(--color-text-muted);
+}
+
+.communication-tab__hint {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+.communication-tab__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* --- Connexion O365 -------------------------------------------------- */
+
+.communication-tab__o365-summary dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.communication-tab__o365-summary dt {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.communication-tab__o365-summary dd {
+  margin: 2px 0 0;
+  font-size: 0.86rem;
+  color: var(--color-text);
+  font-family: var(--font-mono);
+}
+
+.communication-tab__o365-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--space-3);
+}
+
+/* --- Canaux ------------------------------------------------------------ */
+
+.communication-tab__channel-list,
+.communication-tab__recipient-list,
+.communication-tab__message-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.communication-tab__channel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.communication-tab__channel svg {
+  flex: none;
+  color: var(--color-text-muted);
+}
+
+.communication-tab__channel-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.communication-tab__channel-label {
+  font-size: 0.86rem;
+  color: var(--color-text);
+}
+
+.communication-tab__channel-target {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.communication-tab__icon-btn {
+  flex: none;
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+}
+
+.communication-tab__icon-btn:hover {
+  color: var(--tone-error-text);
+  background: color-mix(in srgb, var(--tone-error-text) 12%, transparent);
+}
+
+.communication-tab__empty {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+/* --- Formulaires --------------------------------------------------- */
+
+.communication-tab__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px dashed var(--color-border);
+}
+
+.communication-tab__form-row {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.communication-tab__form-row > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.communication-tab__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+.communication-tab__field input,
+.communication-tab__field textarea {
+  font: inherit;
+  font-size: 0.88rem;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+}
+
+.communication-tab__switch-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.85rem;
+  color: var(--color-text);
+}
+
+.communication-tab__form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.communication-tab__btn {
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.communication-tab__btn:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+.communication-tab__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.communication-tab__btn--primary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
+
+/* --- Historique des messages ----------------------------------------- */
+
+.communication-tab__history-title {
+  margin: var(--space-2) 0 0;
+  font-family: var(--font-display);
+  font-size: 0.88rem;
+  color: var(--color-text);
+}
+
+.communication-tab__message {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.communication-tab__message-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.communication-tab__message-subject {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.communication-tab__message-body {
+  margin: 0;
+  font-size: 0.84rem;
+  color: var(--color-text-muted);
+  white-space: pre-wrap;
+}
+
+.communication-tab__message-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: 0.76rem;
+  color: var(--color-text-faint);
+}
+
+@media (max-width: 720px) {
+  .communication-tab__form-row {
+    flex-direction: column;
+  }
+
+  .communication-tab__o365-summary dl {
+    grid-template-columns: 1fr;
+  }
+}

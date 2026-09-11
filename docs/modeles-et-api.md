@@ -240,6 +240,8 @@ Le SSO/gestion de comptes est volontairement mis en dernier dans la roadmap — 
 
 **Conséquence sur l'intégration ticketing :** le endpoint/webhook d'entrée ticketing (voir section "API / Intégration ticketing") doit pouvoir créer soit une `Task`, soit un `Incident`, selon le type du ticket d'origine — pas seulement des tâches comme décrit initialement. À préciser plus finement quand ce chantier sera lancé.
 
+**Auteur du signalement (session du 2026-09-10, scaffolding communication) :** `Incident.author_name` / `Incident.author_email` (texte libre, vides par défaut) — destinés à être renseignés par l'intégration ticketing à la création (`POST /api/v1/incidents/` accepte les deux champs, `create_incident` les accepte et les stocke). Objectif : tenir la personne à l'origine du ticket informée par mail une fois `apps.communication` câblé (voir plus bas) — pas encore le cas dans cette passe. Le formulaire manuel "Signaler un incident" ne les renseigne jamais (la personne qui signale est un utilisateur Awtodo connu). Nouveau signal `apps.incidents.signals.incident_created` (kwargs `incident`, `actor`), émis en fin de `create_incident` — point d'accroche pour la notification automatique, pas encore consommé activement (voir `apps.communication.signals`).
+
 **Simulation en dev du service account ticketing (session du 11/08/2026) :** `User.is_service_account` (nouveau champ, `apps/accounts/models.py`) marque un compte technique. `IncidentViewSet.create` (`apps/incidents/views.py`) passe `actor=None` à `create_incident` quand `request.user.is_service_account` est vrai — déclenche exactement le même contournement de la contrainte de groupe que le futur appel système réel (voir `apps.incidents.services.create_incident`), au lieu d'être seulement un chemin mort inatteignable via HTTP. Utilisateur de seed dédié : `api.ticketing` (`apps/accounts/management/commands/seed_demo_users.py`, `SERVICE_ACCOUNT_USERS`) — à utiliser via `X-Debug-User-Id` pour tester la création automatique sans avoir besoin d'appartenir au groupe/projet visé. **Reste un mécanisme dev uniquement** (même portée que `X-Debug-User-Id` en général, voir "Mécanisme d'identification temporaire" ci-dessus) — pas une vraie clé API de service account, ce chantier restant hors périmètre (voir CLAUDE.md > "Stack technique" > Auth).
 
 ## Vue détail d'un incident + commentaires
@@ -638,5 +640,58 @@ Scoping : `get_queryset()` filtre toujours par `owner` / participation / `projec
 ### Frontend
 
 Section « Planning » de premier niveau (`BinderTabs`, icône `CalendarDays`) + onglet « Planning » du hub projet (**visible pour tous les membres**, édition réservée aux chefs de projet). Calendrier **fait main** (`frontend/src/features/planning/` : `WeekGrid`, `MonthGrid`, positionnement CSS pur, `@dnd-kit/core` déjà présent pour glisser-déposer et redimensionner) — aucune librairie de calendrier ajoutée, cohérent avec la charte. `RecurrenceEditor` produit une RRULE (sous-ensemble courant) ; `recurrence.ts` la décrit en français. Glisser une tâche du panneau « À planifier » sur la grille crée un `ScheduledBlock` — une même tâche peut recevoir **plusieurs créneaux** (aucune contrainte d'unicité), un compteur l'indique dans le panneau. Un créneau se modifie en l'étirant par la poignée basse ou via `BlockDialog` (début/fin, retrait). Panneau **« Calendriers » façon Outlook** : « Mon calendrier » + une entrée par personne qui partage avec moi, chacune avec case de visibilité et couleur d'identité (palette fixe de 6 teintes sobres, toujours doublée du nom du propriétaire). Les événements d'un calendrier partagé s'affichent dans sa couleur. `EventDialog`/`BlockDialog` gèrent l'édition ; `SharePanel` gère les partages. 448 → 491 tests backend, tous verts.
+
+## Module Communication (scaffolding — session du 2026-09-10)
+
+**Statut : scaffolding explicitement demandé (« on fera tous les câblages une fois le déploiement sur AWS fait, en même temps que le SSO ») — modèle, permissions, API et onglet frontend sont posés, mais aucun envoi réel n'est déclenché.** Nouvelle app `apps/communication/`, label `communication` — dépend de `common`/`accounts`/`projects`/`incidents`, rien ne dépend d'elle.
+
+### Note de transport (arbitrage demandé à l'implémentation)
+
+Deux cibles, deux mécanismes recommandés — à câbler au déploiement :
+
+- **Mail → Microsoft Graph, directement.** `POST /v1.0/users/{sender}/sendMail` avec la permission applicative `Mail.Send` (consentement admin une fois, boîte expéditrice dédiée type `no-reply@…`). Pas besoin de Power Automate — c'est le chemin le plus simple et le plus robuste pour un envoi système.
+- **Canaux Teams → Power Automate, pas Graph direct.** Poster un message de canal en app-only (`POST /teams/{id}/channels/{id}/messages`) est une « Protected API » Microsoft — accès soumis à validation, lourd pour un usage interne. Les anciens connecteurs entrants (Incoming Webhooks) sont en cours de retrait par Microsoft — à éviter pour du neuf. La voie robuste et supportée aujourd'hui : un flow **Power Automate** déclenché par requête HTTP (« Quand une requête HTTP est reçue » → « Publier un message dans un canal ») — Awtodo POST un JSON sur l'URL du flow, zéro app registration Teams, zéro consentement admin dédié.
+
+Conséquence sur le modèle : `CommunicationChannel` porte soit une adresse mail, soit l'URL d'un webhook Power Automate — jamais un identifiant Graph de canal Teams.
+
+### Modèles
+
+| Modèle | Portée | Champs clés |
+|---|---|---|
+| `O365Connection` | **Organisation** (`OneToOneField`, un seul jeu d'identifiants par tenant — les dupliquer par projet serait un non-sens de sécurité) | `tenant_id`, `client_id`, `client_secret` (stocké tel quel pour l'instant — à chiffrer/déléguer à un secret manager au câblage réel), `sender_mailbox`, `is_enabled`, propriété `is_configured` |
+| `CommunicationChannel` | Projet (`StatusLifecycleModel`, `active`/`archived`) | `channel_type` (`email`/`teams`), `label`, `email`, `teams_webhook_url`, `notify_incident_created` (notification auto — non câblée) |
+| `CommunicationMessage` | Projet (append-only, pas de `StatusLifecycleModel` : jamais édité ni archivé) | `subject`, `body`, `trigger` (`manuel`/`incident_cree`), `incident` (FK nullable), `created_by`, `channels` (M2M), `status` (`en_attente`/`envoye`/`echec` — **reste toujours `en_attente` dans cette passe**), `sent_at` |
+
+`Incident.author_name` / `Incident.author_email` (voir "API — endpoints Incidents" ci-dessus) alimentent le futur envoi automatique vers l'auteur du signalement.
+
+### Permissions
+
+Deux nouveaux flags dans `apps.projects.services.get_project_permissions` (gardes dans `apps/projects/services.py`, comme le reste des permissions projet — `apps/communication` importe les prédicats `is_project_manager`/`is_project_contributor`, pas les fonctions de garde, cohérent avec le pattern déjà suivi par `apps.documentation`/`apps.planning`) :
+
+| Action | Rôle requis |
+|---|---|
+| `can_manage_project_communication` (créer/modifier/archiver un canal) | chef de projet |
+| `can_send_project_communication` (rédiger et « envoyer » un message) | tout contributeur (chef de projet ou membre) — jamais un lecteur |
+| Modifier `O365Connection` | admin d'organisation ou admin de plateforme (`apps.accounts.services.is_organisation_admin`, nouveau helper) |
+| Lire `O365Connection` | tout utilisateur authentifié de l'organisation |
+
+Un lecteur n'a **aucun accès** à l'onglet Communication — même portée que Incidents/Planning/Budget/Statistiques (`contributorOnlyTabs` côté frontend, `contributor_projects` côté scoping des canaux/messages).
+
+### API — `/api/v1/communication/`
+
+| Méthode / chemin | Effet |
+|---|---|
+| `GET/PUT /communication/o365/` | connexion Office 365 de l'organisation courante — `client_secret` en écriture seule (jamais renvoyé), `has_client_secret` en lecture indique s'il est renseigné |
+| `GET/POST /communication/projects/{project_id}/channels/` | liste des canaux actifs / création (chef de projet) |
+| `PATCH/DELETE /communication/projects/{project_id}/channels/{channel_id}/` | modification / archivage (`DELETE` → `status="archived"`, jamais de suppression physique) |
+| `GET/POST /communication/projects/{project_id}/messages/` | historique des communications / rédaction — **crée un `CommunicationMessage` en `en_attente`, ne déclenche aucun envoi** |
+
+### Signal d'accroche
+
+`apps.incidents.signals.incident_created` (kwargs `incident`, `actor`), émis en fin de `create_incident`. Récepteur `apps.communication.signals.notify_channels_on_incident_created` déjà branché mais **volontairement inerte** — le corps du récepteur documente en commentaire la suite prévue (lister les canaux `notify_incident_created` du projet, créer un `CommunicationMessage(trigger="incident_cree")`, déclencher l'envoi async). Respecte la règle "aucun appel synchrone vers un système externe dans le flux HTTP" par construction : rien n'est encore appelé du tout.
+
+### Frontend
+
+Nouvel onglet « Communication » du hub projet (`frontend/src/features/communication/CommunicationTab.tsx`), réservé aux contributeurs. Trois blocs : (1) connexion Office 365 — résumé + formulaire d'édition réservé à un admin d'organisation (`currentUser.is_platform_admin || organisation_role === "admin"`) ; (2) canaux du projet — liste + formulaire d'ajout (chef de projet) avec `Combobox` pour le type et `Checkbox` (switch) pour `notify_incident_created` ; (3) rédaction (contributeurs, sélection des destinataires via une liste de switches — pas un `Combobox`, la sélection est multiple) + historique des messages (`StatusBadge` neutre, icône par statut). Bandeau explicite rappelant que l'envoi réel n'est pas encore actif. 532 → 544 tests backend, tous verts.
 
 **Limite v1 assumée** : le panneau « À planifier » ne liste que les **tâches** assignées à l'utilisateur (le sérialiseur `Incident` n'expose pas `assigned_to` côté API) — les blocs sur incident restent créables via l'API mais pas en glisser-déposer depuis l'UI.

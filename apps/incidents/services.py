@@ -5,7 +5,7 @@ from apps.common.permissions import check_permission
 from apps.projects.services import is_project_contributor, is_project_manager
 
 from .models import Incident, IncidentComment
-from .signals import incident_commented, incident_resolved
+from .signals import incident_commented, incident_created, incident_resolved
 
 
 class IncidentPermissionError(Exception):
@@ -188,7 +188,16 @@ def get_incident_permissions(user, incident):
 
 
 def create_incident(
-    *, title, project=None, team=None, description="", priority="moyenne", external_reference_id=None, actor=None
+    *,
+    title,
+    project=None,
+    team=None,
+    description="",
+    priority="moyenne",
+    external_reference_id=None,
+    author_name="",
+    author_email="",
+    actor=None,
 ):
     if bool(project) == bool(team):
         raise IncidentValidationError(
@@ -204,15 +213,19 @@ def create_incident(
     # `apps.incidents.views.IncidentViewSet.create`), qui passe `actor=None`
     # exprès pour simuler ce futur appel.
 
-    return Incident.objects.create(
+    incident = Incident.objects.create(
         project=project,
         team=team,
         title=title,
         description=description,
         priority=priority,
         external_reference_id=external_reference_id,
+        author_name=author_name or "",
+        author_email=author_email or "",
         status="signale",
     )
+    incident_created.send(sender=Incident, incident=incident, actor=actor)
+    return incident
 
 
 def assign_incident_to_project(*, actor, incident, project):

@@ -192,6 +192,19 @@ def can_manage_team(user, team):
     return _is_team_manager(user, team)
 
 
+def is_organisation_admin(user, organisation=None):
+    """Portée organisation : `organisation_role == "admin"` (ou admin de
+    plateforme, transverse). Si `organisation` est fourni, l'utilisateur doit
+    en plus appartenir à cette organisation."""
+    if user is None or not getattr(user, "is_authenticated", False):
+        return False
+    if getattr(user, "is_platform_admin", False):
+        return True
+    if getattr(user, "organisation_role", None) != "admin":
+        return False
+    return organisation is None or user.organisation_id == getattr(organisation, "id", organisation)
+
+
 def add_team_member(*, actor, team, user):
     """Réactive implicitement une adhésion retirée : `TeamMembership.objects`
     (manager actif) ne verra jamais la ligne `removed`, donc `get_or_create`

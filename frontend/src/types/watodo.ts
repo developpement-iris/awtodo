@@ -92,6 +92,49 @@ export interface ProjectPermissions {
   can_manage_budget: boolean;
   can_edit_documentation: boolean;
   can_manage_project_planning: boolean;
+  can_manage_project_communication: boolean;
+  can_send_project_communication: boolean;
+}
+
+// --- Communication de projet (onglet hub) --------------------------------
+// Voir docs/modeles-et-api.md > "Module Communication". Câblage d'envoi
+// (Microsoft Graph / Power Automate) reporté au déploiement AWS.
+
+export interface O365Connection {
+  tenant_id: string;
+  client_id: string;
+  has_client_secret: boolean;
+  sender_mailbox: string;
+  is_enabled: boolean;
+  is_configured: boolean;
+}
+
+export type CommunicationChannelType = "email" | "teams";
+
+export interface CommunicationChannel {
+  id: string;
+  channel_type: CommunicationChannelType;
+  channel_type_display: string;
+  label: string;
+  email: string;
+  teams_webhook_url: string;
+  notify_incident_created: boolean;
+  status: "active" | "archived";
+}
+
+export interface CommunicationMessage {
+  id: string;
+  subject: string;
+  body: string;
+  trigger: "manuel" | "incident_cree";
+  trigger_display: string;
+  status: "en_attente" | "envoye" | "echec";
+  status_display: string;
+  created_by: User | null;
+  channels: CommunicationChannel[];
+  incident: string | null;
+  created_at: string;
+  sent_at: string | null;
 }
 
 // --- Documentation de projet (onglet hub + page publique) -----------------
@@ -309,6 +352,9 @@ export interface Incident {
   status: "signale" | "en_cours" | "resolu" | "archive";
   status_display: string;
   external_reference_id: string | null;
+  /** Auteur du signalement transmis par l'outil de ticketing (vide sinon). */
+  author_name: string;
+  author_email: string;
   created_at: string;
   permissions: IncidentPermissions;
 }
