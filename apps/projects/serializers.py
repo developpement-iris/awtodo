@@ -167,6 +167,10 @@ class ProjectMemberRemoveSerializer(serializers.Serializer):
     membership = serializers.PrimaryKeyRelatedField(queryset=ProjectMembership.objects.all())
 
 
+class ProjectConvertToCollaborativeSerializer(serializers.Serializer):
+    team = serializers.PrimaryKeyRelatedField(queryset=Team.objects.all())
+
+
 class ProjectVersionSerializer(serializers.ModelSerializer):
     created_by = UserSerializer(read_only=True)
 

@@ -8,6 +8,7 @@ from apps.projects.services import (
     ProjectValidationError,
     add_project_member,
     change_project_member_role,
+    convert_to_collaborative,
     create_project,
     remove_project_member,
 )
@@ -60,7 +61,13 @@ class ProjectMemberRoleAndRemovalTests(TestCase):
     def setUp(self):
         self.org = Organisation.objects.create(name="Org A")
         self.chef = User.objects.create_user(username="chef2", organisation=self.org)
-        self.project = create_project(actor=self.chef, name="Projet solo", project_type="individuel")
+        # Collaboratif, pas individuel : un projet individuel n'accepte plus
+        # que des lecteurs (session du 2026-09-11) — cette classe teste la
+        # mécanique générique de rôle/retrait, pas ce cas restreint (voir
+        # ProjectIndividualRoleRestrictionTests plus bas).
+        self.team = Team.objects.create(name="Équipe Y", organisation=self.org, created_by=self.chef)
+        TeamMembership.objects.create(team=self.team, user=self.chef)
+        self.project = create_project(actor=self.chef, name="Projet", project_type="collaboratif", team=self.team)
         self.member = User.objects.create_user(username="member2", organisation=self.org)
         self.member_membership = ProjectMembership.objects.create(
             project=self.project, user=self.member, role="membre"
@@ -157,7 +164,9 @@ class ProjectMemberApiTests(APITestCase):
     def setUp(self):
         self.org = Organisation.objects.create(name="Org A")
         self.chef = User.objects.create_user(username="chef4", organisation=self.org)
-        self.project = create_project(actor=self.chef, name="Projet API", project_type="individuel")
+        self.team = Team.objects.create(name="Équipe API", organisation=self.org, created_by=self.chef)
+        TeamMembership.objects.create(team=self.team, user=self.chef)
+        self.project = create_project(actor=self.chef, name="Projet API", project_type="collaboratif", team=self.team)
         self.candidate = User.objects.create_user(
             username="candidate2", organisation=self.org, email="candidate2@example.com"
         )
@@ -214,3 +223,92 @@ class ProjectMemberApiTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         usernames = [m["user"]["username"] for m in response.json()["members"]]
         self.assertIn("chef4", usernames)
+
+
+class ProjectIndividualRoleRestrictionTests(TestCase):
+    """Un projet individuel n'accueille que des lecteurs (session du
+    2026-09-11) — passer par `convert_to_collaborative` pour ouvrir le projet
+    à d'autres rôles."""
+
+    def setUp(self):
+        self.org = Organisation.objects.create(name="Org A")
+        self.chef = User.objects.create_user(username="chef-solo", organisation=self.org)
+        self.project = create_project(actor=self.chef, name="Projet solo", project_type="individuel")
+        self.other = User.objects.create_user(
+            username="other-solo", organisation=self.org, email="other-solo@example.com"
+        )
+
+    def test_cannot_add_member_role_to_individual_project(self):
+        with self.assertRaises(ProjectValidationError):
+            add_project_member(actor=self.chef, project=self.project, user=self.other, role="membre")
+
+    def test_can_add_reader_to_individual_project(self):
+        membership = add_project_member(actor=self.chef, project=self.project, user=self.other, role="lecteur")
+        self.assertEqual(membership.role, "lecteur")
+
+    def test_cannot_promote_reader_on_individual_project(self):
+        membership = add_project_member(actor=self.chef, project=self.project, user=self.other, role="lecteur")
+        with self.assertRaises(ProjectValidationError):
+            change_project_member_role(actor=self.chef, membership=membership, role="membre")
+
+    def test_convert_to_collaborative_then_add_member_works(self):
+        team = Team.objects.create(name="Équipe convertie", organisation=self.org, created_by=self.chef)
+        TeamMembership.objects.create(team=team, user=self.chef)
+
+        project = convert_to_collaborative(actor=self.chef, project=self.project, team=team)
+        self.assertEqual(project.project_type, "collaboratif")
+        self.assertEqual(project.team_id, team.id)
+
+        membership = add_project_member(actor=self.chef, project=self.project, user=self.other, role="membre")
+        self.assertEqual(membership.role, "membre")
+
+    def test_convert_requires_manager(self):
+        team = Team.objects.create(name="Équipe X", organisation=self.org, created_by=self.chef)
+        TeamMembership.objects.create(team=team, user=self.other)
+        with self.assertRaises(ProjectPermissionError):
+            convert_to_collaborative(actor=self.other, project=self.project, team=team)
+
+    def test_convert_requires_team_membership_of_actor(self):
+        team = Team.objects.create(name="Équipe étrangère", organisation=self.org, created_by=self.other)
+        with self.assertRaises(ProjectPermissionError):
+            convert_to_collaborative(actor=self.chef, project=self.project, team=team)
+
+    def test_cannot_convert_already_collaborative_project(self):
+        team = Team.objects.create(name="Équipe X2", organisation=self.org, created_by=self.chef)
+        TeamMembership.objects.create(team=team, user=self.chef)
+        collaborative = create_project(actor=self.chef, name="Déjà collab", project_type="collaboratif", team=team)
+        with self.assertRaises(ProjectValidationError):
+            convert_to_collaborative(actor=self.chef, project=collaborative, team=team)
+
+
+@override_settings(
+    DEBUG=True,
+    REST_FRAMEWORK={
+        "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
+        "DEFAULT_AUTHENTICATION_CLASSES": [
+            "apps.accounts.authentication.DebugUserIdAuthentication",
+            "rest_framework.authentication.SessionAuthentication",
+        ],
+    },
+)
+class ProjectConvertToCollaborativeApiTests(APITestCase):
+    def setUp(self):
+        self.org = Organisation.objects.create(name="Org A")
+        self.chef = User.objects.create_user(username="chef-conv", organisation=self.org)
+        self.project = create_project(actor=self.chef, name="Solo", project_type="individuel")
+        self.team = Team.objects.create(name="Équipe conv", organisation=self.org, created_by=self.chef)
+        TeamMembership.objects.create(team=self.team, user=self.chef)
+
+    def as_user(self, user):
+        return {"HTTP_X_DEBUG_USER_ID": str(user.id)}
+
+    def test_convert_via_api(self):
+        response = self.client.post(
+            f"/api/v1/projects/{self.project.id}/convert-to-collaborative/",
+            {"team": str(self.team.id)},
+            content_type="application/json",
+            **self.as_user(self.chef),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["project_type"], "collaboratif")
+        self.assertEqual(response.json()["team"], str(self.team.id))

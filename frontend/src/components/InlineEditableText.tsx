@@ -51,6 +51,11 @@ export function InlineEditableText({ value, onSave, ariaLabel, disabled = false,
         onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
+          // Toujours stoppée : un parent (carte Kanban, ligne de tableau…)
+          // peut écouter Espace/Entrée pour ouvrir un modal — sans ça, taper
+          // un espace dans le titre pendant l'édition déclenchait ce modal
+          // (`role="button"` du parent qui reçoit l'événement remonté).
+          event.stopPropagation();
           if (event.key === "Enter") {
             event.preventDefault();
             commit();

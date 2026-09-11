@@ -9,6 +9,7 @@ const TASK_TYPE_OPTIONS: { value: Task["task_type"]; label: string }[] = [
   { value: "correction", label: "Correction" },
   { value: "ajout", label: "Ajout" },
   { value: "evolution", label: "Évolution" },
+  { value: "test", label: "Test" },
 ];
 
 const PRIORITY_OPTIONS: { value: Task["priority"]; label: string }[] = [

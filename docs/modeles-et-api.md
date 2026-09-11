@@ -14,6 +14,7 @@ Détail des modèles de données et des endpoints. Référencé depuis CLAUDE.md
 ### ProjectMembership
 - Utilisateur × Projet × Rôle
 - Rôles possibles : `chef_de_projet`, `membre`, `lecteur` (lecture seule — session du 2026-09-10, voir `docs/organisation-et-comptes.md` > "Rôle Lecteur")
+- **Sur un projet `individuel` (session du 2026-09-11) : `lecteur` est le seul rôle attribuable** au-delà du chef de projet (le créateur) — voir `docs/organisation-et-comptes.md` > "Restriction de rôle sur un projet individuel + conversion en collaboratif"
 - **Un projet peut avoir plusieurs chefs de projet simultanément**
 - **Contrainte (projets collaboratifs uniquement) :** l'utilisateur doit déjà être membre du `Team`/Groupe attribué au projet — voir section "Groupes"
 
@@ -32,7 +33,7 @@ Détail des modèles de données et des endpoints. Référencé depuis CLAUDE.md
 - Projet parent
 - **Version du projet** (FK `ProjectVersion`, voir ci-dessus) — attribuée automatiquement à la version courante du projet au moment de la création, jamais choisie manuellement.
 - Titre, description
-- **Type** : `CORRECTION` / `AJOUT` / `ÉVOLUTION`
+- **Type** : `CORRECTION` / `AJOUT` / `ÉVOLUTION` / `TEST` (ajouté session du 2026-09-10)
 - **Priorité** : niveau configurable (basse/moyenne/haute/critique — à affiner)
 - Deadline optionnelle
 - Assigné à (utilisateur)
@@ -146,6 +147,7 @@ Le SSO/gestion de comptes est volontairement mis en dernier dans la roadmap — 
 | Endpoint | Rôle requis | Effet |
 |---|---|---|
 | `POST /api/v1/projects/` | tout utilisateur authentifié | crée le projet (nom, description, type `individuel`/`collaboratif`, `deadline`/`priority` optionnels, `already_in_production` optionnel — exclusif de `deadline`) ; **le créateur devient automatiquement `chef_de_projet`** via une `ProjectMembership` créée dans le même service — jamais de projet sans au moins un chef de projet |
+| `POST /api/v1/projects/{id}/convert-to-collaborative/` (session du 2026-09-11) | chef de projet | body `{"team": "<uuid>"}` — fait passer un projet `individuel` en `collaboratif` (voir `docs/organisation-et-comptes.md`), sens inverse non proposé |
 
 **Règle d'implémentation :** comme pour les tâches, la logique (création du projet + création de la `ProjectMembership` du créateur) est une seule fonction dans `services.py` (`apps/projects/services.py`), pas répartie entre serializer et vue.
 

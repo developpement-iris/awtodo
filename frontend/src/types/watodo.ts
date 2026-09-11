@@ -86,6 +86,7 @@ export interface ProjectPermissions {
   can_edit_spec: boolean;
   can_edit_notepad: boolean;
   can_manage_members: boolean;
+  can_convert_to_collaborative: boolean;
   can_close: boolean;
   can_reopen: boolean;
   can_create_version: boolean;
@@ -292,7 +293,7 @@ export interface Task {
   version_label: string;
   title: string;
   description: string;
-  task_type: "correction" | "ajout" | "evolution";
+  task_type: "correction" | "ajout" | "evolution" | "test";
   task_type_display: string;
   priority: "basse" | "moyenne" | "haute" | "critique";
   priority_display: string;

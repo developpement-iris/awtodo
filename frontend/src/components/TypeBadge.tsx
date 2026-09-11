@@ -1,10 +1,11 @@
-import { CirclePlus, TrendingUp, Wrench, type LucideIcon } from "lucide-react";
+import { CirclePlus, FlaskConical, TrendingUp, Wrench, type LucideIcon } from "lucide-react";
 import "./TypeBadge.css";
 
 const TASK_TYPE_ICONS: Record<string, LucideIcon> = {
   correction: Wrench,
   ajout: CirclePlus,
   evolution: TrendingUp,
+  test: FlaskConical,
 };
 
 interface TypeBadgeProps {

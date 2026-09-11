@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import {
   addProjectMember,
   changeProjectMemberRole,
+  convertProjectToCollaborative,
   getTeams,
   inviteProjectExternalMember,
   removeProjectMember,
 } from "../../api/client";
 import { Combobox } from "../../components/Combobox";
+import { useCurrentUser } from "../../context/CurrentUserContext";
 import { useToast } from "../../context/ToastContext";
 import type { Project, ProjectMembership, ProjectRole, Team } from "../../types/watodo";
 import "./ProjectAdminTab.css";
@@ -16,6 +18,11 @@ const ROLE_OPTIONS: { value: ProjectRole; label: string }[] = [
   { value: "membre", label: "Membre" },
   { value: "lecteur", label: "Lecteur (lecture seule)" },
 ];
+
+// Un projet individuel n'accueille que des lecteurs (session du 2026-09-11)
+// — voir apps.projects.services._ensure_role_allowed_for_project_type.
+// Passer en collaboratif (bloc dédié plus bas) pour ouvrir les autres rôles.
+const READER_ONLY_ROLE_OPTIONS = ROLE_OPTIONS.filter((option) => option.value === "lecteur");
 
 // Même logique que UserMenu.tsx (initiales) — duplication volontaire d'un
 // petit bloc plutôt qu'une abstraction partagée pour deux usages, cohérent
@@ -34,6 +41,7 @@ interface ProjectAdminTabProps {
 
 export function ProjectAdminTab({ project, onUpdated }: ProjectAdminTabProps) {
   const { showToast } = useToast();
+  const { currentUser } = useCurrentUser();
   const [teams, setTeams] = useState<Team[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pendingMembershipId, setPendingMembershipId] = useState<string | null>(null);
@@ -46,6 +54,8 @@ export function ProjectAdminTab({ project, onUpdated }: ProjectAdminTabProps) {
   const [inviteFirstName, setInviteFirstName] = useState("");
   const [inviteLastName, setInviteLastName] = useState("");
   const [inviteSubmitting, setInviteSubmitting] = useState(false);
+  const [convertTeam, setConvertTeam] = useState("");
+  const [convertSubmitting, setConvertSubmitting] = useState(false);
 
   useEffect(() => {
     getTeams()
@@ -53,10 +63,36 @@ export function ProjectAdminTab({ project, onUpdated }: ProjectAdminTabProps) {
       .catch(() => undefined);
   }, []);
 
+  const isIndividual = project.project_type === "individuel";
+  const roleOptions = isIndividual ? READER_ONLY_ROLE_OPTIONS : ROLE_OPTIONS;
+
+  // Le rôle par défaut du formulaire "ajouter par email" (`membre`) n'est
+  // pas proposé sur un projet individuel — le recaler sur `lecteur`, sinon
+  // le Combobox afficherait un état sélectionné hors de sa propre liste.
+  useEffect(() => {
+    if (isIndividual) setEmailRole("lecteur");
+  }, [isIndividual]);
+
   const isManager = project.permissions.can_manage_members;
   const team = teams.find((t) => t.id === project.team);
   const memberIds = new Set(project.members.map((m) => m.user.id));
   const addableFromGroup = (team?.members ?? []).filter((user) => !memberIds.has(user.id));
+  const myTeams = teams.filter((t) => currentUser?.teams.includes(t.id));
+
+  async function handleConvertToCollaborative() {
+    if (!convertTeam) return;
+    setConvertSubmitting(true);
+    setError(null);
+    try {
+      onUpdated(await convertProjectToCollaborative(project.id, convertTeam));
+      setConvertTeam("");
+      showToast("Projet passé en collaboratif.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "La conversion a échoué.");
+    } finally {
+      setConvertSubmitting(false);
+    }
+  }
 
   async function handleAddFromGroup() {
     if (!groupSelection) return;
@@ -176,10 +212,16 @@ export function ProjectAdminTab({ project, onUpdated }: ProjectAdminTabProps) {
                 </div>
               </td>
               <td>
-                {isManager ? (
+                {/* Sur un projet individuel, le chef de projet (le créateur)
+                    ne peut pas être rétrogradé en lecteur depuis ce sélecteur
+                    — `roleOptions` ne proposerait alors que "lecteur", hors
+                    de sa valeur actuelle. Reste en lecture (texte simple),
+                    cohérent avec le refus backend de toute façon
+                    (`_ensure_not_last_manager`). */}
+                {isManager && roleOptions.some((option) => option.value === membership.role) ? (
                   <span className="project-admin-tab__role-select">
                     <Combobox
-                      options={ROLE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                      options={roleOptions.map((o) => ({ value: o.value, label: o.label }))}
                       value={membership.role}
                       onChange={(value) => handleRoleChange(membership, value as ProjectRole)}
                       disabled={pendingMembershipId === membership.id}
@@ -212,6 +254,36 @@ export function ProjectAdminTab({ project, onUpdated }: ProjectAdminTabProps) {
 
       {isManager && (
         <div className="project-admin-tab__forms">
+          {project.permissions.can_convert_to_collaborative && (
+            <div className="project-admin-tab__form">
+              <h3>Passer en projet collaboratif</h3>
+              <p className="project-admin-tab__hint">
+                Un projet individuel n'accueille que des lecteurs. Pour y ajouter un membre ou un autre chef de
+                projet, rattachez-le d'abord à un groupe — <strong>irréversible</strong>.
+              </p>
+              {myTeams.length === 0 ? (
+                <p className="project-admin-tab__hint">Vous n'appartenez à aucun groupe pour l'instant.</p>
+              ) : (
+                <div className="project-admin-tab__form-row">
+                  <Combobox
+                    options={myTeams.map((t) => ({ value: t.id, label: t.name }))}
+                    value={convertTeam}
+                    onChange={setConvertTeam}
+                    placeholder="Choisir un groupe…"
+                    searchPlaceholder="Rechercher un groupe…"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleConvertToCollaborative}
+                    disabled={convertSubmitting || !convertTeam}
+                  >
+                    Convertir
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {team && addableFromGroup.length > 0 && (
             <div className="project-admin-tab__form">
               <h3>Ajouter un membre du groupe</h3>
@@ -239,6 +311,7 @@ export function ProjectAdminTab({ project, onUpdated }: ProjectAdminTabProps) {
               Recherche par email, même hors du groupe rattaché au projet. Le rôle <strong>Lecteur</strong> donne un
               accès en lecture seule (tâches, cahier des charges, bloc-notes) — pas d'accès au budget, aux incidents,
               au planning ni aux statistiques.
+              {isIndividual && " Un projet individuel n'accueille que des lecteurs."}
             </p>
             <div className="project-admin-tab__form-row project-admin-tab__form-row--stacked">
               <input
@@ -248,7 +321,7 @@ export function ProjectAdminTab({ project, onUpdated }: ProjectAdminTabProps) {
                 onChange={(event) => setEmail(event.target.value)}
               />
               <Combobox
-                options={ROLE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                options={roleOptions.map((o) => ({ value: o.value, label: o.label }))}
                 value={emailRole}
                 onChange={(value) => setEmailRole(value as ProjectRole)}
                 clearable={false}

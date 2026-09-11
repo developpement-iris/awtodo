@@ -32,7 +32,7 @@ import {
   startOfDay,
   startOfWeek,
 } from "./calendarMath";
-import { isoAt, resolveDrop } from "./dndDrop";
+import { isoAt, resolveDrop, resolveMove } from "./dndDrop";
 import { EventDialog } from "./EventDialog";
 import { MonthGrid } from "./MonthGrid";
 import { SharePanel } from "./SharePanel";
@@ -194,8 +194,23 @@ export function PlanningPage() {
     });
   }
 
+  type DragData =
+    | { type: "external"; task: Task }
+    | { type: "move"; item: CalendarItem }
+    | { type: "resize"; item: CalendarItem };
+
+  // Le déplacement d'un item déjà positionné se résout à partir du décalage
+  // du glissé appliqué à sa position de départ (`resolveMove`) — pas de la
+  // position absolue du pointeur (`resolveDrop`), qui dépend de l'endroit où
+  // l'item a été saisi. Dépôt externe / redimensionnement restent pointeur.
+  function resolveForEvent(event: DragEndEvent | DragMoveEvent) {
+    const data = event.active.data.current as DragData | undefined;
+    if (data?.type === "move") return resolveMove(event, data.item.start);
+    return resolveDrop(event);
+  }
+
   function handleDragMove(event: DragMoveEvent) {
-    const next = resolveDrop(event);
+    const next = resolveForEvent(event);
     setDropPreview((prev) => {
       if (prev === next) return prev;
       if (prev && next && prev.dayIso === next.dayIso && prev.minutes === next.minutes) return prev;
@@ -205,13 +220,9 @@ export function PlanningPage() {
 
   async function handleDragEnd(event: DragEndEvent) {
     setDropPreview(null);
-    const drop = resolveDrop(event);
+    const drop = resolveForEvent(event);
     if (!drop) return;
-    const data = event.active.data.current as
-      | { type: "external"; task: Task }
-      | { type: "move"; item: CalendarItem }
-      | { type: "resize"; item: CalendarItem }
-      | undefined;
+    const data = event.active.data.current as DragData | undefined;
     if (!data) return;
 
     try {

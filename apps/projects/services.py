@@ -250,6 +250,13 @@ def can_manage_members(user, project):
     return _check(_ensure_can_manage_members, user, project)
 
 
+def can_convert_to_collaborative(user, project):
+    # Même garde que `can_manage_members` (chef de projet) + n'a de sens que
+    # sur un projet encore individuel — pas de fonction de garde dédiée, la
+    # condition est triviale et ne lève jamais d'exception à traduire.
+    return project.project_type == "individuel" and can_manage_members(user, project)
+
+
 def can_close(user, project):
     return _check(_ensure_can_close, user, project)
 
@@ -292,6 +299,7 @@ def get_project_permissions(user, project):
         "can_edit_spec": can_edit_spec(user, project),
         "can_edit_notepad": can_edit_notepad(user, project),
         "can_manage_members": can_manage_members(user, project),
+        "can_convert_to_collaborative": can_convert_to_collaborative(user, project),
         "can_close": can_close(user, project),
         "can_reopen": can_reopen(user, project),
         "can_create_version": can_create_version(user, project),
@@ -411,6 +419,21 @@ def _ensure_not_last_manager(project, exclude_membership):
         raise ProjectValidationError("Le projet doit toujours avoir au moins un chef de projet actif.")
 
 
+def _ensure_role_allowed_for_project_type(project, role):
+    """Un projet **individuel** ne peut accueillir personne d'autre que son
+    chef de projet (le créateur) en dehors de lecteurs — session du
+    2026-09-11, remontée directe : rien n'empêchait jusque-là d'y ajouter un
+    membre/chef de projet, ce qui rendait l'auto-assignation des tâches au
+    créateur ambiguë (voir `apps.tasks.services.create_task`). Pour ouvrir le
+    projet à d'autres rôles, il faut d'abord le faire passer en collaboratif
+    (`convert_to_collaborative`, ci-dessous)."""
+    if project.project_type == "individuel" and role != "lecteur":
+        raise ProjectValidationError(
+            "Un projet individuel ne peut accueillir que des lecteurs — "
+            "passez-le en collaboratif (onglet Administration) pour ajouter un membre ou un chef de projet."
+        )
+
+
 def add_project_member(*, actor, project, user=None, email=None, role="membre"):
     """Réservé aux chefs de projet de ce projet précis. Deux cas couverts ici
     (voir CLAUDE.md > "Onglet Administration sur le hub projet") : membre du
@@ -420,6 +443,7 @@ def add_project_member(*, actor, project, user=None, email=None, role="membre"):
     `apps.accounts.services.create_invitation`, pas ici — hors périmètre de
     cette fonction, qui ne gère que des comptes déjà existants."""
     _ensure_can_manage_members(actor, project)
+    _ensure_role_allowed_for_project_type(project, role)
 
     if user is None:
         try:
@@ -456,6 +480,12 @@ def change_project_member_role(*, actor, membership, role):
 
     if membership.role == "chef_de_projet" and role != "chef_de_projet":
         _ensure_not_last_manager(membership.project, exclude_membership=membership)
+    if role != membership.role:
+        # On ne bloque que les changements de rôle réels : garder le chef de
+        # projet historique tel quel (role == membership.role) doit rester
+        # possible même si un éventuel re-parcours de ce formulaire soumet la
+        # même valeur — seule une promotion/rétrogradation est concernée.
+        _ensure_role_allowed_for_project_type(membership.project, role)
 
     membership.role = role
     membership.save(update_fields=["role"])
@@ -470,6 +500,28 @@ def remove_project_member(*, actor, membership):
     membership.status = "removed"
     membership.save(update_fields=["status"])
     return membership
+
+
+def convert_to_collaborative(*, actor, project, team):
+    """Fait passer un projet **individuel** en **collaboratif** (session du
+    2026-09-11) — seul sens supporté : un projet individuel ne peut accueillir
+    que des lecteurs (`_ensure_role_allowed_for_project_type`), passer en
+    collaboratif est la façon d'y ajouter un membre ou un chef de projet. Le
+    sens inverse (collaboratif → individuel) n'est pas proposé : il faudrait
+    décider quoi faire des memberships existants (rétrograder tout le monde en
+    lecteur ? les retirer ?), non tranché — voir CLAUDE.md."""
+    _require_manager(actor, project)
+    if project.project_type != "individuel":
+        raise ProjectValidationError("Ce projet est déjà collaboratif.")
+    if team is None:
+        raise ProjectValidationError("Un projet collaboratif doit être rattaché à un groupe.")
+    if not TeamMembership.objects.filter(team=team, user=actor).exists():
+        raise ProjectPermissionError("Vous devez être membre du groupe pour y rattacher le projet.")
+
+    project.project_type = "collaboratif"
+    project.team = team
+    project.save(update_fields=["project_type", "team"])
+    return project
 
 
 def update_project_notepad(*, actor, project, notepad_content):

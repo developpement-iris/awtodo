@@ -101,6 +101,9 @@ async function postJson<T>(path: string, body: Record<string, unknown> = {}): Pr
     const payload = await response.json().catch(() => null);
     throw new Error(errorMessage(payload, path, response.status));
   }
+  // Certaines actions (cancel/revoke/ignore…) renvoient 204 sans corps —
+  // `.json()` sur une réponse vide lève "Unexpected end of JSON input".
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
@@ -114,6 +117,7 @@ async function patchJson<T>(path: string, body: Record<string, unknown> = {}): P
     const payload = await response.json().catch(() => null);
     throw new Error(errorMessage(payload, path, response.status));
   }
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
@@ -127,6 +131,7 @@ async function putJson<T>(path: string, body: Record<string, unknown> = {}): Pro
     const payload = await response.json().catch(() => null);
     throw new Error(errorMessage(payload, path, response.status));
   }
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
@@ -222,6 +227,14 @@ export interface ProjectMemberAddPayload {
 
 export function addProjectMember(projectId: string, payload: ProjectMemberAddPayload): Promise<Project> {
   return postJson<Project>(`/projects/${projectId}/members/`, payload);
+}
+
+// Ouvre un projet individuel (lecteurs uniquement, voir ProjectPermissions
+// > can_convert_to_collaborative) à d'autres rôles en le faisant passer en
+// collaboratif — nécessite un groupe de rattachement, sens inverse non
+// proposé (voir apps.projects.services.convert_to_collaborative).
+export function convertProjectToCollaborative(projectId: string, teamId: string): Promise<Project> {
+  return postJson<Project>(`/projects/${projectId}/convert-to-collaborative/`, { team: teamId });
 }
 
 export function changeProjectMemberRole(

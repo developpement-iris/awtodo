@@ -10,6 +10,7 @@ class Task(UUIDModel, TimeStampedModel, StatusLifecycleModel):
         ("correction", "Correction"),
         ("ajout", "Ajout"),
         ("evolution", "Évolution"),
+        ("test", "Test"),
     ]
     ORIGIN_CHOICES = [
         ("manuelle", "Manuelle"),

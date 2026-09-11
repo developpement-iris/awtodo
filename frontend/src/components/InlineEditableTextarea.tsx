@@ -75,6 +75,9 @@ export function InlineEditableTextarea({
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {
+            // Voir InlineEditableText — un parent au clavier (Espace/Entrée)
+            // ne doit jamais recevoir les touches tapées pendant l'édition.
+            event.stopPropagation();
             if (event.key === "Escape") {
               event.preventDefault();
               cancel();

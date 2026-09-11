@@ -357,11 +357,14 @@ def create_task(
 ):
     _require_member(actor, project)
 
-    # Projet individuel : une seule personne travaille dessus, toute tâche
-    # lui revient — auto-assignée au créateur (session du 2026-09-10), plutôt
-    # que de passer par "disponible" / "en attente de validation" qui n'ont
-    # de sens qu'à plusieurs. Un assigné explicitement fourni (cas rare sur
-    # un projet individuel, mais possible via l'API) reste respecté.
+    # Projet individuel : une seule personne travaille dessus, toute tâche lui
+    # revient — auto-assignée au créateur (session du 2026-09-10). `actor` EST
+    # le créateur ici : depuis le 2026-09-11, un projet individuel ne peut
+    # accueillir personne d'autre que son chef de projet (le créateur) et des
+    # lecteurs (`_ensure_role_allowed_for_project_type`, apps.projects) — un
+    # lecteur n'étant pas contributeur, `_require_member` ci-dessus a déjà
+    # écarté quiconque d'autre. Un assigné explicitement fourni (cas rare,
+    # mais possible via l'API) reste respecté.
     if project.project_type == "individuel" and assignee is None:
         assignee = actor
 

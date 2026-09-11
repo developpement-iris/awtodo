@@ -11,6 +11,7 @@ from .filters import ProjectFilterSet
 from .models import Project, ProjectMembership, ProjectVersion
 from .serializers import (
     NON_REJECTED_TASK_STATUSES,
+    ProjectConvertToCollaborativeSerializer,
     ProjectCreateSerializer,
     ProjectInviteExternalSerializer,
     ProjectMemberAddSerializer,
@@ -30,6 +31,7 @@ from .services import (
     add_project_member,
     change_project_member_role,
     close_project,
+    convert_to_collaborative as convert_project_to_collaborative,
     create_project,
     create_project_version,
     get_spec_sections,
@@ -235,6 +237,21 @@ class ProjectViewSet(
 
         try:
             change_project_member_role(actor=request.user, membership=membership, role=serializer.validated_data["role"])
+        except ProjectPermissionError as exc:
+            return Response({"detail": str(exc)}, status=403)
+        except ProjectValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
+
+        return Response(self.get_serializer(project).data)
+
+    @action(detail=True, methods=["post"], url_path="convert-to-collaborative")
+    def convert_to_collaborative(self, request, pk=None):
+        project = self.get_object()
+        serializer = ProjectConvertToCollaborativeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            convert_project_to_collaborative(actor=request.user, project=project, **serializer.validated_data)
         except ProjectPermissionError as exc:
             return Response({"detail": str(exc)}, status=403)
         except ProjectValidationError as exc:
