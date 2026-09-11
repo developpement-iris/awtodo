@@ -264,8 +264,16 @@ export function PlanningPage() {
   }
 
   function handleItemClick(item: CalendarItem) {
-    if (item.kind === "event" || item.kind === "shared") {
+    if (item.kind === "event") {
       setDialog({ kind: "edit", eventId: item.id });
+    } else if (item.kind === "shared") {
+      // Événement d'un calendrier partagé : lecture seule. Pas d'appel à
+      // `getEvent` — le propriétaire n'est ni moi (owner) ni un participant,
+      // le endpoint est scopé à ces deux cas et renverrait 404 ("Impossible
+      // de charger l'événement"). Le détail utile (titre, propriétaire) est
+      // déjà sur l'item, chargé avec le calendrier — même traitement que les
+      // créneaux partagés ci-dessous.
+      showToast(`${item.title} — ${item.subtitle ?? "calendrier partagé"}`);
     } else if (item.kind === "block") {
       // Créneau d'un calendrier partagé : lecture seule, pas d'édition.
       if (!item.editable) {
