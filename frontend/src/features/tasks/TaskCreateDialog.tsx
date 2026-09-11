@@ -35,6 +35,12 @@ interface TaskCreateDialogProps {
   projects: Project[];
   users: User[];
   defaultProjectId?: string;
+  /** Assigné pré-rempli à l'ouverture — sur un projet individuel, le chef de
+   * projet appelant passe son propre id (voir `KanbanBoard`) : la tâche lui
+   * revient de toute façon automatiquement côté backend si le champ reste
+   * vide, mais le laisser sur "Non assignée" à l'écran donne l'impression
+   * (à tort) que l'auto-assignation ne fonctionne pas. */
+  defaultAssigneeId?: string;
   onCancel: () => void;
   onSubmit: (values: TaskCreateFormValues) => void;
   submitting?: boolean;
@@ -49,6 +55,7 @@ export function TaskCreateDialog({
   projects,
   users,
   defaultProjectId,
+  defaultAssigneeId,
   onCancel,
   onSubmit,
   submitting = false,
@@ -62,7 +69,7 @@ export function TaskCreateDialog({
     priority: "moyenne",
     deadline: "",
     external_reference_id: "",
-    assignee: "",
+    assignee: defaultAssigneeId ?? "",
     estimated_hours: "",
   });
 

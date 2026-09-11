@@ -336,6 +336,7 @@ export function KanbanBoard({ project, versionId }: KanbanBoardProps) {
           projects={[project]}
           users={projectMembers}
           defaultProjectId={project.id}
+          defaultAssigneeId={project.project_type === "individuel" ? currentUser?.id : undefined}
           submitting={createSubmitting}
           error={createError}
           onCancel={() => {
