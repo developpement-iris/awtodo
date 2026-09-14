@@ -16,6 +16,7 @@ from .serializers import (
     IncidentCreateSerializer,
     IncidentDetailSerializer,
     IncidentPriorityUpdateSerializer,
+    IncidentResolveSerializer,
     IncidentSerializer,
 )
 from .services import (
@@ -166,9 +167,11 @@ class IncidentViewSet(ListOnlyFilterMixin, mixins.ListModelMixin, mixins.Retriev
     @action(detail=True, methods=["post"])
     def resolve(self, request, pk=None):
         incident = self.get_object()
+        serializer = IncidentResolveSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
         try:
-            resolve_incident(actor=request.user, incident=incident)
+            resolve_incident(actor=request.user, incident=incident, **serializer.validated_data)
         except IncidentPermissionError as exc:
             return Response({"detail": str(exc)}, status=403)
         except IncidentValidationError as exc:

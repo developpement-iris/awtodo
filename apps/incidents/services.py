@@ -1,3 +1,5 @@
+from decimal import Decimal, InvalidOperation
+
 from apps.accounts.models import Team
 from apps.accounts.services import can_manage_team, is_active_team_member
 from apps.common.audit import record_changes
@@ -270,11 +272,28 @@ def start_incident(*, actor, incident):
     return incident
 
 
-def resolve_incident(*, actor, incident):
+def resolve_incident(*, actor, incident, resolution_comment, time_spent):
+    """Clôture le travail sur l'incident (signalé/en_cours → résolu) — même
+    patron que `apps.tasks.services.complete_task` : les deux champs sont
+    capturés dans le même petit pop-up (session du 2026-09-14), obligatoires
+    pour la même raison (documenter ce qui a été fait, savoir combien de
+    temps ça a coûté), pas dans un commentaire séparé."""
     _ensure_can_resolve(actor, incident)
+    if not resolution_comment or not resolution_comment.strip():
+        raise IncidentValidationError("Le commentaire de résolution est obligatoire.")
+    if time_spent is None or time_spent == "":
+        raise IncidentValidationError("Le temps passé est obligatoire pour résoudre un incident.")
+    try:
+        time_spent = Decimal(str(time_spent))
+    except InvalidOperation:
+        raise IncidentValidationError("Le temps passé doit être un nombre.")
+    if time_spent <= 0:
+        raise IncidentValidationError("Le temps passé doit être un nombre positif.")
 
     with record_changes(incident, actor=actor):
         incident.status = "resolu"
+        incident.resolution_comment = resolution_comment.strip()
+        incident.time_spent = time_spent
         incident.save()
     incident_resolved.send(sender=Incident, incident=incident, actor=actor)
     return incident

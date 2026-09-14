@@ -104,6 +104,15 @@ export function IncidentAccordion({
           </p>
         )}
 
+        {incident.resolution_comment && (
+          <div className="incident-accordion__resolution">
+            <span className="incident-accordion__resolution-label">
+              Résolution — {incident.time_spent ? `${incident.time_spent} h` : "—"}
+            </span>
+            <p>{incident.resolution_comment}</p>
+          </div>
+        )}
+
         <div className="incident-accordion__actions">
           {incident.permissions.can_start && (
             <motion.button

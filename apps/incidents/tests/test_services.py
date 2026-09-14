@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.test import TestCase
 
 from apps.accounts.models import Team, TeamMembership, User
@@ -150,21 +152,51 @@ class ResolveIncidentTests(IncidentServicesTestCase):
     def test_any_group_member_can_resolve(self):
         incident = self.make_incident(status="en_cours")
 
-        resolve_incident(actor=self.other_member, incident=incident)
+        resolve_incident(
+            actor=self.other_member, incident=incident, resolution_comment="Corrigé.", time_spent="2"
+        )
 
         self.assertEqual(incident.status, "resolu")
+        self.assertEqual(incident.resolution_comment, "Corrigé.")
+        self.assertEqual(incident.time_spent, Decimal("2"))
 
     def test_outsider_cannot_resolve(self):
         incident = self.make_incident(status="en_cours")
 
         with self.assertRaises(IncidentPermissionError):
-            resolve_incident(actor=self.outsider, incident=incident)
+            resolve_incident(
+                actor=self.outsider, incident=incident, resolution_comment="Corrigé.", time_spent="1"
+            )
 
     def test_cannot_resolve_from_wrong_status(self):
         incident = self.make_incident(status="signale")
 
         with self.assertRaises(IncidentValidationError):
-            resolve_incident(actor=self.member, incident=incident)
+            resolve_incident(
+                actor=self.member, incident=incident, resolution_comment="Corrigé.", time_spent="1"
+            )
+
+    def test_resolution_comment_is_required(self):
+        incident = self.make_incident(status="en_cours")
+
+        with self.assertRaises(IncidentValidationError):
+            resolve_incident(actor=self.member, incident=incident, resolution_comment="   ", time_spent="1")
+
+    def test_time_spent_is_required(self):
+        incident = self.make_incident(status="en_cours")
+
+        with self.assertRaises(IncidentValidationError):
+            resolve_incident(
+                actor=self.member, incident=incident, resolution_comment="Corrigé.", time_spent=None
+            )
+
+    def test_time_spent_must_be_positive(self):
+        incident = self.make_incident(status="en_cours")
+
+        with self.assertRaises(IncidentValidationError):
+            resolve_incident(
+                actor=self.member, incident=incident, resolution_comment="Corrigé.", time_spent="0"
+            )
 
 
 class ArchiveIncidentTests(IncidentServicesTestCase):

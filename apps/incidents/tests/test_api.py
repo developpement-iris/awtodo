@@ -108,10 +108,29 @@ class IncidentLifecycleApiTests(APITestCase):
     def test_member_resolves_incident(self):
         incident = self.make_incident("en_cours")
 
-        response = self.client.post(f"/api/v1/incidents/{incident.id}/resolve/", **self.as_user(self.member))
+        response = self.client.post(
+            f"/api/v1/incidents/{incident.id}/resolve/",
+            {"resolution_comment": "Correctif déployé.", "time_spent": "1.5"},
+            content_type="application/json",
+            **self.as_user(self.member),
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "resolu")
+        self.assertEqual(response.json()["resolution_comment"], "Correctif déployé.")
+        self.assertEqual(response.json()["time_spent"], "1.50")
+
+    def test_resolve_requires_comment_and_time_spent(self):
+        incident = self.make_incident("en_cours")
+
+        response = self.client.post(
+            f"/api/v1/incidents/{incident.id}/resolve/",
+            {},
+            content_type="application/json",
+            **self.as_user(self.member),
+        )
+
+        self.assertEqual(response.status_code, 400)
 
     def test_member_archives_incident(self):
         incident = self.make_incident("resolu")

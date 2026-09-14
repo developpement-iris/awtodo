@@ -82,6 +82,7 @@ Points importants sur ce cycle :
 - Statut : `signalé` → `en_cours` → `résolu` → `archivé` (jamais supprimé)
 - **`assigned_to`** (implémenté — session du 11/08/2026) : `User` nullable, `on_delete=PROTECT`. N'existait pas avant cette session (voir "Différence volontaire avec les tâches" ci-dessous, nuancée depuis) — sert uniquement de prérequis au changement de priorité, ne restreint aucune des transitions de statut existantes (`start`/`resolve`/`archive` restent ouvertes à tout membre du groupe, inchangé).
 - **Écran dédié séparé des tâches** côté frontend — ne pas mélanger les deux dans les mêmes vues/listes, même si le modèle de données peut partager des composants communs (mixins de statut, etc.)
+- **`resolution_comment` / `time_spent`** (implémenté — session du 2026-09-14) : `TextField` blank / `DecimalField` nullable (`max_digits=6, decimal_places=2`, mêmes bornes que `Task.time_spent`). Renseignés **obligatoirement** à la résolution (`POST .../resolve/`), capturés dans un petit pop-up frontend (`ResolveIncidentDialog`, même patron que `CompleteDialog` côté tâches) plutôt qu'un commentaire de plus dans le fil (`IncidentComment`, qui reste pour la discussion libre) — affichés ensuite sur l'incident une fois résolu (`IncidentAccordion`). Journalisés dans l'audit log comme tout champ modifié par `record_changes` (3 entrées par résolution : `status`, `resolution_comment`, `time_spent`).
 
 #### Boîte de réception des incidents non-affectés (implémenté — session du 07/08/2026)
 
@@ -228,7 +229,7 @@ Le SSO/gestion de comptes est volontairement mis en dernier dans la roadmap — 
 |---|---|---|
 | `POST /api/v1/incidents/` | membre du groupe attribué au projet **ou** du groupe direct (`team`, incident non-affecté — voir "Boîte de réception" ci-dessus) | crée l'incident, statut initial `signalé`. **Peut aussi être créé automatiquement via l'intégration ticketing** (voir note ci-dessous) — dans ce cas, pas de contrainte de groupe, l'appel vient du service account ticketing, pas d'un utilisateur. |
 | `POST /api/v1/incidents/{id}/start/` | n'importe quel membre du groupe | `signalé` → `en_cours` |
-| `POST /api/v1/incidents/{id}/resolve/` | n'importe quel membre du groupe | `en_cours` → `résolu` |
+| `POST /api/v1/incidents/{id}/resolve/` (session du 2026-09-14 : body devenu obligatoire) | n'importe quel membre du groupe | `en_cours` → `résolu`, body `{"resolution_comment": "...", "time_spent": "1.50"}` — les deux obligatoires, même patron que `complete_task` (clôture d'une tâche) |
 | `POST /api/v1/incidents/{id}/archive/` | n'importe quel membre du groupe | `résolu` → `archivé` (jamais supprimé) |
 | `GET /api/v1/incidents/inbox/` (session du 07/08/2026) | membre du groupe | liste les incidents non-affectés (`project=NULL`) du/des groupe(s) de l'acteur |
 | `POST /api/v1/incidents/{id}/assign-project/` (session du 07/08/2026) | membre du groupe source **et** du projet de destination | rattache un incident non-affecté à un projet, `team` repassé à `NULL` |

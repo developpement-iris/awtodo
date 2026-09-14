@@ -356,6 +356,10 @@ export interface Incident {
   /** Auteur du signalement transmis par l'outil de ticketing (vide sinon). */
   author_name: string;
   author_email: string;
+  /** Renseignés à la résolution (pop-up), vides tant que l'incident n'est
+   * pas passé par "resolu" — même patron que `Task.time_spent`. */
+  resolution_comment: string;
+  time_spent: string | null;
   created_at: string;
   permissions: IncidentPermissions;
 }

@@ -36,6 +36,8 @@ class IncidentSerializer(serializers.ModelSerializer):
             "assigned_to_name",
             "author_name",
             "author_email",
+            "resolution_comment",
+            "time_spent",
             "created_at",
             "permissions",
         ]
@@ -83,6 +85,11 @@ class IncidentCreateSerializer(serializers.Serializer):
     # externe) — jamais par le formulaire manuel "Signaler un incident".
     author_name = serializers.CharField(required=False, allow_blank=True, default="", max_length=200)
     author_email = serializers.EmailField(required=False, allow_blank=True, default="")
+
+
+class IncidentResolveSerializer(serializers.Serializer):
+    resolution_comment = serializers.CharField()
+    time_spent = serializers.DecimalField(max_digits=6, decimal_places=2, min_value=0)
 
 
 class IncidentAssignProjectSerializer(serializers.Serializer):

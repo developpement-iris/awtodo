@@ -34,7 +34,9 @@ class DocQueueSignalTests(TestCase):
         incident = Incident.objects.create(
             project=self.project, title="Panne export", status="en_cours"
         )
-        incident_services.resolve_incident(actor=self.mgr, incident=incident)
+        incident_services.resolve_incident(
+            actor=self.mgr, incident=incident, resolution_comment="Corrigé.", time_spent=Decimal("1")
+        )
         return incident
 
     def test_no_space_no_pending(self):
@@ -77,7 +79,9 @@ class DocQueueSignalTests(TestCase):
         incident = Incident.objects.create(
             project=self.project, title="Panne", status="en_cours"
         )
-        incident_services.resolve_incident(actor=self.mgr, incident=incident)
+        incident_services.resolve_incident(
+            actor=self.mgr, incident=incident, resolution_comment="Corrigé.", time_spent=Decimal("1")
+        )
         # Un second envoi manuel du signal ne doit pas créer un doublon.
         from apps.incidents.signals import incident_resolved
 

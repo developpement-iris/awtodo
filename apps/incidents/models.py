@@ -44,6 +44,13 @@ class Incident(UUIDModel, TimeStampedModel, StatusLifecycleModel):
     # l'auteur n'est pas forcément un compte Awtodo.
     author_name = models.CharField(max_length=200, blank=True, default="")
     author_email = models.EmailField(blank=True, default="")
+    # Renseignés à la résolution (session du 2026-09-14), même patron que
+    # `Task.time_spent`/la clôture d'une tâche — capturés dans un petit
+    # pop-up (voir `resolve_incident`) plutôt qu'un commentaire de plus dans
+    # le fil (`IncidentComment`) : c'est LE résumé de ce qui a été fait,
+    # affiché à part sur l'incident une fois résolu.
+    resolution_comment = models.TextField(blank=True, default="")
+    time_spent = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
 
     class Meta:
         default_manager_name = "all_objects"

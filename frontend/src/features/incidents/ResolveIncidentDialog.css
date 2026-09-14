@@ -1,0 +1,93 @@
+.resolve-incident-dialog__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(36, 28, 28, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.resolve-incident-dialog {
+  width: 100%;
+  max-width: 400px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-overlay);
+}
+
+.resolve-incident-dialog__title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: var(--space-4);
+  text-wrap: balance;
+}
+
+.resolve-incident-dialog__label {
+  display: block;
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-2);
+}
+
+.resolve-incident-dialog__label:not(:first-of-type) {
+  margin-top: var(--space-4);
+}
+
+.resolve-incident-dialog__textarea,
+.resolve-incident-dialog__input {
+  width: 100%;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  resize: vertical;
+}
+
+.resolve-incident-dialog__input {
+  font-variant-numeric: tabular-nums;
+}
+
+.resolve-incident-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.resolve-incident-dialog__cancel,
+.resolve-incident-dialog__confirm {
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.12s ease;
+}
+
+.resolve-incident-dialog__cancel {
+  background: none;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+.resolve-incident-dialog__confirm {
+  background: var(--tone-positive-bg);
+  border: 1px solid transparent;
+  color: var(--tone-positive-text);
+}
+
+.resolve-incident-dialog__confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.resolve-incident-dialog__confirm:not(:disabled):hover {
+  opacity: 0.85;
+}

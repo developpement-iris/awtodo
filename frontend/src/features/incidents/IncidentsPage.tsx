@@ -28,6 +28,7 @@ import { defaultStatusSelection, INCIDENT_STATUS_FILTER_OPTIONS } from "../../li
 import type { AuditLogEntry, Incident, IncidentComment, Project } from "../../types/watodo";
 import { IncidentAccordion } from "./IncidentAccordion";
 import { IncidentCreateDialog, type IncidentCreateFormValues } from "./IncidentCreateDialog";
+import { ResolveIncidentDialog } from "./ResolveIncidentDialog";
 import "./IncidentsPage.css";
 
 function buildCreatePayload(values: IncidentCreateFormValues): IncidentCreatePayload {
@@ -183,6 +184,8 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
   const [statusFilter, setStatusFilter] = useState(() => defaultStatusSelection(INCIDENT_STATUS_FILTER_OPTIONS));
   const [pendingIncidentId, setPendingIncidentId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [resolvingIncident, setResolvingIncident] = useState<Incident | null>(null);
+  const [resolveSubmitting, setResolveSubmitting] = useState(false);
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>(null);
@@ -325,15 +328,24 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
     }
   }
 
-  async function handleResolve(incident: Incident) {
+  // Ouvre le petit pop-up (commentaire de résolution + temps passé) plutôt
+  // que de résoudre instantanément — voir ResolveIncidentDialog.
+  function handleResolve(incident: Incident) {
     setActionError(null);
-    setPendingIncidentId(incident.id);
+    setResolvingIncident(incident);
+  }
+
+  async function handleConfirmResolve(resolutionComment: string, timeSpent: string) {
+    if (!resolvingIncident) return;
+    setResolveSubmitting(true);
+    setActionError(null);
     try {
-      updateIncidentLocally(await resolveIncident(incident.id));
+      updateIncidentLocally(await resolveIncident(resolvingIncident.id, { resolution_comment: resolutionComment, time_spent: timeSpent }));
+      setResolvingIncident(null);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "La résolution a échoué.");
     } finally {
-      setPendingIncidentId(null);
+      setResolveSubmitting(false);
     }
   }
 
@@ -582,6 +594,15 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
             setCreateError(null);
           }}
           onSubmit={handleCreate}
+        />
+      )}
+
+      {resolvingIncident && (
+        <ResolveIncidentDialog
+          incident={resolvingIncident}
+          submitting={resolveSubmitting}
+          onCancel={() => setResolvingIncident(null)}
+          onConfirm={handleConfirmResolve}
         />
       )}
     </div>

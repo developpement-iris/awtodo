@@ -23,10 +23,15 @@ class IncidentAuditServiceTests(TestCase):
 
     def test_two_transitions_produce_two_entries_in_order(self):
         start_incident(actor=self.member, incident=self.incident)
-        resolve_incident(actor=self.member, incident=self.incident)
+        resolve_incident(
+            actor=self.member, incident=self.incident, resolution_comment="Corrigé.", time_spent="1"
+        )
 
         entries = list(get_audit_log(self.incident))
-        self.assertEqual(len(entries), 2)
+        # 1 entrée pour le démarrage (status) + 3 pour la résolution (status,
+        # resolution_comment, time_spent — même patron que `complete_task`,
+        # qui journalise aussi `time_spent` en plus du statut).
+        self.assertEqual(len(entries), 4)
         self.assertEqual(entries[0].new_value, "En cours")
         self.assertEqual(entries[1].new_value, "Résolu")
 

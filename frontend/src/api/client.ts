@@ -427,8 +427,11 @@ export function startIncident(incidentId: string): Promise<Incident> {
   return postJson<Incident>(`/incidents/${incidentId}/start/`, {});
 }
 
-export function resolveIncident(incidentId: string): Promise<Incident> {
-  return postJson<Incident>(`/incidents/${incidentId}/resolve/`, {});
+export function resolveIncident(
+  incidentId: string,
+  payload: { resolution_comment: string; time_spent: string },
+): Promise<Incident> {
+  return postJson<Incident>(`/incidents/${incidentId}/resolve/`, payload);
 }
 
 export function archiveIncident(incidentId: string): Promise<Incident> {
