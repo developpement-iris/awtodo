@@ -7,7 +7,8 @@ Hiérarchie plateforme/organisation/projet/groupe, écrans d'administration, cyc
 **Statut : acté. Introduit une notion de groupe pour restreindre qui peut se voir attribuer une tâche sur un projet collaboratif.**
 
 - Un **Groupe** (modèle `Team`) est un ensemble d'utilisateurs, rattaché à une organisation (voir section "Organisation").
-- Un **projet collaboratif** est créé en l'attribuant à **un seul groupe** (`Project.team`, FK) — obligatoire pour un projet `collaboratif`, interdit (null) pour un projet `individuel`.
+- **Un utilisateur peut appartenir à plusieurs groupes simultanément** (précisé — session du 2026-09-16, confirmé plutôt qu'ajouté : `TeamMembership` n'a jamais eu de contrainte "un seul groupe actif par utilisateur", seulement `UniqueConstraint(team, user)` sur les lignes actives — voir modèle plus bas). Le frontend en tenait déjà compte à plusieurs endroits (`UserProfileDrawer` liste tous les groupes, `GroupsSection` n'exclut pas un utilisateur déjà membre d'un autre groupe) sauf le libellé du filtre Tâches global, corrigé à cette occasion (voir "Filtre sur l'écran Tâches global" ci-dessous).
+- Un **projet collaboratif** est créé en l'attribuant à **un seul groupe** (`Project.team`, FK) — obligatoire pour un projet `collaboratif`, interdit (null) pour un projet `individuel`. Ceci concerne le projet, pas l'utilisateur : rien n'empêche le chef de projet d'appartenir par ailleurs à d'autres groupes.
 - **Contrainte à la création d'une `ProjectMembership`** (créateur automatiquement désigné `chef_de_projet`, ou ajout de membre via l'onglet Administration — voir plus bas) : l'utilisateur concerné doit déjà être membre du groupe attribué au projet.
 - Conséquence sur la création de projet : à la création d'un projet collaboratif, le créateur doit choisir un groupe **dont il est déjà membre**.
 
@@ -24,7 +25,7 @@ Hiérarchie plateforme/organisation/projet/groupe, écrans d'administration, cyc
 
 Deux modes, via un filtre sur l'écran "Tâches" (liste simple, pas le Kanban) :
 - **"Mes tâches"** : tâches assignées à l'utilisateur courant — actionnable.
-- **"Tâches de mon groupe"** : tâches assignées à un autre membre d'un groupe dont l'utilisateur courant fait partie — **lecture seule**.
+- **"Tâches de mes groupes"** (libellé pluralisé — session du 2026-09-16, l'utilisateur peut appartenir à plusieurs groupes) : tâches assignées à un autre membre d'un groupe dont l'utilisateur courant fait partie — **lecture seule**. Un sélecteur de groupe (`Combobox`, `TasksListPage.tsx`) apparaît dès que l'utilisateur appartient à plus d'un groupe, pour choisir lequel parcourir — un groupe à la fois, pas d'agrégat multi-groupes dans cette liste.
 
 ## Organisation (nouveau — acté, session du soir)
 

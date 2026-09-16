@@ -224,7 +224,7 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
               className={`tasks-list-page__mode${mode === "team" ? " tasks-list-page__mode--active" : ""}`}
               onClick={() => setMode("team")}
             >
-              Tâches de mon groupe
+              Tâches de mes groupes
             </button>
           )}
         </div>
