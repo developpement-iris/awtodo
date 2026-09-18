@@ -382,7 +382,7 @@ def create_task(
         # Même conversion que `complete_task` pour `time_spent`.
         estimated_hours = Decimal(str(estimated_hours))
 
-    return Task.objects.create(
+    task = Task.objects.create(
         project=project,
         # Toujours la version courante du projet au moment de la création,
         # jamais choisie manuellement (voir docs/modeles-et-api.md >
@@ -399,6 +399,17 @@ def create_task(
         status=status,
         estimated_hours=estimated_hours,
     )
+    # Bug remonté (session du 2026-09-16) : contrairement à `assign_task`/
+    # `validate_task`, cette fonction n'a jamais émis `task_assigned` — une
+    # tâche créée avec un assigné explicite différent du créateur (chef de
+    # projet qui l'attribue directement dans le formulaire de création)
+    # n'avertissait donc jamais la personne assignée. `notify_task_assigned`
+    # (apps.notifications) ignore déjà le cas où l'assigné EST le créateur
+    # (auto-assignation sur un projet individuel), pas la peine de le
+    # reconditionner ici.
+    if task.assignee_id:
+        task_assigned.send(sender=Task, task=task, actor=actor)
+    return task
 
 
 def rename_task(*, actor, task, title):

@@ -21,6 +21,44 @@ Hiérarchie plateforme/organisation/projet/groupe, écrans d'administration, cyc
 - **`can_manage`** : nouveau flag calculé exposé sur `TeamSerializer` (voir CLAUDE.md > "Permissions API — flags calculés") — remplace le calcul client `team.created_by === currentUser.id` qui ne voyait pas les overrides admin. Nécessite que les actions du `TeamViewSet` utilisent `self.get_serializer(...)` plutôt qu'un `TeamSerializer(...)` instancié à la main (sinon pas de `request` dans le contexte du serializer, flag toujours faux) — corrigé au passage sur `create`/`members`/`members/remove`.
 - **Frontend** : le titre de chaque carte de groupe (`GroupsSection.tsx`) devient éditable au clic via `components/InlineEditableText.tsx` (déjà utilisé pour le titre des tâches) — le nom reste toujours visible (ce n'est pas un bouton d'action séparé à masquer), mais l'affordance d'édition (curseur texte, surbrillance au survol, `role="button"`) est simplement absente si `!team.can_manage` : rien à cliquer, sans que l'information elle-même disparaisse.
 
+### Rôle "administrateur de groupe" (implémenté — session du 2026-09-18)
+
+**Statut : implémenté.** Remontée directe : pouvoir désigner un administrateur **par groupe**, distinct de la notion déjà existante d'"administrateur du groupe" ci-dessus (créateur/admin d'organisation/admin de plateforme) — celle-ci reste inchangée et prioritaire, ce nouveau rôle s'y ajoute plutôt que de la remplacer.
+
+- **`TeamMembership.role`** (nouveau champ, `membre`/`administrateur`, défaut `membre`) — même patron que `ProjectMembership.role`. Contrairement aux projets, **pas de protection "dernier administrateur"** : `Team.created_by` reste une autorité permanente et séparée, un groupe n'est donc jamais bloqué sans gestionnaire.
+- **`_is_team_manager`** élargi : créateur du groupe **ou** admin d'organisation/plateforme **ou** `TeamMembership.role="administrateur"` sur ce groupe précis — les trois donnent les mêmes droits (ajout/retrait de membres, renommage, promotion/rétrogradation d'un autre membre).
+- **`POST /api/v1/accounts/teams/{id}/members/role/`** (nouveau) — body `{"membership": "<id>", "role": "membre"|"administrateur"}`, réservé à un administrateur du groupe (au sens élargi ci-dessus).
+- **Frontend** (`GroupsSection.tsx`) : nouveau champ `TeamSerializer.memberships` (`TeamMembership[]`, avec `role`/`role_display`) **en plus** du champ `members` existant (`User[]`, inchangé — toujours consommé par `ProjectAdminTab`/`ProjectCreateDialog`), pour ne rien casser des 3 usages déjà en place. Un gestionnaire de groupe voit un sélecteur de rôle par ligne de membre ; un non-gestionnaire voit un badge "Administrateur" en lecture seule quand applicable.
+
+### Coupure d'accès à l'organisation (implémenté — session du 2026-09-18)
+
+**Statut : implémenté.** Remontée directe : pouvoir couper l'accès de quelqu'un à l'organisation, réversible, réservé à un administrateur d'organisation (`apps.accounts.services.is_organisation_admin` — rôle qui existait déjà, contrairement à ce que la demande initiale supposait).
+
+- **Statut « désactivé » réversible** : 3ᵉ valeur de `User.account_status` (`pending`/`active`/`desactive`), plutôt qu'une suppression ou un simple flag booléen — cohérent avec le fait que `pending`/`active` sont déjà un cycle de statuts, pas des booléens isolés.
+- **`deactivate_account`/`reactivate_account`** (`apps/accounts/services.py`) : réservés à `is_organisation_admin`, bloquent l'auto-désactivation (on ne peut pas se couper soi-même l'accès), exigent le statut de départ attendu (`active`→désactivation, `desactive`→réactivation — pas de transition depuis `pending`, qui n'a pas encore de session à couper).
+- **Coupure immédiate des sessions déjà ouvertes** : désactiver met à jour `account_status` **et** `User.is_active` ensemble — `rest_framework_simplejwt` revérifie `is_active` à **chaque requête** (`JWTAuthentication.get_user`), donc un token JWT déjà émis cesse de fonctionner immédiatement, pas seulement les connexions futures.
+- **`authenticate_user` réécrit** pour ne plus passer par `django.contrib.auth.authenticate()`/`ModelBackend` : celui-ci retourne silencieusement `None` dès que `is_active=False`, ce qui aurait produit "Identifiants invalides." pour un compte désactivé au lieu d'un message clair — la fonction fait maintenant `check_password()` puis vérifie `account_status` explicitement, avec un message dédié ("Ce compte a été désactivé.").
+- **`POST /api/v1/accounts/users/{id}/deactivate/`** / **`.../reactivate/`** — 403 (`AccountPermissionError`) / 400 (`AccountValidationError`) sur échec.
+- **Frontend** (`MembersSection.tsx`) : colonne "Accès" (pastille de statut + libellé) et bouton Désactiver/Réactiver par ligne, masqué pour un compte `pending` (rien à couper) et pour sa propre ligne.
+
+### Écran Paramètres (implémenté — session du 2026-09-18)
+
+**Statut : implémenté.** Remontée directe, à l'occasion d'un audit des notifications (voir `docs/modeles-et-api.md` > "Notifications") : le bouton "Paramètres" de la topbar était un stub inerte (toast "Pas encore disponible"). Trois sections retenues avec l'utilisateur (pas d'autres suggestions ajoutées) :
+
+- **Changer son mot de passe** — `change_own_password` (`apps/accounts/services.py`), `check_password` puis `validate_password` (mêmes validateurs Django que `accept_invitation`/le reset), `POST /api/v1/accounts/me/change-password/`.
+- **Préférence de notification par email** — nouveau `User.email_notifications_enabled` (booléen, défaut `True`). Coupe uniquement l'envoi d'email (`send_notification_email` retourne tôt si désactivé) — **la cloche in-app reste toujours active**, ce réglage ne concerne que le canal email. `PATCH /api/v1/accounts/me/notification-preferences/`.
+- **Informations de compte en lecture seule** — identifiant, email, rôle d'organisation.
+- **`MeSerializer(UserSerializer)`** : sous-classe scopée à `/accounts/me/` et aux deux endpoints ci-dessus, seule à exposer `email_notifications_enabled` — **volontairement pas sur `UserSerializer`** de base, imbriqué partout (membres de projet/groupe, auteurs de commentaire) et visible par d'autres utilisateurs ; y ajouter ce champ aurait fuité la préférence de notification d'un utilisateur à ses collègues.
+- **Frontend** : `frontend/src/features/settings/SettingsDrawer.tsx` (+ `.css`), même patron de tiroir latéral que `UserProfileDrawer` (`position:fixed`, `justify-content:flex-end`, Échap pour fermer). Ouvert depuis `Topbar.tsx` (état local `settingsOpen`, remplace le stub `handlePlaceholderAction`).
+
+### Bug corrigé — assignation à la création d'une tâche ne notifiait pas (session du 2026-09-18)
+
+**Statut : corrigé.** Remontée initiale ("les notifications ne marchent pas") : `create_task` (`apps/tasks/services.py`) ne déclenchait jamais le signal `task_assigned`, contrairement à `assign_task`/`validate_task` qui le faisaient déjà. Une tâche créée directement avec un assigné (≠ créateur) ne notifiait donc personne — seule une **réassignation ultérieure** déclenchait une notification. `create_task` envoie désormais `task_assigned` quand `task.assignee_id` est renseigné à la création. Les 4 types d'événements existants (`task_assigned`/`task_commented`/`incident_commented`/`event_invited`) suffisaient déjà — pas de nouveau type ajouté, voir `docs/modeles-et-api.md` > "Notifications".
+
+### Accès à une tâche depuis le planning (implémenté — session du 2026-09-18)
+
+**Statut : implémenté.** Le dialogue d'édition d'un créneau (`BlockDialog.tsx`, ouvert au clic sur un bloc du calendrier) affiche désormais un lien "Ouvrir la tâche"/"Ouvrir l'incident" quand le créneau est rattaché à l'un ou l'autre — navigue vers l'écran Tâches/Incidents et ouvre directement la ligne concernée (`focusTaskId`/`focusIncidentId`, même mécanisme déjà utilisé par le clic sur une notification). `PlanningPage` reçoit un nouveau prop optionnel `onNavigate` (branché depuis `App.tsx`) ; le bouton reste masqué si absent plutôt que de proposer un clic sans effet.
+
 ### Filtre sur l'écran Tâches global
 
 Deux modes, via un filtre sur l'écran "Tâches" (liste simple, pas le Kanban) :

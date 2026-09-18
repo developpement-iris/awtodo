@@ -32,7 +32,7 @@ from django.core import mail
 from apps.accounts.models import Team, TeamMembership
 from apps.incidents.models import Incident
 from apps.tasks.services import add_comment as add_task_comment
-from apps.tasks.services import assign_task
+from apps.tasks.services import assign_task, create_task
 from apps.incidents.services import add_comment as add_incident_comment
 
 
@@ -98,6 +98,37 @@ class NotificationSignalIntegrationTests(TestCase):
 
         notification = Notification.objects.get(recipient=self.member, verb="incident_commented")
         self.assertIn("Panne réseau", notification.message)
+
+    def test_create_task_with_explicit_assignee_notifies(self):
+        # Bug remonté (session du 2026-09-16) : `create_task` n'émettait
+        # jamais `task_assigned`, contrairement à `assign_task`/`validate_task`
+        # — un chef de projet qui attribue directement la tâche à quelqu'un
+        # d'autre dès la création ne le prévenait jamais.
+        create_task(
+            actor=self.manager, project=self.project, title="Tâche assignée à la création",
+            task_type="correction", assignee=self.member,
+        )
+
+        self.assertTrue(Notification.objects.filter(recipient=self.member, verb="task_assigned").exists())
+
+    def test_create_task_assigned_to_self_does_not_notify(self):
+        create_task(
+            actor=self.manager, project=self.project, title="Tâche perso",
+            task_type="correction", assignee=self.manager,
+        )
+
+        self.assertFalse(Notification.objects.filter(verb="task_assigned").exists())
+
+    def test_email_notification_respects_preference(self):
+        self.member.email_notifications_enabled = False
+        self.member.save(update_fields=["email_notifications_enabled"])
+        mail.outbox.clear()
+
+        assign_task(actor=self.manager, task=self.task, assignee=self.member)
+
+        # La notification in-app reste créée — seul l'email est débrayé.
+        self.assertTrue(Notification.objects.filter(recipient=self.member, verb="task_assigned").exists())
+        self.assertEqual(len(mail.outbox), 0)
 
 
 from django.test import override_settings

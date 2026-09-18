@@ -1,9 +1,10 @@
 import { Search, Settings } from "lucide-react";
+import { useState } from "react";
 import awtodoLogo from "../assets/awtodo-logo.png";
 import { NotificationsDropdown } from "../components/NotificationsDropdown";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { UserMenu } from "../components/UserMenu";
-import { useToast } from "../context/ToastContext";
+import { SettingsDrawer } from "../features/settings/SettingsDrawer";
 import type { ViewName } from "../types/navigation";
 import "./Topbar.css";
 
@@ -26,14 +27,7 @@ export function Topbar({
   onNavigateHome,
   onNavigate,
 }: TopbarProps) {
-  const { showToast } = useToast();
-
-  // Notifications/Paramètres : hors périmètre v1 (voir CLAUDE.md), pas de
-  // fonctionnalité réelle derrière — un placeholder inerte serait trompeur,
-  // donc un accusé de réception explicite plutôt qu'un clic sans effet.
-  function handlePlaceholderAction() {
-    showToast("Pas encore disponible.");
-  }
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
     <header className="topbar">
@@ -69,7 +63,7 @@ export function Topbar({
         <button
           type="button"
           className="topbar__icon-btn"
-          onClick={handlePlaceholderAction}
+          onClick={() => setSettingsOpen(true)}
           aria-label="Paramètres"
           title="Paramètres"
         >
@@ -78,6 +72,8 @@ export function Topbar({
         <UserMenu onLoginClick={onLoginClick} />
         <ThemeToggle theme={theme} onToggle={onToggleTheme} />
       </div>
+
+      {settingsOpen && <SettingsDrawer onClose={() => setSettingsOpen(false)} />}
     </header>
   );
 }

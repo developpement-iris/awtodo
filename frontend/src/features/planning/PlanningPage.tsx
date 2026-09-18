@@ -23,6 +23,7 @@ import { SkeletonRows } from "../../components/Skeleton";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 import { useToast } from "../../context/ToastContext";
 import type { CalendarBundle, ScheduledBlock, Task } from "../../types/watodo";
+import type { ViewName } from "../../types/navigation";
 import { BlockDialog } from "./BlockDialog";
 import {
   addDays,
@@ -75,7 +76,11 @@ function UnscheduledTask({ task, blockCount }: { task: Task; blockCount: number 
   );
 }
 
-export function PlanningPage() {
+interface PlanningPageProps {
+  onNavigate?: (view: ViewName, options?: { taskId?: string; incidentId?: string }) => void;
+}
+
+export function PlanningPage({ onNavigate }: PlanningPageProps) {
   const { currentUser, users } = useCurrentUser();
   const { showToast } = useToast();
   const [view, setView] = useState<ViewMode>("week");
@@ -460,7 +465,23 @@ export function PlanningPage() {
         />
       )}
       {dialog?.kind === "block" && (
-        <BlockDialog block={dialog.block} onClose={() => setDialog(null)} onSaved={reload} />
+        <BlockDialog
+          block={dialog.block}
+          onClose={() => setDialog(null)}
+          onSaved={reload}
+          onOpenTarget={
+            onNavigate
+              ? () => {
+                  setDialog(null);
+                  if (dialog.block.task) {
+                    onNavigate("tasks", { taskId: dialog.block.task.id });
+                  } else if (dialog.block.incident) {
+                    onNavigate("incidents", { incidentId: dialog.block.incident.id });
+                  }
+                }
+              : undefined
+          }
+        />
       )}
       {dialog?.kind === "share" && <SharePanel onClose={() => setDialog(null)} onChanged={reload} />}
     </div>

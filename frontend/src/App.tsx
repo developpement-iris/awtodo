@@ -234,7 +234,7 @@ function App() {
           <ProjectDetailView project={route.project} onBack={() => setRoute({ name: "projects" })} />
         )}
         {route.name === "tasks" && <TasksListPage focusTaskId={route.focusTaskId} />}
-        {route.name === "planning" && <PlanningPage />}
+        {route.name === "planning" && <PlanningPage onNavigate={handleNavigate} />}
         {route.name === "incidents" && (
           <IncidentsPage createTrigger={createIncidentTrigger} focusIncidentId={route.focusIncidentId} />
         )}

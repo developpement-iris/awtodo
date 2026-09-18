@@ -1,13 +1,26 @@
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { addTeamMember, createTeam, getTeams, getUsers, removeTeamMember, renameTeam } from "../../api/client";
+import {
+  addTeamMember,
+  changeTeamMemberRole,
+  createTeam,
+  getTeams,
+  getUsers,
+  removeTeamMember,
+  renameTeam,
+} from "../../api/client";
 import { Combobox } from "../../components/Combobox";
 import { CreationCard } from "../../components/CreationCard";
 import { InlineEditableText } from "../../components/InlineEditableText";
 import { SkeletonCards } from "../../components/Skeleton";
 import { useToast } from "../../context/ToastContext";
-import type { Team, User } from "../../types/watodo";
+import type { Team, TeamMembershipRole, User } from "../../types/watodo";
 import "./GroupsSection.css";
+
+const ROLE_OPTIONS: { value: TeamMembershipRole; label: string }[] = [
+  { value: "membre", label: "Membre" },
+  { value: "administrateur", label: "Administrateur" },
+];
 
 interface GroupsSectionProps {
   currentUser: User;
@@ -81,6 +94,18 @@ export function GroupsSection({ currentUser }: GroupsSectionProps) {
     }
   }
 
+  async function handleChangeRole(team: Team, membershipId: string, role: TeamMembershipRole) {
+    setPendingTeamId(team.id);
+    setError(null);
+    try {
+      updateTeamLocally(await changeTeamMemberRole(team.id, membershipId, role));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Le changement de rôle a échoué.");
+    } finally {
+      setPendingTeamId(null);
+    }
+  }
+
   async function handleRemoveMember(team: Team, userId: string) {
     setPendingTeamId(team.id);
     setError(null);
@@ -132,24 +157,43 @@ export function GroupsSection({ currentUser }: GroupsSectionProps) {
                   />
                 </h3>
                 <ul className="groups-section__members">
-                  {team.members.map((member) => (
-                    <li key={member.id}>
-                      <span>{`${member.first_name} ${member.last_name}`.trim() || member.username}</span>
-                      {isManager && (
-                        <button
-                          type="button"
-                          className="groups-section__remove"
-                          onClick={() => handleRemoveMember(team, member.id)}
-                          disabled={pendingTeamId === team.id}
-                          aria-label="Retirer du groupe"
-                          title="Retirer du groupe"
-                        >
-                          <X size={13} strokeWidth={1.75} aria-hidden="true" />
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                  {team.members.length === 0 && <li className="groups-section__empty">Aucun membre.</li>}
+                  {team.memberships.map((membership) => {
+                    const member = membership.user;
+                    const name = `${member.first_name} ${member.last_name}`.trim() || member.username;
+                    return (
+                      <li key={membership.id}>
+                        <span>{name}</span>
+                        {isManager ? (
+                          <span className="groups-section__member-actions">
+                            <Combobox
+                              options={ROLE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                              value={membership.role}
+                              onChange={(role) =>
+                                handleChangeRole(team, membership.id, role as TeamMembershipRole)
+                              }
+                              disabled={pendingTeamId === team.id}
+                              clearable={false}
+                            />
+                            <button
+                              type="button"
+                              className="groups-section__remove"
+                              onClick={() => handleRemoveMember(team, member.id)}
+                              disabled={pendingTeamId === team.id}
+                              aria-label="Retirer du groupe"
+                              title="Retirer du groupe"
+                            >
+                              <X size={13} strokeWidth={1.75} aria-hidden="true" />
+                            </button>
+                          </span>
+                        ) : (
+                          membership.role === "administrateur" && (
+                            <span className="groups-section__role-badge">Administrateur</span>
+                          )
+                        )}
+                      </li>
+                    );
+                  })}
+                  {team.memberships.length === 0 && <li className="groups-section__empty">Aucun membre.</li>}
                 </ul>
 
                 {isManager && addableUsers.length > 0 && (

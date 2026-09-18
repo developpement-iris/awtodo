@@ -698,3 +698,33 @@ Un lecteur n'a **aucun accès** à l'onglet Communication — même portée que 
 Nouvel onglet « Communication » du hub projet (`frontend/src/features/communication/CommunicationTab.tsx`), réservé aux contributeurs. Trois blocs : (1) connexion Office 365 — résumé + formulaire d'édition réservé à un admin d'organisation (`currentUser.is_platform_admin || organisation_role === "admin"`) ; (2) canaux du projet — liste + formulaire d'ajout (chef de projet) avec `Combobox` pour le type et `Checkbox` (switch) pour `notify_incident_created` ; (3) rédaction (contributeurs, sélection des destinataires via une liste de switches — pas un `Combobox`, la sélection est multiple) + historique des messages (`StatusBadge` neutre, icône par statut). Bandeau explicite rappelant que l'envoi réel n'est pas encore actif. 532 → 544 tests backend, tous verts.
 
 **Limite v1 assumée** : le panneau « À planifier » ne liste que les **tâches** assignées à l'utilisateur (le sérialiseur `Incident` n'expose pas `assigned_to` côté API) — les blocs sur incident restent créables via l'API mais pas en glisser-déposer depuis l'UI.
+
+## Administrateur de groupe, coupure d'accès, Paramètres (session du 2026-09-18)
+
+Voir `docs/organisation-et-comptes.md` pour le détail produit de ces trois chantiers (« Rôle "administrateur de groupe" », « Coupure d'accès à l'organisation », « Écran Paramètres »). Référence API/modèles ici.
+
+**Modèles :**
+- `TeamMembership.role` (`membre`/`administrateur`, défaut `membre`).
+- `User.account_status` gagne une 3ᵉ valeur `desactive` (en plus de `pending`/`active`).
+- `User.email_notifications_enabled` (booléen, défaut `True`).
+
+### API — `/api/v1/accounts/`
+
+| Méthode / chemin | Effet |
+|---|---|
+| `POST /teams/{id}/members/role/` | `{"membership": "<id>", "role": "membre"\|"administrateur"}` — réservé à un administrateur du groupe |
+| `POST /users/{id}/deactivate/` | coupe l'accès (`account_status="desactive"` + `is_active=False`) — réservé à `is_organisation_admin`, refuse l'auto-désactivation |
+| `POST /users/{id}/reactivate/` | rétablit l'accès — réservé à `is_organisation_admin` |
+| `POST /me/change-password/` | `{"current_password", "new_password"}` — `AccountValidationError` (400) si le mot de passe actuel est faux ou le nouveau invalide (`AUTH_PASSWORD_VALIDATORS`) |
+| `PATCH /me/notification-preferences/` | `{"email_notifications_enabled": bool}` — renvoie `MeSerializer` |
+| `GET /me/` | renvoie désormais `MeSerializer` (ajoute `email_notifications_enabled` à `UserSerializer`, **scopé à ce endpoint et aux deux ci-dessus** — jamais sur `UserSerializer` de base, imbriqué et visible par d'autres utilisateurs) |
+
+`TeamSerializer` gagne `memberships` (`TeamMembership[]`, avec `role`/`role_display`) **en plus** de `members` (`User[]`, inchangé) — deux vues du même roster, `memberships` réservée à la gestion des rôles (`GroupsSection`), `members` conservée pour ses 3 consommateurs existants (`ProjectAdminTab`, `ProjectCreateDialog`, `GroupsSection` elle-même pour le picker d'ajout).
+
+### Notifications — correctif
+
+`create_task` (`apps/tasks/services.py`) émet désormais `task_assigned` quand la tâche est créée avec un `assignee` explicite (≠ créateur) — avant cette passe, seules `assign_task`/`validate_task` le faisaient, une tâche créée directement avec un assigné ne notifiait donc personne. Les 4 verbes existants (`task_assigned`/`task_commented`/`incident_commented`/`event_invited`) restent inchangés, aucun nouveau type ajouté. `send_notification_email` respecte désormais `User.email_notifications_enabled` (en plus du garde-fou déjà existant "pas d'email si le destinataire n'en a pas").
+
+### Planning — accès à une tâche/incident depuis un créneau
+
+`BlockDialog.tsx` affiche un lien "Ouvrir la tâche"/"Ouvrir l'incident" quand le créneau cliqué (`ScheduledBlock`) est rattaché à l'un ou l'autre — aucun nouvel endpoint, réutilise la navigation `onNavigate(view, {taskId|incidentId})` déjà câblée pour le clic sur une notification (`Topbar.tsx`). `PlanningPage` reçoit ce callback en prop optionnel depuis `App.tsx`.

@@ -1,6 +1,6 @@
 import { Search } from "lucide-react";
 import { useEffect, useState } from "react";
-import { getTeams, getUsers, setOrganisationRole } from "../../api/client";
+import { deactivateUser, getTeams, getUsers, reactivateUser, setOrganisationRole } from "../../api/client";
 import { Combobox } from "../../components/Combobox";
 import { SkeletonTable } from "../../components/Skeleton";
 import { useToast } from "../../context/ToastContext";
@@ -65,6 +65,20 @@ export function MembersSection({ currentUser }: MembersSectionProps) {
     }
   }
 
+  async function handleToggleAccess(user: User) {
+    setPendingUserId(user.id);
+    setError(null);
+    try {
+      const updated = user.account_status === "desactive" ? await reactivateUser(user.id) : await deactivateUser(user.id);
+      setUsers((current) => (current ? current.map((u) => (u.id === updated.id ? updated : u)) : current));
+      showToast(updated.account_status === "desactive" ? "Accès coupé." : "Accès rétabli.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "L'opération a échoué.");
+    } finally {
+      setPendingUserId(null);
+    }
+  }
+
   return (
     <div className="members-section">
       <div className="members-section__toolbar">
@@ -92,6 +106,7 @@ export function MembersSection({ currentUser }: MembersSectionProps) {
             <tr>
               <th>Utilisateur</th>
               <th>Rôle dans l'organisation</th>
+              <th>Accès</th>
               <th></th>
             </tr>
           </thead>
@@ -118,7 +133,32 @@ export function MembersSection({ currentUser }: MembersSectionProps) {
                     />
                   </span>
                 </td>
-                <td></td>
+                <td>
+                  <span
+                    className={`members-section__access-dot members-section__access-dot--${user.account_status}`}
+                  />
+                  {user.account_status_display}
+                </td>
+                <td onClick={(event) => event.stopPropagation()}>
+                  {/* Un compte "en attente" (jamais activé via invitation) n'a
+                      rien à désactiver — voir `deactivate_account`, réservé
+                      aux comptes actifs — et personne ne peut couper son
+                      propre accès (protection contre l'auto-verrouillage). */}
+                  {user.account_status !== "pending" && user.id !== currentUser.id && (
+                    <button
+                      type="button"
+                      className={
+                        user.account_status === "desactive"
+                          ? "members-section__access-action"
+                          : "members-section__access-action members-section__access-action--danger"
+                      }
+                      onClick={() => handleToggleAccess(user)}
+                      disabled={pendingUserId === user.id}
+                    >
+                      {user.account_status === "desactive" ? "Réactiver" : "Désactiver"}
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

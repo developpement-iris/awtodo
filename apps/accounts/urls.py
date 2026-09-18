@@ -2,9 +2,11 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    ChangePasswordView,
     InvitationViewSet,
     LoginView,
     MeView,
+    NotificationPreferencesView,
     OrganisationViewSet,
     PasswordResetConfirmView,
     PasswordResetRequestView,
@@ -22,6 +24,8 @@ router.register("invitations", InvitationViewSet, basename="invitation")
 urlpatterns = router.urls + [
     path("login/", LoginView.as_view(), name="login"),
     path("me/", MeView.as_view(), name="me"),
+    path("me/change-password/", ChangePasswordView.as_view(), name="change-password"),
+    path("me/notification-preferences/", NotificationPreferencesView.as_view(), name="notification-preferences"),
     # `<uuid:token>` plutôt qu'un ViewSet routé : évite toute ambiguïté avec
     # `password-reset/request/` (un routeur DRF classique sur `token` capture
     # n'importe quel segment, y compris littéralement "request").

@@ -9,9 +9,11 @@ interface BlockDialogProps {
   block: ScheduledBlock;
   onClose: () => void;
   onSaved: () => void;
+  /** Absent si l'écran appelant ne sait pas naviguer (garde le bouton masqué plutôt que sans effet). */
+  onOpenTarget?: () => void;
 }
 
-export function BlockDialog({ block, onClose, onSaved }: BlockDialogProps) {
+export function BlockDialog({ block, onClose, onSaved, onOpenTarget }: BlockDialogProps) {
   const [start, setStart] = useState(isoToLocalInput(block.start));
   const [end, setEnd] = useState(isoToLocalInput(block.end));
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +71,11 @@ export function BlockDialog({ block, onClose, onSaved }: BlockDialogProps) {
             {block.task ? "Tâche" : "Incident"}
             {block.task ? ` — ${block.task.status_display}` : ""}
           </p>
+          {onOpenTarget && (
+            <button type="button" className="planning-dialog__link" onClick={onOpenTarget}>
+              {block.task ? "Ouvrir la tâche" : "Ouvrir l'incident"}
+            </button>
+          )}
 
           <div className="planning-field-row">
             <label className="planning-field">

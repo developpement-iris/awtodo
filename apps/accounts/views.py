@@ -10,10 +10,13 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import Invitation, Organisation, PasswordResetRequest, Team, User
 from .serializers import (
+    ChangePasswordSerializer,
     InvitationAcceptSerializer,
     InvitationCreateSerializer,
     InvitationSerializer,
     LoginSerializer,
+    MeSerializer,
+    NotificationPreferencesSerializer,
     OrganisationCreateSerializer,
     OrganisationRoleUpdateSerializer,
     OrganisationSerializer,
@@ -21,6 +24,7 @@ from .serializers import (
     PasswordResetRequestSerializer,
     PasswordResetTokenSerializer,
     TeamCreateSerializer,
+    TeamMemberRoleSerializer,
     TeamMemberSerializer,
     TeamRenameSerializer,
     TeamSerializer,
@@ -32,15 +36,20 @@ from .services import (
     accept_invitation,
     add_team_member,
     authenticate_user,
+    change_own_password,
+    change_team_member_role,
     confirm_password_reset,
     create_invitation,
     create_organisation,
     create_team,
+    deactivate_account,
+    reactivate_account,
     remove_team_member,
     rename_team,
     request_password_reset,
     resend_invitation,
     set_organisation_role,
+    update_notification_preferences,
 )
 
 
@@ -67,7 +76,7 @@ class LoginView(APIView):
             {
                 "access": str(refresh.access_token),
                 "refresh": str(refresh),
-                "user": UserSerializer(user).data,
+                "user": MeSerializer(user).data,
             }
         )
 
@@ -81,7 +90,39 @@ class MeView(APIView):
     def get(self, request):
         if not request.user or not request.user.is_authenticated:
             return Response({"detail": "Utilisateur non identifié."}, status=401)
-        return Response(UserSerializer(request.user).data)
+        return Response(MeSerializer(request.user).data)
+
+
+class ChangePasswordView(APIView):
+    """Écran Paramètres (session du 2026-09-16) — connecté, distinct du flux
+    « mot de passe oublié » (public, voir `PasswordResetRequestView`)."""
+
+    def post(self, request):
+        if not request.user or not request.user.is_authenticated:
+            return Response({"detail": "Utilisateur non identifié."}, status=401)
+        serializer = ChangePasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            change_own_password(actor=request.user, **serializer.validated_data)
+        except AccountValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
+
+        return Response({"detail": "Mot de passe mis à jour."})
+
+
+class NotificationPreferencesView(APIView):
+    """Écran Paramètres (session du 2026-09-16) — un seul réglage pour
+    l'instant (envoi par email), voir `User.email_notifications_enabled`."""
+
+    def patch(self, request):
+        if not request.user or not request.user.is_authenticated:
+            return Response({"detail": "Utilisateur non identifié."}, status=401)
+        serializer = NotificationPreferencesSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        updated = update_notification_preferences(actor=request.user, **serializer.validated_data)
+        return Response(MeSerializer(updated).data)
 
 
 class PasswordResetRequestView(APIView):
@@ -175,6 +216,32 @@ class UserViewSet(ReadOnlyModelViewSet):
 
         return Response(UserSerializer(updated).data)
 
+    @action(detail=True, methods=["post"])
+    def deactivate(self, request, pk=None):
+        target_user = self.get_object()
+
+        try:
+            updated = deactivate_account(actor=request.user, target_user=target_user)
+        except AccountPermissionError as exc:
+            return Response({"detail": str(exc)}, status=403)
+        except AccountValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
+
+        return Response(UserSerializer(updated).data)
+
+    @action(detail=True, methods=["post"])
+    def reactivate(self, request, pk=None):
+        target_user = self.get_object()
+
+        try:
+            updated = reactivate_account(actor=request.user, target_user=target_user)
+        except AccountPermissionError as exc:
+            return Response({"detail": str(exc)}, status=403)
+        except AccountValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
+
+        return Response(UserSerializer(updated).data)
+
 
 class TeamViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
     queryset = Team.objects.active()
@@ -207,6 +274,25 @@ class TeamViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.Gen
             return Response({"detail": str(exc)}, status=400)
 
         return Response(self.get_serializer(team).data, status=201)
+
+    @action(detail=True, methods=["post"], url_path="members/role")
+    def member_role(self, request, pk=None):
+        team = self.get_object()
+        serializer = TeamMemberRoleSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        membership = serializer.validated_data["membership"]
+
+        if membership.team_id != team.id:
+            return Response({"detail": "Cette adhésion n'appartient pas à ce groupe."}, status=400)
+
+        try:
+            change_team_member_role(actor=request.user, membership=membership, role=serializer.validated_data["role"])
+        except AccountPermissionError as exc:
+            return Response({"detail": str(exc)}, status=403)
+        except AccountValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
+
+        return Response(self.get_serializer(team).data)
 
     @action(detail=True, methods=["post"], url_path="members/remove")
     def remove_member(self, request, pk=None):

@@ -7,6 +7,7 @@ from apps.accounts.services import (
     AccountValidationError,
     add_team_member,
     can_manage_team,
+    change_team_member_role,
     create_team,
     remove_team_member,
     rename_team,
@@ -153,6 +154,56 @@ class TeamManagementOverrideTests(TestCase):
         self.assertFalse(can_manage_team(None, self.team))
 
 
+class TeamAdministratorRoleTests(TestCase):
+    """« Administrateur de groupe » nommable par groupe (session du
+    2026-09-16) — `TeamMembership.role`, à ne pas confondre avec
+    `TeamManagementOverrideTests` ci-dessus (org admin/plateforme, portée
+    plus large et déjà existante)."""
+
+    def setUp(self):
+        self.org = Organisation.objects.create(name="Org A")
+        self.creator = User.objects.create_user(
+            username="creator3", organisation=self.org, organisation_role="chef_de_projet"
+        )
+        self.team = create_team(actor=self.creator, name="Équipe Rôle")
+        self.plain_member = User.objects.create_user(username="plain3", organisation=self.org)
+        add_team_member(actor=self.creator, team=self.team, user=self.plain_member)
+        self.membership = TeamMembership.objects.get(team=self.team, user=self.plain_member)
+        self.outsider = User.objects.create_user(username="outsider3", organisation=self.org)
+
+    def test_creator_promotes_member_to_group_admin(self):
+        updated = change_team_member_role(actor=self.creator, membership=self.membership, role="administrateur")
+
+        self.assertEqual(updated.role, "administrateur")
+
+    def test_promoted_member_can_then_manage_the_team(self):
+        change_team_member_role(actor=self.creator, membership=self.membership, role="administrateur")
+
+        self.assertTrue(can_manage_team(self.plain_member, self.team))
+        add_team_member(actor=self.plain_member, team=self.team, user=self.outsider)
+        self.assertTrue(TeamMembership.objects.filter(team=self.team, user=self.outsider).exists())
+
+    def test_demoting_back_to_member_revokes_management(self):
+        change_team_member_role(actor=self.creator, membership=self.membership, role="administrateur")
+        change_team_member_role(actor=self.creator, membership=self.membership, role="membre")
+
+        self.assertFalse(can_manage_team(self.plain_member, self.team))
+
+    def test_plain_member_cannot_promote_anyone(self):
+        with self.assertRaises(AccountPermissionError):
+            change_team_member_role(actor=self.outsider, membership=self.membership, role="administrateur")
+
+    def test_invalid_role_rejected(self):
+        with self.assertRaises(AccountValidationError):
+            change_team_member_role(actor=self.creator, membership=self.membership, role="chef_supreme")
+
+    def test_creator_keeps_management_even_when_demoted_to_plain_role(self):
+        # Le créateur n'a jamais de TeamMembership.role="administrateur" à
+        # promouvoir — sa capacité à gérer le groupe vient de `created_by`,
+        # jamais de ce champ (voir docstring `_is_team_manager`).
+        self.assertTrue(can_manage_team(self.creator, self.team))
+
+
 @override_settings(
     DEBUG=True,
     REST_FRAMEWORK={
@@ -248,3 +299,40 @@ class TeamApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, 403)
+
+    def test_member_role_via_api(self):
+        create_response = self.client.post(
+            "/api/v1/accounts/teams/", {"name": "Équipe Rôle API"}, **self.as_user(self.admin)
+        )
+        team_id = create_response.json()["id"]
+        self.client.post(
+            f"/api/v1/accounts/teams/{team_id}/members/",
+            {"user": str(self.member.id)},
+            content_type="application/json",
+            **self.as_user(self.admin),
+        )
+        membership_id = TeamMembership.objects.get(team_id=team_id, user=self.member).id
+
+        response = self.client.post(
+            f"/api/v1/accounts/teams/{team_id}/members/role/",
+            {"membership": str(membership_id), "role": "administrateur"},
+            content_type="application/json",
+            **self.as_user(self.admin),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        updated = next(m for m in response.json()["memberships"] if m["id"] == str(membership_id))
+        self.assertEqual(updated["role"], "administrateur")
+
+    def test_team_response_still_exposes_flat_members_list(self):
+        # `members` (User[]) reste inchangé — consommé ailleurs (sélecteurs de
+        # projet) — `memberships` (TeamMembership[]) est le nouvel ajout.
+        create_response = self.client.post(
+            "/api/v1/accounts/teams/", {"name": "Équipe Compat"}, **self.as_user(self.admin)
+        )
+        data = create_response.json()
+        self.assertIn("members", data)
+        self.assertIn("memberships", data)
+        self.assertEqual(data["members"][0]["username"], "admin2")
+        self.assertEqual(data["memberships"][0]["user"]["username"], "admin2")
+        self.assertEqual(data["memberships"][0]["role"], "membre")

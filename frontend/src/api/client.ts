@@ -24,6 +24,7 @@ import type {
   IncidentDetail,
   Invitation,
   LoginResponse,
+  Me,
   Notification,
   Organisation,
   PasswordResetToken,
@@ -38,6 +39,7 @@ import type {
   TaskDetail,
   TaskInsights,
   Team,
+  TeamMembershipRole,
   User,
 } from "../types/watodo";
 
@@ -280,6 +282,14 @@ export function renameTeam(teamId: string, name: string): Promise<Team> {
   return patchJson<Team>(`/accounts/teams/${teamId}/rename/`, { name });
 }
 
+export function changeTeamMemberRole(
+  teamId: string,
+  membershipId: string,
+  role: TeamMembershipRole,
+): Promise<Team> {
+  return postJson<Team>(`/accounts/teams/${teamId}/members/role/`, { membership: membershipId, role });
+}
+
 export function setOrganisationRole(userId: string, role: User["organisation_role"]): Promise<User> {
   return patchJson<User>(`/accounts/users/${userId}/organisation-role/`, { organisation_role: role });
 }
@@ -351,8 +361,33 @@ export function login(username: string, password: string): Promise<LoginResponse
   return postJson<LoginResponse>("/accounts/login/", { username, password });
 }
 
-export function getMe(): Promise<User> {
-  return getJson<User>("/accounts/me/");
+export function getMe(): Promise<Me> {
+  return getJson<Me>("/accounts/me/");
+}
+
+// Écran Paramètres — session du 2026-09-16. `changePassword` est distinct du
+// flux « mot de passe oublié » (déconnecté, voir `requestPasswordReset`).
+export function changePassword(currentPassword: string, newPassword: string): Promise<{ detail: string }> {
+  return postJson<{ detail: string }>("/accounts/me/change-password/", {
+    current_password: currentPassword,
+    new_password: newPassword,
+  });
+}
+
+export function updateNotificationPreferences(emailNotificationsEnabled: boolean): Promise<Me> {
+  return patchJson<Me>("/accounts/me/notification-preferences/", {
+    email_notifications_enabled: emailNotificationsEnabled,
+  });
+}
+
+// Couper/rétablir l'accès d'un compte de l'organisation — réservé à un admin
+// d'organisation/plateforme (voir docs/organisation-et-comptes.md).
+export function deactivateUser(userId: string): Promise<User> {
+  return postJson<User>(`/accounts/users/${userId}/deactivate/`, {});
+}
+
+export function reactivateUser(userId: string): Promise<User> {
+  return postJson<User>(`/accounts/users/${userId}/reactivate/`, {});
 }
 
 interface TaskFilters {

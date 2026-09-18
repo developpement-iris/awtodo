@@ -13,8 +13,16 @@ export interface User {
   is_platform_admin: boolean;
   account_type: "interne" | "externe";
   account_type_display: string;
-  account_status: "pending" | "active";
+  account_status: "pending" | "active" | "desactive";
   account_status_display: string;
+}
+
+// `User` + préférences strictement personnelles — renvoyé uniquement par
+// `/accounts/me/` et les deux endpoints de l'écran Paramètres (jamais nested
+// ailleurs, voir `MeSerializer` côté backend : pas la peine de le savoir
+// pour un autre utilisateur).
+export interface Me extends User {
+  email_notifications_enabled: boolean;
 }
 
 // Connexion par mot de passe — voir docs/organisation-et-comptes.md >
@@ -54,15 +62,28 @@ export interface Organisation {
   created_at: string;
 }
 
+export type TeamMembershipRole = "membre" | "administrateur";
+
+export interface TeamMembership {
+  id: string;
+  user: User;
+  role: TeamMembershipRole;
+  role_display: string;
+}
+
 export interface Team {
   id: string;
   name: string;
   description: string;
   organisation: string;
   created_by: string | null;
+  // Liste plate — utilisée pour peupler des sélecteurs ailleurs (création de
+  // projet, admin d'un projet). Pour le rôle par membre, voir `memberships`.
   members: User[];
-  // Créateur du groupe OU admin d'organisation/de plateforme — voir
-  // docs/organisation-et-comptes.md > "Groupes" > administration.
+  memberships: TeamMembership[];
+  // Créateur du groupe, admin d'organisation/de plateforme, OU un membre
+  // promu `role="administrateur"` sur CE groupe (session du 2026-09-16) —
+  // voir docs/organisation-et-comptes.md > "Groupes" > administration.
   can_manage: boolean;
 }
 

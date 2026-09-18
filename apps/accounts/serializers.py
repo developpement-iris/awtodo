@@ -56,17 +56,57 @@ class OrganisationRoleUpdateSerializer(serializers.Serializer):
     organisation_role = serializers.ChoiceField(choices=ORGANISATION_ROLE_CHOICES)
 
 
+class MeSerializer(UserSerializer):
+    """`UserSerializer` + préférences strictement personnelles (session du
+    2026-09-16) — volontairement PAS sur `UserSerializer` de base : ce
+    dernier est nested un peu partout (membres de projet/groupe, auteur d'un
+    commentaire...), `email_notifications_enabled` n'a de sens que pour
+    l'intéressé lui-même. Utilisé par `MeView` et les deux endpoints de
+    l'écran Paramètres (mot de passe, préférences)."""
+
+    class Meta(UserSerializer.Meta):
+        fields = UserSerializer.Meta.fields + ["email_notifications_enabled"]
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    current_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True)
+
+
+class NotificationPreferencesSerializer(serializers.Serializer):
+    email_notifications_enabled = serializers.BooleanField()
+
+
+class TeamMembershipSerializer(serializers.ModelSerializer):
+    """Vue « adhésion » d'un membre de groupe (utilisateur + rôle) — voir
+    `TeamSerializer.memberships`, distinct de `TeamSerializer.members`
+    (liste d'utilisateurs bruts, déjà consommée ailleurs pour peupler des
+    sélecteurs — pas touchée pour ne rien casser)."""
+
+    user = UserSerializer(read_only=True)
+    role_display = serializers.CharField(source="get_role_display", read_only=True)
+
+    class Meta:
+        model = TeamMembership
+        fields = ["id", "user", "role", "role_display"]
+
+
 class TeamSerializer(serializers.ModelSerializer):
     members = serializers.SerializerMethodField()
+    memberships = serializers.SerializerMethodField()
     can_manage = serializers.SerializerMethodField()
 
     class Meta:
         model = Team
-        fields = ["id", "name", "description", "organisation", "created_by", "members", "can_manage"]
+        fields = ["id", "name", "description", "organisation", "created_by", "members", "memberships", "can_manage"]
 
     def get_members(self, obj):
         member_ids = TeamMembership.objects.filter(team=obj).values_list("user_id", flat=True)
         return UserSerializer(User.objects.filter(id__in=member_ids), many=True).data
+
+    def get_memberships(self, obj):
+        memberships = TeamMembership.objects.filter(team=obj).select_related("user")
+        return TeamMembershipSerializer(memberships, many=True).data
 
     def get_can_manage(self, obj):
         # Voir CLAUDE.md > "Permissions API — flags calculés" : une seule
@@ -83,6 +123,11 @@ class TeamCreateSerializer(serializers.Serializer):
 
 class TeamMemberSerializer(serializers.Serializer):
     user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
+
+
+class TeamMemberRoleSerializer(serializers.Serializer):
+    membership = serializers.PrimaryKeyRelatedField(queryset=TeamMembership.objects.all())
+    role = serializers.ChoiceField(choices=TeamMembership.ROLE_CHOICES)
 
 
 class TeamRenameSerializer(serializers.Serializer):

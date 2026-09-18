@@ -3,7 +3,6 @@ import re
 from contextlib import contextmanager
 
 from django.conf import settings
-from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.mail import send_mail
@@ -76,11 +75,24 @@ def authenticate_user(*, username, password):
     à écrire. `AccountValidationError` (pas `AccountPermissionError`) : c'est
     une saisie utilisateur incorrecte, pas un problème de droits — cohérent
     avec le découpage 400/403 déjà en place ailleurs dans ce fichier."""
-    user = authenticate(username=username, password=password)
-    if user is None:
+    # Vérifié à la main plutôt que via `django.contrib.auth.authenticate()`
+    # (session du 2026-09-16) : le backend par défaut refuse un utilisateur
+    # `is_active=False` *avant* toute autre vérification et renvoie `None`
+    # sans distinction — un compte désactivé (voir `deactivate_account`,
+    # qui met `is_active=False` en plus de `account_status`) afficherait
+    # alors le même "Identifiants invalides." qu'un mauvais mot de passe.
+    # Ici le mot de passe est vérifié en premier (message uniforme si faux),
+    # puis le statut donne un message précis.
+    try:
+        user = User.objects.get(username=username)
+    except User.DoesNotExist:
         raise AccountValidationError("Identifiants invalides.")
-    if user.account_status != "active":
+    if not user.check_password(password):
+        raise AccountValidationError("Identifiants invalides.")
+    if user.account_status == "pending":
         raise AccountValidationError("Ce compte n'est pas encore activé.")
+    if user.account_status != "active":
+        raise AccountValidationError("Ce compte a été désactivé.")
     return user
 
 
@@ -174,8 +186,16 @@ def _is_team_manager(actor, team):
     `organisation_role=admin` sur les invitations...). Élargit volontairement
     la règle précédente ("réservé au créateur du groupe") : un admin
     d'organisation ou de plateforme doit pouvoir gérer n'importe quel groupe,
-    pas seulement ceux qu'il a lui-même créés."""
-    return team.created_by_id == actor.id or actor.is_platform_admin or actor.organisation_role == "admin"
+    pas seulement ceux qu'il a lui-même créés. **Élargi le 2026-09-16** : un
+    membre promu `role="administrateur"` sur CE groupe précis (via
+    `change_team_member_role`) gère aussi le groupe, sans être admin de toute
+    l'organisation — portée volontairement plus étroite que les deux
+    premiers cas."""
+    if team.created_by_id == actor.id or actor.is_platform_admin or actor.organisation_role == "admin":
+        return True
+    return TeamMembership.objects.filter(
+        team=team, user=actor, status="active", role="administrateur"
+    ).exists()
 
 
 def _ensure_can_manage_team(actor, team):
@@ -203,6 +223,68 @@ def is_organisation_admin(user, organisation=None):
     if getattr(user, "organisation_role", None) != "admin":
         return False
     return organisation is None or user.organisation_id == getattr(organisation, "id", organisation)
+
+
+def deactivate_account(*, actor, target_user):
+    """Coupe l'accès d'un compte de l'organisation (session du 2026-09-16) —
+    réversible (`reactivate_account`), aucune donnée touchée (tâches,
+    memberships... restent en l'état, la personne disparaît juste des flux
+    d'authentification). Réservé à un admin d'organisation/plateforme, même
+    portée que `set_organisation_role`.
+
+    `is_active=False` en plus de `account_status` : c'est ce champ que
+    `rest_framework_simplejwt` vérifie à *chaque requête* pour un token déjà
+    émis (voir `authenticate_user` pour pourquoi le login par mot de passe,
+    lui, ne s'appuie plus sur ce champ) — sans lui, une session déjà ouverte
+    ne serait coupée qu'à l'expiration du token (jusqu'à 8h, voir
+    `SIMPLE_JWT`), pas immédiatement."""
+    if not is_organisation_admin(actor, target_user.organisation):
+        raise AccountPermissionError("Seul un administrateur d'organisation peut désactiver un compte.")
+    if target_user.id == actor.id:
+        raise AccountValidationError("Vous ne pouvez pas désactiver votre propre compte.")
+    if target_user.account_status != "active":
+        raise AccountValidationError("Seul un compte actif peut être désactivé.")
+
+    target_user.account_status = "desactive"
+    target_user.is_active = False
+    target_user.save(update_fields=["account_status", "is_active"])
+    return target_user
+
+
+def reactivate_account(*, actor, target_user):
+    if not is_organisation_admin(actor, target_user.organisation):
+        raise AccountPermissionError("Seul un administrateur d'organisation peut réactiver un compte.")
+    if target_user.account_status != "desactive":
+        raise AccountValidationError("Seul un compte désactivé peut être réactivé.")
+
+    target_user.account_status = "active"
+    target_user.is_active = True
+    target_user.save(update_fields=["account_status", "is_active"])
+    return target_user
+
+
+def change_own_password(*, actor, current_password, new_password):
+    """Changement de mot de passe en étant déjà connecté (écran Paramètres,
+    session du 2026-09-16) — distinct du flux « mot de passe oublié »
+    (`request_password_reset`/`confirm_password_reset`, sans session)."""
+    _require_actor(actor)
+    if not actor.check_password(current_password):
+        raise AccountValidationError("Mot de passe actuel incorrect.")
+    try:
+        validate_password(new_password, user=actor)
+    except DjangoValidationError as exc:
+        raise AccountValidationError(" ".join(exc.messages))
+
+    actor.set_password(new_password)
+    actor.save(update_fields=["password"])
+    return actor
+
+
+def update_notification_preferences(*, actor, email_notifications_enabled):
+    _require_actor(actor)
+    actor.email_notifications_enabled = email_notifications_enabled
+    actor.save(update_fields=["email_notifications_enabled"])
+    return actor
 
 
 def add_team_member(*, actor, team, user):
@@ -243,6 +325,22 @@ def rename_team(*, actor, team, name):
     team.name = name
     team.save(update_fields=["name"])
     return team
+
+
+def change_team_member_role(*, actor, membership, role):
+    """Promeut/rétrograde un membre entre `membre` et `administrateur` sur
+    SON groupe (`membership.team`) — voir `_is_team_manager`. Contrairement à
+    `change_project_member_role`, pas de garde-fou "dernier administrateur" :
+    `Team.created_by` reste toujours en mesure de gérer le groupe quel que
+    soit ce champ, la rétrogradation ne peut donc jamais bloquer le groupe."""
+    _ensure_can_manage_team(actor, membership.team)
+    valid_roles = {choice for choice, _ in TeamMembership.ROLE_CHOICES}
+    if role not in valid_roles:
+        raise AccountValidationError("Rôle de groupe invalide.")
+
+    membership.role = role
+    membership.save(update_fields=["role"])
+    return membership
 
 
 def _send_invitation_email(invitation):

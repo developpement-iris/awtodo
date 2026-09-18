@@ -23,6 +23,11 @@ def send_notification_email(notification):
     # d'invitation).
     if not notification.recipient.email:
         return
+    # Préférence personnelle (écran Paramètres, session du 2026-09-16) — la
+    # notification in-app (déjà créée par `create_notification`, cloche du
+    # Topbar) reste dans tous les cas, seul l'envoi par email est débrayable.
+    if not notification.recipient.email_notifications_enabled:
+        return
     send_mail(
         subject="Awtodo — nouvelle notification",
         message=notification.message,

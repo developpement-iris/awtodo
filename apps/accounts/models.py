@@ -86,8 +86,21 @@ class TeamMembership(UUIDModel, TimeStampedModel, StatusLifecycleModel):
     ]
     ACTIVE_STATUSES = frozenset({"active"})
 
+    # 2e valeur (session du 2026-09-16) : un membre peut être promu
+    # « administrateur » de ce groupe précis, sans passer par
+    # `organisation_role="admin"` (portée organisation entière) — même
+    # logique que `ProjectMembership.role` pour les projets. Le créateur du
+    # groupe (`Team.created_by`) garde ses droits de gestion quel que soit ce
+    # champ (voir `_is_team_manager`, apps.accounts.services) : pas de risque
+    # de "dernier administrateur" à protéger comme pour les projets.
+    ROLE_CHOICES = [
+        ("membre", "Membre"),
+        ("administrateur", "Administrateur"),
+    ]
+
     team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name="memberships")
     user = models.ForeignKey("accounts.User", on_delete=models.CASCADE, related_name="team_memberships")
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="membre")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active")
 
     class Meta:
@@ -113,6 +126,9 @@ ACCOUNT_TYPE_CHOICES = [
 ACCOUNT_STATUS_CHOICES = [
     ("pending", "En attente"),
     ("active", "Actif"),
+    # Coupe l'accès sans rien supprimer (session du 2026-09-16) — réversible,
+    # voir `apps.accounts.services.deactivate_account`/`reactivate_account`.
+    ("desactive", "Désactivé"),
 ]
 
 
@@ -136,6 +152,11 @@ class User(UUIDModel, AbstractUser):
     # `pending`, et éventuellement `externe`.
     account_type = models.CharField(max_length=20, choices=ACCOUNT_TYPE_CHOICES, default="interne")
     account_status = models.CharField(max_length=20, choices=ACCOUNT_STATUS_CHOICES, default="active")
+    # Préférence personnelle (écran Paramètres, session du 2026-09-16) — la
+    # cloche in-app reste toujours active, seul l'envoi par email est
+    # débrayable. Pas de granularité par type de notification dans cette
+    # passe (2/3 utilisateurs, pas nécessaire pour l'instant).
+    email_notifications_enabled = models.BooleanField(default=True)
 
     def __str__(self):
         return self.get_username()
