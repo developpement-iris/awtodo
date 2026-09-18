@@ -124,6 +124,15 @@ Ce skill est une base de recherche (styles, palettes, guidelines UX), pas un ski
 
 ## Patterns UI actés
 
+### Colonnes personnalisables des listes (implémenté — session du 2026-09-18)
+
+Demande directe : pouvoir choisir, par utilisateur, quelles colonnes afficher sur les écrans de liste tabulaires (Tâches, Incidents) selon les informations disponibles en base — mémorisé en cache local, pas synchronisé entre postes (à la différence des réglages de l'écran Paramètres/panneau Planning, backend, voir `docs/organisation-et-comptes.md`).
+
+- **Nouveau composant `ColumnPicker`** (`components/ColumnPicker.tsx`) : bouton rond dans la barre d'outils (même gabarit que `StatusFilterDropdown`), panneau `AnchoredPanel` avec une case à cocher (`Checkbox`) par colonne optionnelle. Générique sur une clé de colonne (`ColumnDef<K>`), réutilisé tel quel entre Tâches et Incidents.
+- **Nouveau hook `useColumnPreferences`** (`hooks/useColumnPreferences.ts`) : lit/écrit `localStorage` sous la clé `awtodo:columns:<liste>:<userId>` — **volontairement pas un champ backend** : préférence d'affichage par appareil, cohérent avec l'écart déjà acté ailleurs (les réglages de compte/planning, eux, suivent l'utilisateur d'un poste à l'autre, ce n'est pas le même besoin). Repli silencieux sur les colonnes par défaut si `localStorage` est indisponible (navigation privée, quota).
+- **`TasksListPage`** : "Titre" reste obligatoire (identifiant de ligne, édition inline) ; Réf./Type/Statut/Priorité/Assigné à/Projet sont optionnelles, toutes visibles par défaut (comportement inchangé pour qui n'a jamais rien réglé).
+- **`IncidentsPage`** : même principe, colonne "owner" partagée entre les deux tableaux de l'écran (Projet dans la liste principale, Groupe dans la boîte de réception — visuellement la même colonne, un seul réglage la contrôle) ; absente d'office sur un projet scopé (`scopedProject`, onglet Incidents d'un hub projet), quel que soit le réglage. La colonne Actions reste toujours affichée.
+
 ### Page de connexion — panneau oblique (implémenté — session du 10/08/2026)
 
 Reprise de `maquette-login-oblique.html` (fournie par l'utilisateur, copiée à la racine du repo). Consigne explicite et inhabituelle par rapport à toutes les passes précédentes : **adapter les polices à la charte, mais pas les couleurs**. Appliqué à la lettre :

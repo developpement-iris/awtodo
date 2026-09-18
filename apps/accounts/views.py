@@ -23,6 +23,7 @@ from .serializers import (
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
     PasswordResetTokenSerializer,
+    PlanningPreferencesSerializer,
     TeamCreateSerializer,
     TeamMemberRoleSerializer,
     TeamMemberSerializer,
@@ -50,6 +51,7 @@ from .services import (
     resend_invitation,
     set_organisation_role,
     update_notification_preferences,
+    update_planning_preferences,
 )
 
 
@@ -122,6 +124,24 @@ class NotificationPreferencesView(APIView):
         serializer.is_valid(raise_exception=True)
 
         updated = update_notification_preferences(actor=request.user, **serializer.validated_data)
+        return Response(MeSerializer(updated).data)
+
+
+class PlanningPreferencesView(APIView):
+    """Écran Planning (session du 2026-09-18) — couleur du calendrier
+    personnel + horaires de travail affichés (grisent le reste de la grille).
+    Mise à jour partielle, voir `update_planning_preferences`."""
+
+    def patch(self, request):
+        if not request.user or not request.user.is_authenticated:
+            return Response({"detail": "Utilisateur non identifié."}, status=401)
+        serializer = PlanningPreferencesSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            updated = update_planning_preferences(actor=request.user, **serializer.validated_data)
+        except AccountValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
         return Response(MeSerializer(updated).data)
 
 

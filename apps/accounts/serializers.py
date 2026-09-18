@@ -39,6 +39,7 @@ class UserSerializer(serializers.ModelSerializer):
             "account_type_display",
             "account_status",
             "account_status_display",
+            "planning_color",
         ]
 
     def get_teams(self, obj):
@@ -65,7 +66,11 @@ class MeSerializer(UserSerializer):
     l'écran Paramètres (mot de passe, préférences)."""
 
     class Meta(UserSerializer.Meta):
-        fields = UserSerializer.Meta.fields + ["email_notifications_enabled"]
+        fields = UserSerializer.Meta.fields + [
+            "email_notifications_enabled",
+            "work_hours_start",
+            "work_hours_end",
+        ]
 
 
 class ChangePasswordSerializer(serializers.Serializer):
@@ -75,6 +80,19 @@ class ChangePasswordSerializer(serializers.Serializer):
 
 class NotificationPreferencesSerializer(serializers.Serializer):
     email_notifications_enabled = serializers.BooleanField()
+
+
+class PlanningPreferencesSerializer(serializers.Serializer):
+    """Les trois champs sont optionnels indépendamment (mise à jour
+    partielle) — `update_planning_preferences` ne touche que ceux réellement
+    fournis. `planning_color` accepte une chaîne vide : c'est la façon de
+    revenir à "pas de couleur choisie" (repli sur l'accent thémé)."""
+
+    planning_color = serializers.RegexField(
+        r"^(#[0-9A-Fa-f]{6})?$", required=False, allow_blank=True
+    )
+    work_hours_start = serializers.TimeField(required=False)
+    work_hours_end = serializers.TimeField(required=False)
 
 
 class TeamMembershipSerializer(serializers.ModelSerializer):

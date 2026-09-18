@@ -380,6 +380,22 @@ export function updateNotificationPreferences(emailNotificationsEnabled: boolean
   });
 }
 
+// Personnalisation du planning — session du 2026-09-18. Mise à jour
+// partielle : seuls les champs fournis sont modifiés (`planningColor: ""`
+// est une valeur valide, distincte d'`undefined`, pour revenir à l'accent
+// thémé par défaut). `workHoursStart`/`workHoursEnd` au format "HH:MM".
+export function updatePlanningPreferences(input: {
+  planningColor?: string;
+  workHoursStart?: string;
+  workHoursEnd?: string;
+}): Promise<Me> {
+  const body: Record<string, string> = {};
+  if (input.planningColor !== undefined) body.planning_color = input.planningColor;
+  if (input.workHoursStart !== undefined) body.work_hours_start = input.workHoursStart;
+  if (input.workHoursEnd !== undefined) body.work_hours_end = input.workHoursEnd;
+  return patchJson<Me>("/accounts/me/planning-preferences/", body);
+}
+
 // Couper/rétablir l'accès d'un compte de l'organisation — réservé à un admin
 // d'organisation/plateforme (voir docs/organisation-et-comptes.md).
 export function deactivateUser(userId: string): Promise<User> {

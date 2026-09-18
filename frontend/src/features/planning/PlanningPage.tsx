@@ -7,11 +7,12 @@ import {
   type DragEndEvent,
   type DragMoveEvent,
 } from "@dnd-kit/core";
-import { CalendarPlus, ChevronLeft, ChevronRight, Share2 } from "lucide-react";
+import { CalendarPlus, ChevronLeft, ChevronRight, Share2, SlidersHorizontal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   createBlock,
   getCalendar,
+  getMe,
   getTasks,
   updateBlock,
   updateEvent,
@@ -22,8 +23,8 @@ import { LoadingTransition } from "../../components/LoadingTransition";
 import { SkeletonRows } from "../../components/Skeleton";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 import { useToast } from "../../context/ToastContext";
-import type { CalendarBundle, ScheduledBlock, Task } from "../../types/watodo";
 import type { ViewName } from "../../types/navigation";
+import type { CalendarBundle, Me, ScheduledBlock, Task } from "../../types/watodo";
 import { BlockDialog } from "./BlockDialog";
 import {
   addDays,
@@ -36,19 +37,21 @@ import {
 import { isoAt, resolveDrop, resolveMove } from "./dndDrop";
 import { EventDialog } from "./EventDialog";
 import { MonthGrid } from "./MonthGrid";
+import { PlanningPreferencesDialog } from "./PlanningPreferencesDialog";
 import { SharePanel } from "./SharePanel";
-import { blockToItem, calendarUserLabel, eventToItem, projectEntryToItem, type CalendarItem } from "./types";
+import {
+  blockToItem,
+  calendarUserLabel,
+  eventToItem,
+  PLANNING_PALETTE,
+  projectEntryToItem,
+  type CalendarItem,
+} from "./types";
 import { WeekGrid } from "./WeekGrid";
 import "./planning.css";
 
 const SCHEDULABLE_TASK_STATUSES = new Set(["assignee", "en_cours"]);
 const HOUR_MS = 60 * 60 * 1000;
-
-// Couleurs d'identité des calendriers partagés (façon Outlook). Teintes
-// "text" sobres, toujours accompagnées du nom du propriétaire — jamais la
-// couleur seule (règle d'accessibilité de la charte). "Mon calendrier"
-// garde le traitement accent par défaut, pas de couleur ici.
-const CALENDAR_COLORS = ["#2E6363", "#96790F", "#7A4F9E", "#2E6B45", "#B0466A", "#3A6EA5"];
 
 type ViewMode = "week" | "month";
 
@@ -97,8 +100,20 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
     | { kind: "edit"; eventId: string }
     | { kind: "block"; block: ScheduledBlock }
     | { kind: "share" }
+    | { kind: "preferences" }
     | null
   >(null);
+  // Réglages personnels du planning (couleur, horaires de travail) —
+  // chargés à part de `currentUser` (contexte global) : les horaires ne sont
+  // exposés que par `MeSerializer`/`getMe()`, jamais par `getUsers()` (voir
+  // docs/organisation-et-comptes.md > "Personnalisation du planning").
+  const [me, setMe] = useState<Me | null>(null);
+
+  useEffect(() => {
+    getMe()
+      .then(setMe)
+      .catch(() => undefined);
+  }, []);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -143,7 +158,7 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
       (bundle?.shared ?? []).map((group, index) => ({
         id: group.owner.id,
         label: calendarUserLabel(group.owner),
-        color: CALENDAR_COLORS[index % CALENDAR_COLORS.length],
+        color: PLANNING_PALETTE[index % PLANNING_PALETTE.length],
       })),
     [bundle],
   );
@@ -154,11 +169,13 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
     return map;
   }, [sharedCalendars]);
 
+  const myColor = me?.planning_color || undefined;
+
   const allItems: CalendarItem[] = useMemo(() => {
     if (!bundle) return [];
     return [
-      ...bundle.events.map((occ) => eventToItem(occ)),
-      ...bundle.blocks.map((block) => blockToItem(block)),
+      ...bundle.events.map((occ) => eventToItem(occ, { color: myColor })),
+      ...bundle.blocks.map((block) => blockToItem(block, { color: myColor })),
       ...bundle.project_entries.map((occ) => projectEntryToItem(occ)),
       ...bundle.shared.flatMap((group) => {
         const color = colorByCalendar.get(group.owner.id);
@@ -175,12 +192,20 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
         ];
       }),
     ];
-  }, [bundle, colorByCalendar]);
+  }, [bundle, colorByCalendar, myColor]);
 
   const visibleItems = useMemo(
     () => allItems.filter((item) => !hiddenCalendars.has(item.calendarId)),
     [allItems, hiddenCalendars],
   );
+
+  // "HH:MM:SS" (sérialisation DRF TimeField) -> minutes depuis minuit.
+  const workHours = useMemo(() => {
+    if (!me) return null;
+    const [startH, startM] = me.work_hours_start.split(":").map(Number);
+    const [endH, endM] = me.work_hours_end.split(":").map(Number);
+    return { startMinutes: startH * 60 + startM, endMinutes: endH * 60 + endM };
+  }, [me]);
 
   const blockCountByTask = useMemo(() => {
     const map = new Map<string, number>();
@@ -334,6 +359,10 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
               Mois
             </button>
           </div>
+          <button type="button" className="planning-btn" onClick={() => setDialog({ kind: "preferences" })}>
+            <SlidersHorizontal size={15} strokeWidth={1.75} aria-hidden="true" />
+            Mon planning
+          </button>
           <button type="button" className="planning-btn" onClick={() => setDialog({ kind: "share" })}>
             <Share2 size={15} strokeWidth={1.75} aria-hidden="true" />
             Partage
@@ -375,7 +404,10 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
                       onCheckedChange={() => toggleCalendar("mine")}
                       aria-label="Afficher mon calendrier"
                     />
-                    <span className="planning-calendars__swatch planning-calendars__swatch--mine" />
+                    <span
+                      className="planning-calendars__swatch planning-calendars__swatch--mine"
+                      style={myColor ? { backgroundColor: myColor } : undefined}
+                    />
                     Mon calendrier
                   </label>
                 </li>
@@ -422,6 +454,7 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
                   weekStart={startOfWeek(cursor)}
                   items={visibleItems}
                   dropPreview={dropPreview}
+                  workHours={workHours}
                   onItemClick={handleItemClick}
                   onEmptyClick={(dayIso, minutes) => {
                     const start = isoAt(dayIso, minutes);
@@ -484,6 +517,13 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
         />
       )}
       {dialog?.kind === "share" && <SharePanel onClose={() => setDialog(null)} onChanged={reload} />}
+      {dialog?.kind === "preferences" && me && (
+        <PlanningPreferencesDialog
+          me={me}
+          onClose={() => setDialog(null)}
+          onSaved={(updated) => setMe(updated)}
+        />
+      )}
     </div>
   );
 }

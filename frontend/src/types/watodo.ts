@@ -15,6 +15,8 @@ export interface User {
   account_type_display: string;
   account_status: "pending" | "active" | "desactive";
   account_status_display: string;
+  /** Vide = pas de choix, repli sur l'accent thémé (frontend). */
+  planning_color: string;
 }
 
 // `User` + préférences strictement personnelles — renvoyé uniquement par
@@ -23,6 +25,9 @@ export interface User {
 // pour un autre utilisateur).
 export interface Me extends User {
   email_notifications_enabled: boolean;
+  /** Format "HH:MM:SS" (sérialisation DRF `TimeField`). */
+  work_hours_start: string;
+  work_hours_end: string;
 }
 
 // Connexion par mot de passe — voir docs/organisation-et-comptes.md >

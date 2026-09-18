@@ -15,6 +15,7 @@ import {
   updateIncidentDescription,
   type IncidentCreatePayload,
 } from "../../api/client";
+import { ColumnPicker, type ColumnDef } from "../../components/ColumnPicker";
 import { Combobox } from "../../components/Combobox";
 import { LoadingTransition } from "../../components/LoadingTransition";
 import { SkeletonTable } from "../../components/Skeleton";
@@ -22,6 +23,7 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { StatusFilterDropdown } from "../../components/StatusFilterDropdown";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 import { useToast } from "../../context/ToastContext";
+import { useColumnPreferences } from "../../hooks/useColumnPreferences";
 import { incidentStatusIcon, incidentStatusTone, priorityRank, priorityTone } from "../../lib/badges";
 import { formatRelativeTime } from "../../lib/relativeTime";
 import { defaultStatusSelection, INCIDENT_STATUS_FILTER_OPTIONS } from "../../lib/statusFilterOptions";
@@ -44,6 +46,22 @@ function buildCreatePayload(values: IncidentCreateFormValues): IncidentCreatePay
 
 type SortKey = "delay" | "priority" | null;
 
+// Colonnes personnalisables (session du 2026-09-18) — mêmes principes que
+// `TasksListPage` : "Titre" et la colonne d'actions restent obligatoires,
+// "owner" couvre la colonne Projet (liste principale) OU Groupe (boîte de
+// réception) selon le contexte — c'est visuellement la même colonne, un seul
+// réglage la contrôle dans les deux tableaux.
+type IncidentColumnKey = "ref" | "owner" | "status" | "priority" | "delay";
+
+const INCIDENT_COLUMNS: ColumnDef<IncidentColumnKey>[] = [
+  { key: "ref", label: "Réf." },
+  { key: "owner", label: "Projet / Groupe" },
+  { key: "status", label: "Statut" },
+  { key: "priority", label: "Priorité" },
+  { key: "delay", label: "Délai" },
+];
+const INCIDENT_COLUMN_KEYS = INCIDENT_COLUMNS.map((c) => c.key);
+
 function sortIncidents(list: Incident[], sortKey: SortKey, reversed: boolean): Incident[] {
   if (!sortKey) return list;
   const sorted = [...list].sort((a, b) => {
@@ -58,6 +76,7 @@ function sortIncidents(list: Incident[], sortKey: SortKey, reversed: boolean): I
 interface IncidentRowProps {
   incident: Incident;
   ownerLabel?: string;
+  visibleColumns: Set<IncidentColumnKey>;
   expanded: boolean;
   onToggle: () => void;
   onStart: () => void;
@@ -71,6 +90,7 @@ interface IncidentRowProps {
 function IncidentRow({
   incident,
   ownerLabel,
+  visibleColumns,
   expanded,
   onToggle,
   onStart,
@@ -84,31 +104,39 @@ function IncidentRow({
     <>
       <tr id={`incident-row-${incident.id}`} className="incidents-page__row--clickable" onClick={onToggle}>
         <td>{incident.title}</td>
-        <td>
-          {incident.external_reference_id && (
-            <span className="incidents-page__ref">{incident.external_reference_id}</span>
-          )}
-        </td>
-        {ownerLabel !== undefined && <td>{ownerLabel}</td>}
-        <td>
-          <StatusBadge
-            label={incident.status_display}
-            tone={incidentStatusTone(incident.status)}
-            icon={incidentStatusIcon(incident.status)}
-          />
-        </td>
-        <td>
-          <StatusBadge label={incident.priority_display} tone={priorityTone(incident.priority)} />
-        </td>
-        <td>
-          <time
-            className="incidents-page__delay"
-            dateTime={incident.created_at}
-            title={new Date(incident.created_at).toLocaleString("fr-FR")}
-          >
-            {formatRelativeTime(incident.created_at)}
-          </time>
-        </td>
+        {visibleColumns.has("ref") && (
+          <td>
+            {incident.external_reference_id && (
+              <span className="incidents-page__ref">{incident.external_reference_id}</span>
+            )}
+          </td>
+        )}
+        {visibleColumns.has("owner") && ownerLabel !== undefined && <td>{ownerLabel}</td>}
+        {visibleColumns.has("status") && (
+          <td>
+            <StatusBadge
+              label={incident.status_display}
+              tone={incidentStatusTone(incident.status)}
+              icon={incidentStatusIcon(incident.status)}
+            />
+          </td>
+        )}
+        {visibleColumns.has("priority") && (
+          <td>
+            <StatusBadge label={incident.priority_display} tone={priorityTone(incident.priority)} />
+          </td>
+        )}
+        {visibleColumns.has("delay") && (
+          <td>
+            <time
+              className="incidents-page__delay"
+              dateTime={incident.created_at}
+              title={new Date(incident.created_at).toLocaleString("fr-FR")}
+            >
+              {formatRelativeTime(incident.created_at)}
+            </time>
+          </td>
+        )}
         <td className="incidents-page__actions">
           {incident.permissions.can_start && (
             <button
@@ -195,6 +223,11 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
   const [commentsError, setCommentsError] = useState<string | null>(null);
   const [commentSubmitting, setCommentSubmitting] = useState(false);
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
+  const [visibleColumns, setVisibleColumns] = useColumnPreferences<IncidentColumnKey>(
+    "incidents",
+    INCIDENT_COLUMN_KEYS,
+    INCIDENT_COLUMN_KEYS,
+  );
 
   const effectiveProjectFilter = scopedProject?.id ?? projectFilter;
 
@@ -446,7 +479,11 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
 
   const projectNameById = new Map(projects.map((project) => [project.id, project.name]));
   const displayedIncidents = incidents ? sortIncidents(incidents, sortKey, sortReversed) : null;
-  const mainColSpan = scopedProject ? 6 : 7;
+  // Titre + actions (toujours affichés) + colonnes optionnelles visibles —
+  // "owner" (Projet) n'existe pas du tout sur un projet déjà scopé, quel que
+  // soit le réglage de colonnes.
+  const mainVisibleCount = Array.from(visibleColumns).filter((key) => key !== "owner" || !scopedProject).length;
+  const mainColSpan = 2 + mainVisibleCount;
 
   return (
     <div className="incidents-page">
@@ -478,6 +515,8 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
           onChange={setStatusFilter}
         />
 
+        <ColumnPicker columns={INCIDENT_COLUMNS} visible={visibleColumns} onChange={setVisibleColumns} />
+
         <button type="button" className="incidents-page__create" onClick={() => setCreating(true)}>
           <Plus size={14} strokeWidth={1.75} aria-hidden="true" />
           Signaler un incident
@@ -497,11 +536,11 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
             <thead>
               <tr>
                 <th>Titre</th>
-                <th>Réf.</th>
-                <th>Groupe</th>
-                <th>Statut</th>
-                <th>Priorité</th>
-                <th>Délai</th>
+                {visibleColumns.has("ref") && <th>Réf.</th>}
+                {visibleColumns.has("owner") && <th>Groupe</th>}
+                {visibleColumns.has("status") && <th>Statut</th>}
+                {visibleColumns.has("priority") && <th>Priorité</th>}
+                {visibleColumns.has("delay") && <th>Délai</th>}
                 <th></th>
               </tr>
             </thead>
@@ -511,13 +550,14 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
                   key={incident.id}
                   incident={incident}
                   ownerLabel={incident.team_name ?? "—"}
+                  visibleColumns={visibleColumns}
                   expanded={expandedIncidentId === incident.id}
                   onToggle={() => toggleExpanded(incident.id)}
                   onStart={() => handleStart(incident)}
                   onResolve={() => handleResolve(incident)}
                   onArchive={() => handleArchive(incident)}
                   pending={pendingIncidentId === incident.id}
-                  colSpan={7}
+                  colSpan={2 + visibleColumns.size}
                 >
                   {expandedIncidentId === incident.id &&
                     renderAccordion(incident, { teamName: incident.team_name ?? undefined })}
@@ -537,19 +577,23 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
               <thead>
                 <tr>
                   <th>Titre</th>
-                  <th>Réf.</th>
-                  {!scopedProject && <th>Projet</th>}
-                  <th>Statut</th>
-                  <th>
-                    <button type="button" className="incidents-page__sort" onClick={() => handleSortClick("priority")}>
-                      Priorité {sortIcon("priority")}
-                    </button>
-                  </th>
-                  <th>
-                    <button type="button" className="incidents-page__sort" onClick={() => handleSortClick("delay")}>
-                      Délai {sortIcon("delay")}
-                    </button>
-                  </th>
+                  {visibleColumns.has("ref") && <th>Réf.</th>}
+                  {!scopedProject && visibleColumns.has("owner") && <th>Projet</th>}
+                  {visibleColumns.has("status") && <th>Statut</th>}
+                  {visibleColumns.has("priority") && (
+                    <th>
+                      <button type="button" className="incidents-page__sort" onClick={() => handleSortClick("priority")}>
+                        Priorité {sortIcon("priority")}
+                      </button>
+                    </th>
+                  )}
+                  {visibleColumns.has("delay") && (
+                    <th>
+                      <button type="button" className="incidents-page__sort" onClick={() => handleSortClick("delay")}>
+                        Délai {sortIcon("delay")}
+                      </button>
+                    </th>
+                  )}
                   <th></th>
                 </tr>
               </thead>
@@ -563,6 +607,7 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
                         ? undefined
                         : ((incident.project && projectNameById.get(incident.project)) ?? "—")
                     }
+                    visibleColumns={visibleColumns}
                     expanded={expandedIncidentId === incident.id}
                     onToggle={() => toggleExpanded(incident.id)}
                     onStart={() => handleStart(incident)}

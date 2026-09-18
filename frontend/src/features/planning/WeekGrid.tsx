@@ -29,12 +29,18 @@ function minutesFromMidnight(iso: string): number {
   return d.getHours() * 60 + d.getMinutes();
 }
 
+interface WorkHours {
+  startMinutes: number;
+  endMinutes: number;
+}
+
 interface DayColumnProps {
   day: Date;
   items: CalendarItem[];
   now: Date;
   /** Minutes depuis minuit du cran survolé pendant un glissé (aperçu). */
   previewMinutes: number | null;
+  workHours: WorkHours | null;
   onItemClick: (item: CalendarItem) => void;
   onEmptyClick?: (dayIso: string, minutes: number) => void;
 }
@@ -112,12 +118,14 @@ function ItemBlock({
   );
 }
 
-function DayColumn({ day, items, now, previewMinutes, onItemClick, onEmptyClick }: DayColumnProps) {
+function DayColumn({ day, items, now, previewMinutes, workHours, onItemClick, onEmptyClick }: DayColumnProps) {
   const iso = toIsoDate(day);
   const { setNodeRef, isOver } = useDroppable({ id: `day:${iso}` });
   const isToday = isSameDay(day, now);
   const nowOffset = isToday ? minutesToOffset(now.getHours() * 60 + now.getMinutes()) : null;
   const gridHeight = (GRID_END_HOUR - GRID_START_HOUR) * HOUR_HEIGHT;
+  const gridStartMin = GRID_START_HOUR * 60;
+  const gridEndMin = GRID_END_HOUR * 60;
 
   const dayItems = items.filter((item) => isSameDay(new Date(item.start), day) && !item.allDay);
 
@@ -138,6 +146,26 @@ function DayColumn({ day, items, now, previewMinutes, onItemClick, onEmptyClick 
       style={{ height: `${gridHeight}px` }}
       onClick={handleBackgroundClick}
     >
+      {workHours && workHours.startMinutes > gridStartMin && (
+        <div
+          className="week-grid__offhours"
+          style={{
+            top: 0,
+            height: `${minutesToOffset(Math.min(workHours.startMinutes, gridEndMin))}px`,
+          }}
+          aria-hidden="true"
+        />
+      )}
+      {workHours && workHours.endMinutes < gridEndMin && (
+        <div
+          className="week-grid__offhours"
+          style={{
+            top: `${minutesToOffset(Math.max(workHours.endMinutes, gridStartMin))}px`,
+            height: `${gridHeight - minutesToOffset(Math.max(workHours.endMinutes, gridStartMin))}px`,
+          }}
+          aria-hidden="true"
+        />
+      )}
       {gridSlots().map((minutes) => (
         <div
           key={minutes}
@@ -167,11 +195,23 @@ interface WeekGridProps {
   items: CalendarItem[];
   /** Cible du glissé en cours : jour + cran de 30 min survolé. */
   dropPreview?: { dayIso: string; minutes: number } | null;
+  /** Horaires de travail de l'utilisateur courant — grise le reste de la
+   * grille quand fourni (voir docs/organisation-et-comptes.md >
+   * "Personnalisation du planning"). `null` tant que non chargé : pas de
+   * grisé plutôt qu'un défaut arbitraire pendant le chargement. */
+  workHours?: WorkHours | null;
   onItemClick: (item: CalendarItem) => void;
   onEmptyClick?: (dayIso: string, minutes: number) => void;
 }
 
-export function WeekGrid({ weekStart, items, dropPreview, onItemClick, onEmptyClick }: WeekGridProps) {
+export function WeekGrid({
+  weekStart,
+  items,
+  dropPreview,
+  workHours = null,
+  onItemClick,
+  onEmptyClick,
+}: WeekGridProps) {
   const days = useMemo(() => weekDays(weekStart), [weekStart]);
   const now = new Date();
 
@@ -228,6 +268,7 @@ export function WeekGrid({ weekStart, items, dropPreview, onItemClick, onEmptyCl
             items={items}
             now={now}
             previewMinutes={dropPreview && dropPreview.dayIso === toIsoDate(day) ? dropPreview.minutes : null}
+            workHours={workHours}
             onItemClick={onItemClick}
             onEmptyClick={onEmptyClick}
           />

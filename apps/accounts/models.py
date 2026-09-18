@@ -1,5 +1,5 @@
 import uuid
-from datetime import timedelta
+from datetime import time, timedelta
 
 from django.contrib.auth.models import AbstractUser
 from django.db import models
@@ -157,6 +157,19 @@ class User(UUIDModel, AbstractUser):
     # débrayable. Pas de granularité par type de notification dans cette
     # passe (2/3 utilisateurs, pas nécessaire pour l'instant).
     email_notifications_enabled = models.BooleanField(default=True)
+
+    # Personnalisation du planning (session du 2026-09-18). `planning_color`
+    # vide = pas de choix, le frontend retombe sur l'accent thémé — un
+    # utilisateur qui n'a jamais rien réglé ne voit donc aucun changement.
+    # Exposé sur `UserSerializer` (pas seulement `MeSerializer`) : un
+    # calendrier partagé affiche la couleur choisie par son propriétaire aux
+    # personnes avec qui il partage, ce n'est pas une donnée privée comme
+    # `email_notifications_enabled`. Les horaires de travail, eux, ne servent
+    # qu'à griser SA PROPRE grille (jamais celle d'un calendrier partagé) —
+    # restent donc scopés à `MeSerializer` uniquement.
+    planning_color = models.CharField(max_length=7, blank=True, default="")
+    work_hours_start = models.TimeField(default=time(9, 0))
+    work_hours_end = models.TimeField(default=time(18, 0))
 
     def __str__(self):
         return self.get_username()

@@ -13,6 +13,7 @@ from apps.accounts.services import (
     deactivate_account,
     reactivate_account,
     update_notification_preferences,
+    update_planning_preferences,
 )
 
 
@@ -166,6 +167,45 @@ class SettingsApiTests(APITestCase):
         self.assertEqual(r.status_code, 200)
         self.assertIn("email_notifications_enabled", r.json())
 
+    def test_update_planning_color_via_api(self):
+        r = self.client.patch(
+            "/api/v1/accounts/me/planning-preferences/",
+            {"planning_color": "#2E6363"},
+            content_type="application/json",
+            **self.as_user(self.user),
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["planning_color"], "#2E6363")
+
+    def test_update_work_hours_via_api(self):
+        r = self.client.patch(
+            "/api/v1/accounts/me/planning-preferences/",
+            {"work_hours_start": "08:00", "work_hours_end": "17:30"},
+            content_type="application/json",
+            **self.as_user(self.user),
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["work_hours_start"], "08:00:00")
+        self.assertEqual(r.json()["work_hours_end"], "17:30:00")
+
+    def test_invalid_planning_color_rejected(self):
+        r = self.client.patch(
+            "/api/v1/accounts/me/planning-preferences/",
+            {"planning_color": "brique"},
+            content_type="application/json",
+            **self.as_user(self.user),
+        )
+        self.assertEqual(r.status_code, 400)
+
+    def test_work_hours_start_after_end_rejected(self):
+        r = self.client.patch(
+            "/api/v1/accounts/me/planning-preferences/",
+            {"work_hours_start": "18:00", "work_hours_end": "09:00"},
+            content_type="application/json",
+            **self.as_user(self.user),
+        )
+        self.assertEqual(r.status_code, 400)
+
 
 class NotificationPreferenceServiceTests(TestCase):
     def test_update_notification_preferences(self):
@@ -177,3 +217,47 @@ class NotificationPreferenceServiceTests(TestCase):
         self.assertFalse(updated.email_notifications_enabled)
         user.refresh_from_db()
         self.assertFalse(user.email_notifications_enabled)
+
+
+class PlanningPreferenceServiceTests(TestCase):
+    def setUp(self):
+        self.org = Organisation.objects.create(name="Org A")
+        self.user = User.objects.create_user(username="planning-user", organisation=self.org)
+
+    def test_update_planning_color(self):
+        updated = update_planning_preferences(actor=self.user, planning_color="#7A4F9E")
+
+        self.assertEqual(updated.planning_color, "#7A4F9E")
+
+    def test_reset_planning_color_to_empty(self):
+        update_planning_preferences(actor=self.user, planning_color="#7A4F9E")
+
+        updated = update_planning_preferences(actor=self.user, planning_color="")
+
+        self.assertEqual(updated.planning_color, "")
+
+    def test_update_work_hours(self):
+        from datetime import time
+
+        updated = update_planning_preferences(
+            actor=self.user, work_hours_start=time(8, 0), work_hours_end=time(17, 0)
+        )
+
+        self.assertEqual(updated.work_hours_start, time(8, 0))
+        self.assertEqual(updated.work_hours_end, time(17, 0))
+
+    def test_start_after_end_rejected(self):
+        from datetime import time
+
+        with self.assertRaises(AccountValidationError):
+            update_planning_preferences(
+                actor=self.user, work_hours_start=time(18, 0), work_hours_end=time(9, 0)
+            )
+
+    def test_partial_update_only_changes_start(self):
+        from datetime import time
+
+        updated = update_planning_preferences(actor=self.user, work_hours_start=time(7, 30))
+
+        self.assertEqual(updated.work_hours_start, time(7, 30))
+        self.assertEqual(updated.work_hours_end, time(18, 0))

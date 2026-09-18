@@ -25,6 +25,13 @@ export interface CalendarItem {
   raw: CalendarEventOccurrence | ScheduledBlock | ProjectPlanningOccurrence;
 }
 
+/** Palette de couleurs d'identité de calendrier — couleurs "text" sobres,
+ * cohérentes avec la charte (pas de couleur vive/saturée). Utilisée pour (1)
+ * l'attribution automatique par rotation des calendriers partagés (façon
+ * Outlook, voir `PlanningPage.CALENDAR_COLORS`), et (2) le choix explicite
+ * de la couleur de son propre calendrier (`PlanningPreferencesDialog`). */
+export const PLANNING_PALETTE = ["#2E6363", "#96790F", "#7A4F9E", "#2E6B45", "#B0466A", "#3A6EA5"];
+
 export function calendarUserLabel(u: { first_name: string; last_name: string; username: string }): string {
   return `${u.first_name} ${u.last_name}`.trim() || u.username;
 }

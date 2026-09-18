@@ -287,6 +287,30 @@ def update_notification_preferences(*, actor, email_notifications_enabled):
     return actor
 
 
+def update_planning_preferences(*, actor, planning_color=None, work_hours_start=None, work_hours_end=None):
+    """Mise à jour partielle — seuls les paramètres réellement fournis (non
+    `None`) sont modifiés. `planning_color=""` est une valeur valide (retour
+    à l'accent thémé par défaut), distincte de `None` (champ non fourni)."""
+    _require_actor(actor)
+    update_fields = []
+    if planning_color is not None:
+        actor.planning_color = planning_color
+        update_fields.append("planning_color")
+    start = work_hours_start if work_hours_start is not None else actor.work_hours_start
+    end = work_hours_end if work_hours_end is not None else actor.work_hours_end
+    if start >= end:
+        raise AccountValidationError("L'heure de début doit précéder l'heure de fin.")
+    if work_hours_start is not None:
+        actor.work_hours_start = work_hours_start
+        update_fields.append("work_hours_start")
+    if work_hours_end is not None:
+        actor.work_hours_end = work_hours_end
+        update_fields.append("work_hours_end")
+    if update_fields:
+        actor.save(update_fields=update_fields)
+    return actor
+
+
 def add_team_member(*, actor, team, user):
     """Réactive implicitement une adhésion retirée : `TeamMembership.objects`
     (manager actif) ne verra jamais la ligne `removed`, donc `get_or_create`

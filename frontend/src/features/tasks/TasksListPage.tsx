@@ -10,6 +10,7 @@ import {
   updateTaskDescription,
   updateTaskEstimatedHours,
 } from "../../api/client";
+import { ColumnPicker, type ColumnDef } from "../../components/ColumnPicker";
 import { Combobox } from "../../components/Combobox";
 import { InlineEditableText } from "../../components/InlineEditableText";
 import { LoadingTransition } from "../../components/LoadingTransition";
@@ -19,6 +20,7 @@ import { StatusFilterDropdown } from "../../components/StatusFilterDropdown";
 import { TypeBadge } from "../../components/TypeBadge";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 import { useToast } from "../../context/ToastContext";
+import { useColumnPreferences } from "../../hooks/useColumnPreferences";
 import { priorityTone, statusTone, taskStatusIcon } from "../../lib/badges";
 import { defaultStatusSelection, TASK_STATUS_FILTER_OPTIONS } from "../../lib/statusFilterOptions";
 import type { AuditLogEntry, Project, Task, TaskComment, Team } from "../../types/watodo";
@@ -29,6 +31,23 @@ import { useTaskTransitions } from "./useTaskTransitions";
 import "./TasksListPage.css";
 
 type Mode = "mine" | "team";
+
+// Colonnes personnalisables (session du 2026-09-18) — "Titre" reste
+// obligatoire (identifiant primaire de la ligne, édition inline), les autres
+// sont optionnelles et mémorisées en cache local par utilisateur (voir
+// `useColumnPreferences`). Toutes visibles par défaut : comportement
+// inchangé pour qui n'a jamais rien réglé.
+type TaskColumnKey = "ref" | "type" | "status" | "priority" | "assignee" | "project";
+
+const TASK_COLUMNS: ColumnDef<TaskColumnKey>[] = [
+  { key: "ref", label: "Réf." },
+  { key: "type", label: "Type" },
+  { key: "status", label: "Statut" },
+  { key: "priority", label: "Priorité" },
+  { key: "assignee", label: "Assigné à" },
+  { key: "project", label: "Projet" },
+];
+const TASK_COLUMN_KEYS = TASK_COLUMNS.map((c) => c.key);
 
 interface TasksListPageProps {
   /** Depuis une notification "tâche" : ouvre directement cette tâche et
@@ -51,6 +70,11 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
   const [commentSubmitting, setCommentSubmitting] = useState(false);
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [statusFilter, setStatusFilter] = useState(() => defaultStatusSelection(TASK_STATUS_FILTER_OPTIONS));
+  const [visibleColumns, setVisibleColumns] = useColumnPreferences<TaskColumnKey>(
+    "tasks",
+    TASK_COLUMN_KEYS,
+    TASK_COLUMN_KEYS,
+  );
 
   const myTeams = currentUser?.teams ?? [];
   const activeTeam = selectedTeam || myTeams[0] || "";
@@ -244,6 +268,7 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
         )}
 
         <StatusFilterDropdown options={TASK_STATUS_FILTER_OPTIONS} selected={statusFilter} onChange={setStatusFilter} />
+        <ColumnPicker columns={TASK_COLUMNS} visible={visibleColumns} onChange={setVisibleColumns} />
       </div>
 
       {!currentUser && (
@@ -268,12 +293,12 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
               <thead>
                 <tr>
                   <th>Titre</th>
-                  <th>Réf.</th>
-                  <th>Type</th>
-                  <th>Statut</th>
-                  <th>Priorité</th>
-                  <th>Assigné à</th>
-                  <th>Projet</th>
+                  {visibleColumns.has("ref") && <th>Réf.</th>}
+                  {visibleColumns.has("type") && <th>Type</th>}
+                  {visibleColumns.has("status") && <th>Statut</th>}
+                  {visibleColumns.has("priority") && <th>Priorité</th>}
+                  {visibleColumns.has("assignee") && <th>Assigné à</th>}
+                  {visibleColumns.has("project") && <th>Projet</th>}
                 </tr>
               </thead>
               <tbody>
@@ -296,30 +321,40 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
                           disabled={mode !== "mine" || pendingTaskId === task.id || !task.permissions.can_rename}
                         />
                       </td>
-                      <td>
-                        {task.external_reference_id && (
-                          <span className="tasks-list-page__ref">{task.external_reference_id}</span>
-                        )}
-                      </td>
-                      <td>
-                        <TypeBadge type={task.task_type} label={task.task_type_display} />
-                      </td>
-                      <td>
-                        <StatusBadge label={task.status_display} tone={statusTone(task.status)} icon={taskStatusIcon(task.status)} />
-                      </td>
-                      <td>
-                        <StatusBadge label={task.priority_display} tone={priorityTone(task.priority)} />
-                      </td>
-                      <td>
-                        {task.assignee
-                          ? `${task.assignee.first_name} ${task.assignee.last_name}`.trim() || task.assignee.username
-                          : <span className="tasks-list-page__empty-cell">Non assignée</span>}
-                      </td>
-                      <td>{projectNameById.get(task.project) ?? "—"}</td>
+                      {visibleColumns.has("ref") && (
+                        <td>
+                          {task.external_reference_id && (
+                            <span className="tasks-list-page__ref">{task.external_reference_id}</span>
+                          )}
+                        </td>
+                      )}
+                      {visibleColumns.has("type") && (
+                        <td>
+                          <TypeBadge type={task.task_type} label={task.task_type_display} />
+                        </td>
+                      )}
+                      {visibleColumns.has("status") && (
+                        <td>
+                          <StatusBadge label={task.status_display} tone={statusTone(task.status)} icon={taskStatusIcon(task.status)} />
+                        </td>
+                      )}
+                      {visibleColumns.has("priority") && (
+                        <td>
+                          <StatusBadge label={task.priority_display} tone={priorityTone(task.priority)} />
+                        </td>
+                      )}
+                      {visibleColumns.has("assignee") && (
+                        <td>
+                          {task.assignee
+                            ? `${task.assignee.first_name} ${task.assignee.last_name}`.trim() || task.assignee.username
+                            : <span className="tasks-list-page__empty-cell">Non assignée</span>}
+                        </td>
+                      )}
+                      {visibleColumns.has("project") && <td>{projectNameById.get(task.project) ?? "—"}</td>}
                     </tr>
                     {mode === "mine" && expandedTaskId === task.id && (
                       <tr className="tasks-list-page__accordion-row">
-                        <td colSpan={7}>
+                        <td colSpan={1 + visibleColumns.size}>
                           <AnimatePresence>
                             <TaskAccordion
                               task={task}
