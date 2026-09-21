@@ -39,6 +39,20 @@ class SetOrganisationRoleTests(TestCase):
         with self.assertRaises(AccountValidationError):
             set_organisation_role(actor=self.admin, target_user=self.member, role="super-admin")
 
+    def test_platform_admin_without_org_admin_role_can_promote(self):
+        """Corrige un bug remonté ("je ne peux pas l'ajouter aux gens même en
+        admin") : un administrateur de plateforme dont le `organisation_role`
+        personnel n'est PAS "admin" (les deux portées sont indépendantes)
+        doit tout de même pouvoir promouvoir quelqu'un — même dans une
+        organisation qui n'est pas la sienne."""
+        platform_admin = User.objects.create_user(
+            username="platform-promoter", organisation=self.other_org, is_platform_admin=True
+        )
+
+        updated = set_organisation_role(actor=platform_admin, target_user=self.member, role="admin")
+
+        self.assertEqual(updated.organisation_role, "admin")
+
 
 class CreateOrganisationServiceTests(TestCase):
     def setUp(self):

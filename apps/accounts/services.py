@@ -99,12 +99,19 @@ def authenticate_user(*, username, password):
 def set_organisation_role(*, actor, target_user, role):
     """Portée organisation (User.organisation_role) — à ne pas confondre avec
     User.is_platform_admin (portée plateforme) ni ProjectMembership.role
-    (portée projet), voir CLAUDE.md > "Organisation"."""
+    (portée projet), voir CLAUDE.md > "Organisation".
+
+    Corrigé (session du 2026-09-21, retour direct : "je ne peux pas
+    l'ajouter aux gens même en admin") : vérifiait `actor.organisation_role
+    != "admin"` en dur, sans passer par `is_organisation_admin` — un
+    administrateur de plateforme dont le `organisation_role` personnel
+    n'était pas "admin" (cas courant, les deux portées sont indépendantes,
+    voir la hiérarchie à 4 niveaux dans CLAUDE.md) se voyait donc refuser
+    l'action alors qu'il devrait pouvoir agir sur n'importe quelle
+    organisation."""
     _require_actor(actor)
-    if actor.organisation_role != "admin":
+    if not is_organisation_admin(actor, target_user.organisation):
         raise AccountPermissionError("Seul un administrateur de l'organisation peut changer ce rôle.")
-    if target_user.organisation_id != actor.organisation_id:
-        raise AccountPermissionError("Cet utilisateur n'appartient pas à votre organisation.")
     valid_roles = {choice for choice, _ in User._meta.get_field("organisation_role").choices}
     if role not in valid_roles:
         raise AccountValidationError("Rôle d'organisation invalide.")
