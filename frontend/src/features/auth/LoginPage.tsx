@@ -4,17 +4,6 @@ import { useCurrentUser } from "../../context/CurrentUserContext";
 import { useToast } from "../../context/ToastContext";
 import "./LoginPage.css";
 
-function initials(label: string): string {
-  const parts = label.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
-}
-
-function displayName(user: { username: string; first_name: string; last_name: string }): string {
-  return `${user.first_name} ${user.last_name}`.trim() || user.username;
-}
-
 // Portage direct de `watodo-logo-animation.html` (fourni par l'utilisateur,
 // vérifié fonctionnel de son côté) — la première tentative en `motion`
 // déclaratif (`pathLength` + tableau `times`) ne rejouait pas correctement.
@@ -108,13 +97,13 @@ interface LoginPageProps {
   onSuccess: () => void;
   /** Absent quand cette page est le point d'entrée obligatoire du site (pas
    * encore connecté — rien à "annuler" pour y retourner). Présent quand elle
-   * est atteinte volontairement depuis `UserMenu` en étant déjà identifié
-   * (démo ou connexion réelle) — voir `App.tsx`. */
+   * est atteinte volontairement depuis `UserMenu` en étant déjà connecté —
+   * voir `App.tsx`. */
   onCancel?: () => void;
 }
 
 export function LoginPage({ onSuccess, onCancel }: LoginPageProps) {
-  const { users, login, setCurrentUserId } = useCurrentUser();
+  const { login } = useCurrentUser();
   const { showToast } = useToast();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -131,12 +120,6 @@ export function LoginPage({ onSuccess, onCancel }: LoginPageProps) {
   const [resetSubmitting, setResetSubmitting] = useState(false);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
 
-  // Mode démo (voir CLAUDE.md — mécanisme d'identification temporaire) :
-  // même liste/filtre que le sélecteur de UserMenu, dupliqué ici plutôt que
-  // factorisé — rendu très différent (page pleine vs menu déroulant),
-  // cohérent avec le reste du projet qui duplique ce genre de petit bloc.
-  const selectableUsers = users.filter((user) => user.account_status === "active");
-
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setSubmitting(true);
@@ -149,11 +132,6 @@ export function LoginPage({ onSuccess, onCancel }: LoginPageProps) {
     } finally {
       setSubmitting(false);
     }
-  }
-
-  function handleDebugSelect(userId: string) {
-    setCurrentUserId(userId);
-    onSuccess();
   }
 
   async function handleRequestReset(event: React.FormEvent) {
@@ -310,26 +288,6 @@ export function LoginPage({ onSuccess, onCancel }: LoginPageProps) {
               Retour à la connexion
             </button>
           </form>
-        )}
-
-        {mode === "login" && selectableUsers.length > 0 && (
-          <div className="login-page__demo">
-            <p className="login-page__demo-title">Mode démo — continuer en tant que</p>
-            <ul className="login-page__demo-list">
-              {selectableUsers.map((user) => (
-                <li key={user.id}>
-                  <button
-                    type="button"
-                    className="login-page__demo-option"
-                    onClick={() => handleDebugSelect(user.id)}
-                  >
-                    <span className="login-page__demo-avatar">{initials(displayName(user))}</span>
-                    {displayName(user)}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
         )}
       </div>
     </div>

@@ -41,22 +41,19 @@ import type {
   Team,
   TeamMembershipRole,
   User,
+  WorkingHoursDay,
+  WorkingHoursSchedule,
 } from "../types/watodo";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
-// Identifiant de l'utilisateur factice courant (voir CLAUDE.md — mécanisme
-// d'identification temporaire dev uniquement), tenu à jour par CurrentUserContext.
-let debugUserId: string | null = null;
-
-export function setDebugUserId(id: string | null) {
-  debugUserId = id;
-}
-
 // Token d'accès JWT de la connexion réelle (voir docs/organisation-et-comptes.md
 // > "Comptes et invitations" > authentification, session du 2026-08-06) —
-// prioritaire sur le header debug quand présent, mutuellement exclusifs
-// (tenu à jour par CurrentUserContext).
+// tenu à jour par CurrentUserContext. Le header `X-Debug-User-Id` (mécanisme
+// d'identification temporaire dev, voir `apps.accounts.authentication`) n'est
+// plus envoyé automatiquement par le frontend depuis le retrait du "mode
+// démo" (session du 2026-09-18) — reste utilisable à la main (curl) en local,
+// le backend l'ignore de toute façon dès que `DEBUG=False`.
 let accessToken: string | null = null;
 
 export function setAccessToken(token: string | null) {
@@ -64,8 +61,7 @@ export function setAccessToken(token: string | null) {
 }
 
 function authHeaders(): Record<string, string> {
-  if (accessToken) return { Authorization: `Bearer ${accessToken}` };
-  return debugUserId ? { "X-Debug-User-Id": debugUserId } : {};
+  return accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
 }
 
 // Rend lisible un corps d'erreur DRF : soit `{detail: "..."}`, soit un
@@ -380,19 +376,14 @@ export function updateNotificationPreferences(emailNotificationsEnabled: boolean
   });
 }
 
-// Personnalisation du planning — session du 2026-09-18. Mise à jour
-// partielle : seuls les champs fournis sont modifiés (`planningColor: ""`
-// est une valeur valide, distincte d'`undefined`, pour revenir à l'accent
-// thémé par défaut). `workHoursStart`/`workHoursEnd` au format "HH:MM".
-export function updatePlanningPreferences(input: {
-  planningColor?: string;
-  workHoursStart?: string;
-  workHoursEnd?: string;
-}): Promise<Me> {
+// Couleur du calendrier personnel — session du 2026-09-18. Mise à jour
+// partielle : `planningColor: ""` est une valeur valide, distincte
+// d'`undefined`, pour revenir à l'accent thémé par défaut. Les horaires de
+// travail sont gérées à part, voir `getWorkingHours`/`updateWorkingHours`
+// ci-dessous (modèle hebdomadaire + exceptions, pas un simple champ).
+export function updatePlanningPreferences(input: { planningColor?: string }): Promise<Me> {
   const body: Record<string, string> = {};
   if (input.planningColor !== undefined) body.planning_color = input.planningColor;
-  if (input.workHoursStart !== undefined) body.work_hours_start = input.workHoursStart;
-  if (input.workHoursEnd !== undefined) body.work_hours_end = input.workHoursEnd;
   return patchJson<Me>("/accounts/me/planning-preferences/", body);
 }
 
@@ -863,12 +854,55 @@ export function listCalendarShares(): Promise<CalendarShareList> {
   return getJson<CalendarShareList>("/planning/shares/");
 }
 
-export function createCalendarShare(granteeId: string): Promise<CalendarShare> {
-  return postJson<CalendarShare>("/planning/shares/", { grantee: granteeId });
+export function createCalendarShare(granteeId: string, canManageWorkHours = false): Promise<CalendarShare> {
+  return postJson<CalendarShare>("/planning/shares/", {
+    grantee: granteeId,
+    can_manage_work_hours: canManageWorkHours,
+  });
 }
 
 export function revokeCalendarShare(shareId: string): Promise<void> {
   return postJson<void>(`/planning/shares/${shareId}/revoke/`, {});
+}
+
+// Droit « peut gérer mes horaires » sur un partage déjà accordé — réservé au
+// propriétaire (voir `apps.planning.services.update_share_permissions`).
+export function updateCalendarSharePermissions(
+  shareId: string,
+  canManageWorkHours: boolean,
+): Promise<CalendarShare> {
+  return patchJson<CalendarShare>(`/planning/shares/${shareId}/permissions/`, {
+    can_manage_work_hours: canManageWorkHours,
+  });
+}
+
+// Horaires de travail — session du 2026-09-18. Modèle hebdomadaire récurrent
+// (7 jours) + exceptions ponctuelles par semaine calendaire (`week`, lundi
+// de la semaine visée). `user` optionnel : consulter/gérer les horaires
+// d'un tiers qui a accordé `can_manage_work_hours` (défaut : soi-même).
+export function getWorkingHours(params: { user?: string; week?: string } = {}): Promise<WorkingHoursSchedule> {
+  const query = new URLSearchParams();
+  if (params.user) query.set("user", params.user);
+  if (params.week) query.set("week", params.week);
+  const qs = query.toString();
+  return getJson<WorkingHoursSchedule>(`/planning/working-hours/${qs ? `?${qs}` : ""}`);
+}
+
+export function updateWorkingHours(input: {
+  days: WorkingHoursDay[];
+  user?: string;
+  weekStart?: string;
+}): Promise<WorkingHoursSchedule> {
+  const body: Record<string, unknown> = { days: input.days };
+  if (input.user) body.user = input.user;
+  if (input.weekStart) body.week_start = input.weekStart;
+  return patchJson<WorkingHoursSchedule>("/planning/working-hours/", body);
+}
+
+export function clearWorkingHoursOverride(params: { week: string; user?: string }): Promise<WorkingHoursSchedule> {
+  const query = new URLSearchParams({ week: params.week });
+  if (params.user) query.set("user", params.user);
+  return deleteJson<WorkingHoursSchedule>(`/planning/working-hours/?${query.toString()}`);
 }
 
 // --- Communication de projet ---------------------------------------------

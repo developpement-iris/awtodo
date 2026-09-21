@@ -7,6 +7,7 @@ from .views import (
     CalendarView,
     ProjectPlanningViewSet,
     ScheduledBlockViewSet,
+    WorkingHoursView,
 )
 
 router = SimpleRouter(trailing_slash=True)
@@ -17,5 +18,6 @@ router.register("projects", ProjectPlanningViewSet, basename="planning-project")
 
 urlpatterns = [
     path("calendar/", CalendarView.as_view(), name="planning-calendar"),
+    path("working-hours/", WorkingHoursView.as_view(), name="planning-working-hours"),
     *router.urls,
 ]

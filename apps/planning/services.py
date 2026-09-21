@@ -21,6 +21,9 @@ from .models import (
     EventParticipant,
     ProjectPlanningEntry,
     ScheduledBlock,
+    WorkingHoursDay,
+    WorkingHoursOverrideDay,
+    WorkingHoursWeekOverride,
 )
 from .signals import event_participant_invited
 
@@ -691,11 +694,16 @@ def cancel_project_entry(*, actor, entry):
 # --- Partage de calendrier ------------------------------------------
 
 
-def create_share(*, actor, grantee):
+def create_share(*, actor, grantee, can_manage_work_hours=False):
     _require_actor(actor)
     if grantee.id == actor.id:
         raise PlanningValidationError("Vous ne pouvez pas partager votre calendrier avec vous-même.")
-    share, _ = CalendarShare.objects.get_or_create(owner=actor, grantee=grantee, status="active")
+    share, created = CalendarShare.objects.get_or_create(
+        owner=actor, grantee=grantee, status="active", defaults={"can_manage_work_hours": can_manage_work_hours}
+    )
+    if not created and share.can_manage_work_hours != can_manage_work_hours:
+        share.can_manage_work_hours = can_manage_work_hours
+        share.save(update_fields=["can_manage_work_hours", "updated_at"])
     return share
 
 
@@ -708,11 +716,24 @@ def revoke_share(*, actor, share):
     return share
 
 
+def update_share_permissions(*, actor, share, can_manage_work_hours):
+    """Bascule le droit « peut gérer mes horaires » sur un partage déjà
+    accordé — réservé au propriétaire (`owner`), le bénéficiaire ne peut pas
+    se l'accorder lui-même."""
+    _require_actor(actor)
+    if actor.id != share.owner_id:
+        raise PlanningPermissionError("Seul le propriétaire du calendrier peut modifier ce droit.")
+    share.can_manage_work_hours = can_manage_work_hours
+    share.save(update_fields=["can_manage_work_hours", "updated_at"])
+    return share
+
+
 def _share_dict(share):
     return {
         "id": str(share.id),
         "owner": _user_dict(share.owner),
         "grantee": _user_dict(share.grantee),
+        "can_manage_work_hours": share.can_manage_work_hours,
         "created_at": _iso(share.created_at),
     }
 
@@ -729,3 +750,139 @@ def list_shares(*, actor):
             for s in CalendarShare.objects.filter(grantee=actor).select_related("owner", "grantee")
         ],
     }
+
+
+# --- Horaires de travail (session du 2026-09-18) ----------------------------
+#
+# Modèle hebdomadaire récurrent (WorkingHoursDay, une ligne par jour) +
+# exceptions ponctuelles par semaine calendaire (WorkingHoursWeekOverride +
+# WorkingHoursOverrideDay). Remplace `User.work_hours_start/end` (passe
+# précédente, un seul horaire pour toute la semaine).
+
+_DEFAULT_ENABLED_WEEKDAYS = frozenset({0, 1, 2, 3, 4})  # lundi-vendredi
+
+
+def _ensure_can_view_working_hours(actor, target_user):
+    _require_actor(actor)
+    if actor.id == target_user.id:
+        return
+    if not CalendarShare.objects.filter(
+        owner=target_user, grantee=actor, status="active"
+    ).exists():
+        raise PlanningPermissionError("Vous n'avez pas accès au calendrier de cette personne.")
+
+
+def _ensure_can_manage_working_hours(actor, target_user):
+    _require_actor(actor)
+    if actor.id == target_user.id:
+        return
+    if not CalendarShare.objects.filter(
+        owner=target_user, grantee=actor, status="active", can_manage_work_hours=True
+    ).exists():
+        raise PlanningPermissionError("Vous n'avez pas le droit de gérer les horaires de cette personne.")
+
+
+def can_manage_working_hours(actor, target_user):
+    return _check(_ensure_can_manage_working_hours, actor, target_user)
+
+
+def _get_or_seed_base_days(user):
+    """Les 7 lignes existent toujours après le premier accès — créées à la
+    demande plutôt que par un signal `post_save` sur `User` (évite de coupler
+    `apps.accounts` à `apps.planning`, sens de dépendance interdit)."""
+    existing = {d.weekday: d for d in WorkingHoursDay.objects.filter(user=user)}
+    missing = [w for w in range(7) if w not in existing]
+    if missing:
+        WorkingHoursDay.objects.bulk_create(
+            [WorkingHoursDay(user=user, weekday=w, enabled=w in _DEFAULT_ENABLED_WEEKDAYS) for w in missing]
+        )
+        existing = {d.weekday: d for d in WorkingHoursDay.objects.filter(user=user)}
+    return [existing[w] for w in range(7)]
+
+
+def _day_dict(day):
+    return {
+        "weekday": day.weekday,
+        "weekday_display": day.get_weekday_display(),
+        "enabled": day.enabled,
+        "start": day.start.strftime("%H:%M"),
+        "end": day.end.strftime("%H:%M"),
+    }
+
+
+def get_working_hours(*, actor, target_user, week_start=None):
+    """`week_start` (date du lundi) optionnel : si une exception existe pour
+    cette semaine, elle prime sur le modèle de base — sinon le modèle de base
+    est retourné, annoté `is_override=False`."""
+    _ensure_can_view_working_hours(actor, target_user)
+    if week_start is not None:
+        override = (
+            WorkingHoursWeekOverride.objects.filter(user=target_user, week_start=week_start)
+            .prefetch_related("days")
+            .first()
+        )
+        if override is not None:
+            days_by_weekday = {d.weekday: d for d in override.days.all()}
+            days = [days_by_weekday[w] for w in range(7) if w in days_by_weekday]
+            return {
+                "is_override": True,
+                "week_start": week_start.isoformat(),
+                "days": [_day_dict(d) for d in days],
+            }
+    base_days = _get_or_seed_base_days(target_user)
+    return {
+        "is_override": False,
+        "week_start": week_start.isoformat() if week_start else None,
+        "days": [_day_dict(d) for d in base_days],
+    }
+
+
+def _validate_days_payload(days):
+    if not days:
+        raise PlanningValidationError("Au moins un jour est requis.")
+    seen = set()
+    for entry in days:
+        weekday = entry.get("weekday")
+        if weekday is None or weekday in seen:
+            raise PlanningValidationError("Jours invalides ou en double.")
+        seen.add(weekday)
+        if entry.get("enabled", True) and entry["start"] >= entry["end"]:
+            raise PlanningValidationError("L'heure de début doit précéder l'heure de fin.")
+
+
+def update_working_hours(*, actor, target_user, days, week_start=None):
+    _ensure_can_manage_working_hours(actor, target_user)
+    _validate_days_payload(days)
+
+    if week_start is None:
+        existing = {d.weekday: d for d in WorkingHoursDay.objects.filter(user=target_user)}
+        for entry in days:
+            day = existing.get(entry["weekday"])
+            if day is None:
+                day = WorkingHoursDay(user=target_user, weekday=entry["weekday"])
+            day.enabled = entry.get("enabled", True)
+            day.start = entry["start"]
+            day.end = entry["end"]
+            day.save()
+        return get_working_hours(actor=actor, target_user=target_user)
+
+    override, _ = WorkingHoursWeekOverride.objects.get_or_create(user=target_user, week_start=week_start)
+    existing = {d.weekday: d for d in override.days.all()}
+    for entry in days:
+        day = existing.get(entry["weekday"])
+        if day is None:
+            day = WorkingHoursOverrideDay(override=override, weekday=entry["weekday"])
+        day.enabled = entry.get("enabled", True)
+        day.start = entry["start"]
+        day.end = entry["end"]
+        day.save()
+    return get_working_hours(actor=actor, target_user=target_user, week_start=week_start)
+
+
+def clear_working_hours_override(*, actor, target_user, week_start):
+    """Retire l'exception d'une semaine précise — retour au modèle de base.
+    Suppression réelle (pas un statut) : voir la justification sur
+    `WorkingHoursWeekOverride`."""
+    _ensure_can_manage_working_hours(actor, target_user)
+    WorkingHoursWeekOverride.objects.filter(user=target_user, week_start=week_start).delete()
+    return get_working_hours(actor=actor, target_user=target_user, week_start=week_start)

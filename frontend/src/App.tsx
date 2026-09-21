@@ -147,17 +147,16 @@ function App() {
   // Restauration initiale (liste des utilisateurs + reprise d'un token
   // stocké, voir CurrentUserContext) : écran neutre le temps que ça
   // résolve, pour ne pas flasher la page de connexion à chaque rechargement
-  // d'un utilisateur pourtant déjà identifié (démo ou connexion réelle).
+  // d'un utilisateur pourtant déjà identifié.
   if (isRestoring) {
     return <div className="app-loading" />;
   }
 
   // La connexion est la porte d'entrée du site : tant qu'aucune identité
-  // n'est établie (connexion réelle ou sélection du mode démo), rien
-  // d'autre ne s'affiche — pas de bouton "Annuler" ici, il n'y a nulle part
-  // où revenir. Une fois `currentUser` non nul (login() ou
-  // setCurrentUserId() dans LoginPage), ce garde-fou ne se déclenche plus et
-  // l'app normale s'affiche.
+  // n'est établie, rien d'autre ne s'affiche — pas de bouton "Annuler" ici,
+  // il n'y a nulle part où revenir. Une fois `currentUser` non nul (login()
+  // dans LoginPage), ce garde-fou ne se déclenche plus et l'app normale
+  // s'affiche.
   if (!currentUser) {
     return <LoginPage onSuccess={() => setRoute({ name: "home" })} />;
   }

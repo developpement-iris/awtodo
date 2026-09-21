@@ -1,6 +1,12 @@
 import { Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { createCalendarShare, listCalendarShares, revokeCalendarShare } from "../../api/client";
+import {
+  createCalendarShare,
+  listCalendarShares,
+  revokeCalendarShare,
+  updateCalendarSharePermissions,
+} from "../../api/client";
+import { Checkbox } from "../../components/Checkbox";
 import { Combobox, type ComboboxOption } from "../../components/Combobox";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 import type { CalendarShareList } from "../../types/watodo";
@@ -18,6 +24,7 @@ export function SharePanel({ onClose, onChanged }: SharePanelProps) {
   const { users, currentUser } = useCurrentUser();
   const [shares, setShares] = useState<CalendarShareList | null>(null);
   const [granteeId, setGranteeId] = useState("");
+  const [canManageWorkHours, setCanManageWorkHours] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function reload() {
@@ -32,8 +39,9 @@ export function SharePanel({ onClose, onChanged }: SharePanelProps) {
     if (!granteeId) return;
     setError(null);
     try {
-      await createCalendarShare(granteeId);
+      await createCalendarShare(granteeId, canManageWorkHours);
       setGranteeId("");
+      setCanManageWorkHours(false);
       reload();
       onChanged();
     } catch (err) {
@@ -48,6 +56,16 @@ export function SharePanel({ onClose, onChanged }: SharePanelProps) {
       onChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Révocation impossible.");
+    }
+  }
+
+  async function handleToggleManageWorkHours(shareId: string, next: boolean) {
+    setError(null);
+    try {
+      await updateCalendarSharePermissions(shareId, next);
+      reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "La mise à jour a échoué.");
     }
   }
 
@@ -94,10 +112,22 @@ export function SharePanel({ onClose, onChanged }: SharePanelProps) {
                 Partager
               </button>
             </div>
+            <label className="share-panel__manage-toggle">
+              <Checkbox checked={canManageWorkHours} onCheckedChange={setCanManageWorkHours} aria-label="Peut aussi gérer mes horaires de travail" />
+              Peut aussi gérer mes horaires de travail
+            </label>
             <ul className="share-panel__list">
               {(shares?.granted ?? []).map((s) => (
                 <li key={s.id}>
                   <span>{displayName(s.grantee)}</span>
+                  <label className="share-panel__manage-toggle share-panel__manage-toggle--inline">
+                    <Checkbox
+                      checked={s.can_manage_work_hours}
+                      onCheckedChange={(next) => handleToggleManageWorkHours(s.id, next)}
+                      aria-label={`${displayName(s.grantee)} peut gérer mes horaires`}
+                    />
+                    Horaires
+                  </label>
                   <button type="button" onClick={() => handleRevoke(s.id)} aria-label="Révoquer">
                     <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />
                   </button>

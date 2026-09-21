@@ -37,12 +37,6 @@
   flex: none;
 }
 
-.user-menu__avatar--sm {
-  width: 22px;
-  height: 22px;
-  font-size: 10px;
-}
-
 .user-menu__name {
   font-size: 13.5px;
   font-weight: 500;
@@ -59,43 +53,6 @@
   padding: var(--space-2);
   box-shadow: var(--shadow-overlay);
   z-index: 20;
-}
-
-.user-menu__panel-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--color-text-muted);
-  padding: var(--space-2) var(--space-2) var(--space-1);
-  margin: 0;
-}
-
-.user-menu__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  max-height: 220px;
-  overflow-y: auto;
-}
-
-.user-menu__option {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  background: none;
-  border: none;
-  border-radius: var(--radius-sm);
-  padding: var(--space-2);
-  font-size: 13.5px;
-  color: var(--color-text);
-  cursor: pointer;
-  text-align: left;
-  transition: background-color 0.12s ease;
-}
-
-.user-menu__option:hover {
-  background: var(--tone-neutral-bg);
 }
 
 .user-menu__logout {

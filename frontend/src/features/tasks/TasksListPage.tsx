@@ -35,9 +35,23 @@ type Mode = "mine" | "team";
 // Colonnes personnalisables (session du 2026-09-18) — "Titre" reste
 // obligatoire (identifiant primaire de la ligne, édition inline), les autres
 // sont optionnelles et mémorisées en cache local par utilisateur (voir
-// `useColumnPreferences`). Toutes visibles par défaut : comportement
-// inchangé pour qui n'a jamais rien réglé.
-type TaskColumnKey = "ref" | "type" | "status" | "priority" | "assignee" | "project";
+// `useColumnPreferences`). Les 6 premières sont visibles par défaut
+// (comportement inchangé pour qui n'a jamais rien réglé) ; échéance/temps
+// estimé/temps passé/version, ajoutées après coup (retour direct : "il
+// manque des critères, par exemple date d'échéance"), démarrent masquées
+// pour ne pas surcharger un tableau déjà réglé — l'utilisateur les active
+// lui-même via le sélecteur de colonnes.
+type TaskColumnKey =
+  | "ref"
+  | "type"
+  | "status"
+  | "priority"
+  | "assignee"
+  | "project"
+  | "deadline"
+  | "estimated_hours"
+  | "time_spent"
+  | "version";
 
 const TASK_COLUMNS: ColumnDef<TaskColumnKey>[] = [
   { key: "ref", label: "Réf." },
@@ -46,8 +60,30 @@ const TASK_COLUMNS: ColumnDef<TaskColumnKey>[] = [
   { key: "priority", label: "Priorité" },
   { key: "assignee", label: "Assigné à" },
   { key: "project", label: "Projet" },
+  { key: "deadline", label: "Échéance" },
+  { key: "estimated_hours", label: "Temps estimé" },
+  { key: "time_spent", label: "Temps passé" },
+  { key: "version", label: "Version" },
 ];
 const TASK_COLUMN_KEYS = TASK_COLUMNS.map((c) => c.key);
+const TASK_COLUMNS_DEFAULT_VISIBLE: TaskColumnKey[] = [
+  "ref",
+  "type",
+  "status",
+  "priority",
+  "assignee",
+  "project",
+];
+
+function formatDeadline(deadline: string | null): string {
+  if (!deadline) return "—";
+  return new Date(deadline).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function formatHours(value: string | null): string {
+  if (!value) return "—";
+  return `${value} h`;
+}
 
 interface TasksListPageProps {
   /** Depuis une notification "tâche" : ouvre directement cette tâche et
@@ -73,7 +109,7 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
   const [visibleColumns, setVisibleColumns] = useColumnPreferences<TaskColumnKey>(
     "tasks",
     TASK_COLUMN_KEYS,
-    TASK_COLUMN_KEYS,
+    TASK_COLUMNS_DEFAULT_VISIBLE,
   );
 
   const myTeams = currentUser?.teams ?? [];
@@ -132,12 +168,24 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
   useEffect(() => {
     if (!focusTaskId) return;
     setMode("mine");
+    // Garantit que la tâche ciblée est bien incluse dans le fetch, quel que
+    // soit son statut — sans ça, une tâche archivée/rejetée (hors du filtre
+    // par défaut) restait invisible malgré la navigation : la liste
+    // s'ouvrait mais la tâche elle-même n'apparaissait jamais (retour direct).
+    setStatusFilter(new Set(TASK_STATUS_FILTER_OPTIONS.map((o) => o.value)));
     setExpandedTaskId(focusTaskId);
+  }, [focusTaskId]);
+
+  // Le scroll n'a de sens qu'une fois la ligne effectivement présente dans le
+  // DOM — un délai fixe (ancienne version) pouvait s'exécuter avant la fin du
+  // fetch et échouer silencieusement (`getElementById` renvoie `null`).
+  useEffect(() => {
+    if (!focusTaskId || !tasks || !tasks.some((t) => t.id === focusTaskId)) return;
     const timeout = window.setTimeout(() => {
       document.getElementById(`task-row-${focusTaskId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 50);
     return () => window.clearTimeout(timeout);
-  }, [focusTaskId]);
+  }, [focusTaskId, tasks]);
 
   useEffect(() => {
     if (!expandedTaskId) return;
@@ -299,6 +347,10 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
                   {visibleColumns.has("priority") && <th>Priorité</th>}
                   {visibleColumns.has("assignee") && <th>Assigné à</th>}
                   {visibleColumns.has("project") && <th>Projet</th>}
+                  {visibleColumns.has("deadline") && <th>Échéance</th>}
+                  {visibleColumns.has("estimated_hours") && <th>Temps estimé</th>}
+                  {visibleColumns.has("time_spent") && <th>Temps passé</th>}
+                  {visibleColumns.has("version") && <th>Version</th>}
                 </tr>
               </thead>
               <tbody>
@@ -351,6 +403,10 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
                         </td>
                       )}
                       {visibleColumns.has("project") && <td>{projectNameById.get(task.project) ?? "—"}</td>}
+                      {visibleColumns.has("deadline") && <td>{formatDeadline(task.deadline)}</td>}
+                      {visibleColumns.has("estimated_hours") && <td>{formatHours(task.estimated_hours)}</td>}
+                      {visibleColumns.has("time_spent") && <td>{formatHours(task.time_spent)}</td>}
+                      {visibleColumns.has("version") && <td>{task.version_label || "—"}</td>}
                     </tr>
                     {mode === "mine" && expandedTaskId === task.id && (
                       <tr className="tasks-list-page__accordion-row">

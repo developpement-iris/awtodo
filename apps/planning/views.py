@@ -10,6 +10,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.accounts.models import User
 from apps.projects.services import contributor_projects
 
 from . import services
@@ -29,7 +30,9 @@ from .serializers import (
     ProjectEntryCreateSerializer,
     ProjectEntryUpdateSerializer,
     RespondSerializer,
+    SharePermissionsUpdateSerializer,
     ShareCreateSerializer,
+    WorkingHoursUpdateSerializer,
 )
 
 
@@ -210,7 +213,7 @@ class CalendarShareViewSet(_PlanningExceptionMixin, viewsets.GenericViewSet):
     def create(self, request):
         serializer = ShareCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        share = services.create_share(actor=request.user, grantee=serializer.validated_data["grantee"])
+        share = services.create_share(actor=request.user, **serializer.validated_data)
         return Response(services._share_dict(share), status=201)
 
     @action(detail=True, methods=["post"], url_path="revoke")
@@ -218,6 +221,66 @@ class CalendarShareViewSet(_PlanningExceptionMixin, viewsets.GenericViewSet):
         share = self.get_object()
         services.revoke_share(actor=request.user, share=share)
         return Response(status=204)
+
+    @action(detail=True, methods=["patch"], url_path="permissions")
+    def permissions(self, request, pk=None):
+        share = self.get_object()
+        serializer = SharePermissionsUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        share = services.update_share_permissions(actor=request.user, share=share, **serializer.validated_data)
+        return Response(services._share_dict(share))
+
+
+@extend_schema(responses=OpenApiTypes.OBJECT)
+class WorkingHoursView(_PlanningExceptionMixin, APIView):
+    """Horaires de travail (modèle hebdomadaire + exceptions par semaine,
+    session du 2026-09-18) — `?user=<id>` optionnel pour consulter/gérer les
+    horaires d'un tiers qui a accordé `can_manage_work_hours` (défaut : soi-
+    même), `?week=<YYYY-MM-DD>` optionnel (lundi de la semaine visée) pour
+    lire/poser une exception plutôt que le modèle de base."""
+
+    def _target_user(self, request):
+        user_id = request.query_params.get("user")
+        if not user_id:
+            return request.user
+        return get_object_or_404(User, id=user_id)
+
+    def _week_start(self, request):
+        raw = request.query_params.get("week")
+        if not raw:
+            return None
+        from django.utils.dateparse import parse_date
+
+        parsed = parse_date(raw)
+        if parsed is None:
+            raise services.PlanningValidationError("« week » invalide (format YYYY-MM-DD attendu).")
+        return parsed
+
+    def get(self, request):
+        target_user = self._target_user(request)
+        week_start = self._week_start(request)
+        return Response(services.get_working_hours(actor=request.user, target_user=target_user, week_start=week_start))
+
+    def patch(self, request):
+        serializer = WorkingHoursUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        validated = serializer.validated_data
+        target_user = validated.get("user") or request.user
+        data = services.update_working_hours(
+            actor=request.user,
+            target_user=target_user,
+            days=validated["days"],
+            week_start=validated.get("week_start"),
+        )
+        return Response(data)
+
+    def delete(self, request):
+        target_user = self._target_user(request)
+        week_start = self._week_start(request)
+        if week_start is None:
+            raise services.PlanningValidationError("« week » est obligatoire pour retirer une exception.")
+        data = services.clear_working_hours_override(actor=request.user, target_user=target_user, week_start=week_start)
+        return Response(data)
 
 
 @extend_schema(responses=OpenApiTypes.OBJECT)

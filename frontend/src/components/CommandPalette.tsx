@@ -10,7 +10,6 @@ import {
   Plus,
   Search,
   Sun,
-  User as UserIcon,
 } from "lucide-react";
 import { useEffect } from "react";
 import { useCurrentUser } from "../context/CurrentUserContext";
@@ -28,10 +27,6 @@ interface CommandPaletteProps {
   onToggleTheme: () => void;
 }
 
-function displayName(user: { username: string; first_name: string; last_name: string }): string {
-  return `${user.first_name} ${user.last_name}`.trim() || user.username;
-}
-
 export function CommandPalette({
   open,
   onClose,
@@ -42,7 +37,7 @@ export function CommandPalette({
   theme,
   onToggleTheme,
 }: CommandPaletteProps) {
-  const { users, currentUser, setCurrentUserId, clearCurrentUser } = useCurrentUser();
+  const { isAuthenticated, logout } = useCurrentUser();
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -119,26 +114,14 @@ export function CommandPalette({
               </Command.Item>
             </Command.Group>
 
-            <Command.Group heading="Utilisateur (mode démo)" className="command-palette__group">
-              {users
-                .filter((user) => user.id !== currentUser?.id)
-                .map((user) => (
-                  <Command.Item
-                    key={user.id}
-                    className="command-palette__item"
-                    onSelect={() => run(() => setCurrentUserId(user.id))}
-                  >
-                    <UserIcon size={15} strokeWidth={1.75} aria-hidden="true" />
-                    Se connecter en tant que {displayName(user)}
-                  </Command.Item>
-                ))}
-              {currentUser && (
-                <Command.Item className="command-palette__item" onSelect={() => run(clearCurrentUser)}>
+            {isAuthenticated && (
+              <Command.Group heading="Compte" className="command-palette__group">
+                <Command.Item className="command-palette__item" onSelect={() => run(logout)}>
                   <LogOut size={15} strokeWidth={1.75} aria-hidden="true" />
                   Déconnexion
                 </Command.Item>
-              )}
-            </Command.Group>
+              </Command.Group>
+            )}
           </Command.List>
         </Command>
       </div>

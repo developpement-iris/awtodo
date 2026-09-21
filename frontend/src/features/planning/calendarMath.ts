@@ -51,6 +51,22 @@ export function weekDays(weekStart: Date): Date[] {
   return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 }
 
+/** "YYYY-MM-DD" en heure locale (pas `toISOString`, qui bascule en UTC et
+ * peut décaler la date d'un jour selon le fuseau/l'heure). */
+export function toIsoDate(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/** Index 0 (lundi) .. 6 (dimanche) — convention `WorkingHoursDay.weekday`,
+ * distincte de `Date.getDay()` (0 = dimanche). */
+export function isoWeekday(date: Date): number {
+  const day = date.getDay();
+  return day === 0 ? 6 : day - 1;
+}
+
 export function gridHours(): number[] {
   return Array.from({ length: GRID_END_HOUR - GRID_START_HOUR + 1 }, (_, i) => GRID_START_HOUR + i);
 }

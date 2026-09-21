@@ -1,5 +1,6 @@
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useMemo } from "react";
+import type { WorkingHoursDay } from "../../types/watodo";
 import {
   GRID_END_HOUR,
   GRID_START_HOUR,
@@ -10,28 +11,24 @@ import {
   formatTimeRange,
   gridHours,
   gridSlots,
+  isoWeekday,
   isSameDay,
   minutesToOffset,
   snapMinutes,
   snapOffset,
+  toIsoDate,
   weekDays,
 } from "./calendarMath";
 import type { CalendarItem } from "./types";
-
-function toIsoDate(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
-    date.getDate(),
-  ).padStart(2, "0")}`;
-}
 
 function minutesFromMidnight(iso: string): number {
   const d = new Date(iso);
   return d.getHours() * 60 + d.getMinutes();
 }
 
-interface WorkHours {
-  startMinutes: number;
-  endMinutes: number;
+function hmToMinutes(hm: string): number {
+  const [h, m] = hm.split(":").map(Number);
+  return h * 60 + m;
 }
 
 interface DayColumnProps {
@@ -40,7 +37,9 @@ interface DayColumnProps {
   now: Date;
   /** Minutes depuis minuit du cran survolé pendant un glissé (aperçu). */
   previewMinutes: number | null;
-  workHours: WorkHours | null;
+  /** Horaires de travail des 7 jours (index 0 = lundi), ou `null` tant que
+   * non chargées — pas de grisage plutôt qu'un défaut arbitraire. */
+  workHours: WorkingHoursDay[] | null;
   onItemClick: (item: CalendarItem) => void;
   onEmptyClick?: (dayIso: string, minutes: number) => void;
 }
@@ -126,6 +125,7 @@ function DayColumn({ day, items, now, previewMinutes, workHours, onItemClick, on
   const gridHeight = (GRID_END_HOUR - GRID_START_HOUR) * HOUR_HEIGHT;
   const gridStartMin = GRID_START_HOUR * 60;
   const gridEndMin = GRID_END_HOUR * 60;
+  const dayWorkHours = workHours ? workHours[isoWeekday(day)] : null;
 
   const dayItems = items.filter((item) => isSameDay(new Date(item.start), day) && !item.allDay);
 
@@ -146,25 +146,32 @@ function DayColumn({ day, items, now, previewMinutes, workHours, onItemClick, on
       style={{ height: `${gridHeight}px` }}
       onClick={handleBackgroundClick}
     >
-      {workHours && workHours.startMinutes > gridStartMin && (
-        <div
-          className="week-grid__offhours"
-          style={{
-            top: 0,
-            height: `${minutesToOffset(Math.min(workHours.startMinutes, gridEndMin))}px`,
-          }}
-          aria-hidden="true"
-        />
+      {dayWorkHours && !dayWorkHours.enabled && (
+        <div className="week-grid__offhours" style={{ top: 0, height: `${gridHeight}px` }} aria-hidden="true" />
       )}
-      {workHours && workHours.endMinutes < gridEndMin && (
-        <div
-          className="week-grid__offhours"
-          style={{
-            top: `${minutesToOffset(Math.max(workHours.endMinutes, gridStartMin))}px`,
-            height: `${gridHeight - minutesToOffset(Math.max(workHours.endMinutes, gridStartMin))}px`,
-          }}
-          aria-hidden="true"
-        />
+      {dayWorkHours && dayWorkHours.enabled && (
+        <>
+          {hmToMinutes(dayWorkHours.start) > gridStartMin && (
+            <div
+              className="week-grid__offhours"
+              style={{
+                top: 0,
+                height: `${minutesToOffset(Math.min(hmToMinutes(dayWorkHours.start), gridEndMin))}px`,
+              }}
+              aria-hidden="true"
+            />
+          )}
+          {hmToMinutes(dayWorkHours.end) < gridEndMin && (
+            <div
+              className="week-grid__offhours"
+              style={{
+                top: `${minutesToOffset(Math.max(hmToMinutes(dayWorkHours.end), gridStartMin))}px`,
+                height: `${gridHeight - minutesToOffset(Math.max(hmToMinutes(dayWorkHours.end), gridStartMin))}px`,
+              }}
+              aria-hidden="true"
+            />
+          )}
+        </>
       )}
       {gridSlots().map((minutes) => (
         <div
@@ -195,11 +202,11 @@ interface WeekGridProps {
   items: CalendarItem[];
   /** Cible du glissé en cours : jour + cran de 30 min survolé. */
   dropPreview?: { dayIso: string; minutes: number } | null;
-  /** Horaires de travail de l'utilisateur courant — grise le reste de la
-   * grille quand fourni (voir docs/organisation-et-comptes.md >
-   * "Personnalisation du planning"). `null` tant que non chargé : pas de
-   * grisé plutôt qu'un défaut arbitraire pendant le chargement. */
-  workHours?: WorkHours | null;
+  /** Horaires de travail de la semaine affichée (7 jours, base ou exception
+   * — voir docs/organisation-et-comptes.md > "Personnalisation du
+   * planning"). `null` tant que non chargées : pas de grisé plutôt qu'un
+   * défaut arbitraire pendant le chargement. */
+  workHours?: WorkingHoursDay[] | null;
   onItemClick: (item: CalendarItem) => void;
   onEmptyClick?: (dayIso: string, minutes: number) => void;
 }

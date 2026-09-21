@@ -136,7 +136,7 @@ interface QuickAccessTab {
 }
 
 export function HomePage({ onNavigate }: HomePageProps) {
-  const { currentUser, isAuthenticated, logout, clearCurrentUser } = useCurrentUser();
+  const { currentUser, logout } = useCurrentUser();
   const [projects, setProjects] = useState<Project[] | null>(null);
   // Listes complètes (mes tâches assignées / incidents ouverts) — le filtrage
   // "urgent" et le repli "échéances les plus proches" en sont dérivés.
@@ -220,11 +220,7 @@ export function HomePage({ onNavigate }: HomePageProps) {
   );
 
   function handleLogout() {
-    if (isAuthenticated) {
-      logout();
-    } else {
-      clearCurrentUser();
-    }
+    logout();
   }
 
   const tabs: QuickAccessTab[] = [

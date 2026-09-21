@@ -86,3 +86,23 @@ class ProjectEntryUpdateSerializer(_AtLeastOneFieldSerializer):
 
 class ShareCreateSerializer(serializers.Serializer):
     grantee = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
+    can_manage_work_hours = serializers.BooleanField(required=False, default=False)
+
+
+class SharePermissionsUpdateSerializer(serializers.Serializer):
+    can_manage_work_hours = serializers.BooleanField()
+
+
+class WorkingHoursDayInputSerializer(serializers.Serializer):
+    weekday = serializers.IntegerField(min_value=0, max_value=6)
+    enabled = serializers.BooleanField(required=False, default=True)
+    start = serializers.TimeField()
+    end = serializers.TimeField()
+
+
+class WorkingHoursUpdateSerializer(serializers.Serializer):
+    days = WorkingHoursDayInputSerializer(many=True)
+    # Utilisateur ciblé (délégation) et semaine (exception) — voir
+    # `apps.planning.services.update_working_hours`. `user` absent = soi-même.
+    user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), required=False)
+    week_start = serializers.DateField(required=False)

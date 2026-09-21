@@ -25,9 +25,6 @@ export interface User {
 // pour un autre utilisateur).
 export interface Me extends User {
   email_notifications_enabled: boolean;
-  /** Format "HH:MM:SS" (sérialisation DRF `TimeField`). */
-  work_hours_start: string;
-  work_hours_end: string;
 }
 
 // Connexion par mot de passe — voir docs/organisation-et-comptes.md >
@@ -615,10 +612,33 @@ export interface CalendarShare {
   id: string;
   owner: CalendarUser;
   grantee: CalendarUser;
+  /** Droit additionnel, optionnel : le bénéficiaire peut modifier les
+   * horaires de travail du propriétaire (voir docs/organisation-et-comptes.md
+   * > "Personnalisation du planning" > délégation). */
+  can_manage_work_hours: boolean;
   created_at: string;
 }
 
 export interface CalendarShareList {
   granted: CalendarShare[];
   received: CalendarShare[];
+}
+
+// Horaires de travail — session du 2026-09-18. Modèle hebdomadaire récurrent
+// (7 jours) + exceptions ponctuelles par semaine calendaire. Voir
+// docs/organisation-et-comptes.md > "Personnalisation du planning".
+export interface WorkingHoursDay {
+  weekday: number; // 0 = lundi .. 6 = dimanche
+  weekday_display: string;
+  enabled: boolean;
+  /** Format "HH:MM". */
+  start: string;
+  end: string;
+}
+
+export interface WorkingHoursSchedule {
+  is_override: boolean;
+  /** Lundi de la semaine visée, "YYYY-MM-DD" — présent seulement si demandé. */
+  week_start: string | null;
+  days: WorkingHoursDay[];
 }

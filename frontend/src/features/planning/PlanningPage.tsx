@@ -14,6 +14,8 @@ import {
   getCalendar,
   getMe,
   getTasks,
+  getWorkingHours,
+  listCalendarShares,
   updateBlock,
   updateEvent,
   updateProjectPlanningEntry,
@@ -24,7 +26,7 @@ import { SkeletonRows } from "../../components/Skeleton";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 import { useToast } from "../../context/ToastContext";
 import type { ViewName } from "../../types/navigation";
-import type { CalendarBundle, Me, ScheduledBlock, Task } from "../../types/watodo";
+import type { CalendarBundle, Me, ScheduledBlock, Task, WorkingHoursDay } from "../../types/watodo";
 import { BlockDialog } from "./BlockDialog";
 import {
   addDays,
@@ -33,6 +35,7 @@ import {
   formatRangeTitle,
   startOfDay,
   startOfWeek,
+  toIsoDate,
 } from "./calendarMath";
 import { isoAt, resolveDrop, resolveMove } from "./dndDrop";
 import { EventDialog } from "./EventDialog";
@@ -108,10 +111,23 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
   // exposés que par `MeSerializer`/`getMe()`, jamais par `getUsers()` (voir
   // docs/organisation-et-comptes.md > "Personnalisation du planning").
   const [me, setMe] = useState<Me | null>(null);
+  // Personnes qui m'ont accordé le droit de gérer leurs horaires (partage
+  // avec `can_manage_work_hours=True`) — alimente le sélecteur de personne
+  // du panneau "Mon planning".
+  const [delegatedUsers, setDelegatedUsers] = useState<{ id: string; label: string }[]>([]);
 
   useEffect(() => {
     getMe()
       .then(setMe)
+      .catch(() => undefined);
+    listCalendarShares()
+      .then((data) =>
+        setDelegatedUsers(
+          data.received
+            .filter((share) => share.can_manage_work_hours)
+            .map((share) => ({ id: share.owner.id, label: calendarUserLabel(share.owner) })),
+        ),
+      )
       .catch(() => undefined);
   }, []);
 
@@ -199,13 +215,27 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
     [allItems, hiddenCalendars],
   );
 
-  // "HH:MM:SS" (sérialisation DRF TimeField) -> minutes depuis minuit.
-  const workHours = useMemo(() => {
-    if (!me) return null;
-    const [startH, startM] = me.work_hours_start.split(":").map(Number);
-    const [endH, endM] = me.work_hours_end.split(":").map(Number);
-    return { startMinutes: startH * 60 + startM, endMinutes: endH * 60 + endM };
-  }, [me]);
+  // Horaires de travail de la semaine affichée (base ou exception) — voir
+  // docs/organisation-et-comptes.md > "Personnalisation du planning".
+  // Refetch à chaque changement de semaine : une exception peut ne concerner
+  // que la semaine consultée, pas le modèle de base.
+  const currentWeekStart = useMemo(() => toIsoDate(startOfWeek(cursor)), [cursor]);
+  const [workHours, setWorkHours] = useState<WorkingHoursDay[] | null>(null);
+
+  useEffect(() => {
+    if (view !== "week") return;
+    let cancelled = false;
+    getWorkingHours({ week: currentWeekStart })
+      .then((data) => {
+        if (!cancelled) setWorkHours(data.days);
+      })
+      .catch(() => {
+        if (!cancelled) setWorkHours(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentWeekStart, view, reloadKey]);
 
   const blockCountByTask = useMemo(() => {
     const map = new Map<string, number>();
@@ -520,8 +550,13 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
       {dialog?.kind === "preferences" && me && (
         <PlanningPreferencesDialog
           me={me}
+          currentWeekStart={currentWeekStart}
+          delegatedUsers={delegatedUsers}
           onClose={() => setDialog(null)}
-          onSaved={(updated) => setMe(updated)}
+          onSaved={(updated) => {
+            setMe(updated);
+            reload();
+          }}
         />
       )}
     </div>

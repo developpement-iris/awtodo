@@ -1,3 +1,5 @@
+from datetime import time
+
 from django.conf import settings
 from django.db import models
 
@@ -8,6 +10,16 @@ KIND_CHOICES = [
     ("phase", "Phase"),
     ("reunion", "Réunion"),
     ("autre", "Autre"),
+]
+
+WEEKDAY_CHOICES = [
+    (0, "Lundi"),
+    (1, "Mardi"),
+    (2, "Mercredi"),
+    (3, "Jeudi"),
+    (4, "Vendredi"),
+    (5, "Samedi"),
+    (6, "Dimanche"),
 ]
 
 
@@ -193,6 +205,13 @@ class CalendarShare(UUIDModel, TimeStampedModel, StatusLifecycleModel):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="calendar_shares_received"
     )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active")
+    # Droit additionnel, optionnel (session du 2026-09-18) : au-delà de la
+    # simple superposition en lecture, `grantee` peut modifier les horaires
+    # de travail de `owner` (base hebdomadaire + exceptions par semaine, voir
+    # `WorkingHoursDay`/`WorkingHoursWeekOverride`) — utile pour un·e
+    # assistant·e qui tient l'agenda de quelqu'un d'autre. Toujours `False`
+    # par défaut : ne change rien au comportement d'un partage existant.
+    can_manage_work_hours = models.BooleanField(default=False)
 
     class Meta:
         default_manager_name = "all_objects"
@@ -211,3 +230,80 @@ class CalendarShare(UUIDModel, TimeStampedModel, StatusLifecycleModel):
 
     def __str__(self):
         return f"{self.owner} → {self.grantee}"
+
+
+class WorkingHoursDay(UUIDModel, TimeStampedModel):
+    """Une ligne par jour de semaine (0=lundi..6=dimanche) : horaires de
+    travail récurrents d'un utilisateur, affichés dans son planning (grise le
+    reste de la grille Semaine). Remplace `User.work_hours_start/end` (passe
+    précédente, un seul horaire pour toute la semaine — trop rigide, retour
+    direct : "on doit pouvoir modifier jour par jour").
+
+    Pas de `StatusLifecycleModel` ici : les 7 lignes existent toujours pour
+    un utilisateur donné (créées à la demande, `get_or_create`), on les met à
+    jour en place — ce n'est pas une entité métier avec un historique à
+    conserver, au même titre que `User.planning_color` (simple champ
+    overwritable, pas de cycle de vie)."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="working_hours_days"
+    )
+    weekday = models.PositiveSmallIntegerField(choices=WEEKDAY_CHOICES)
+    # Jour non travaillé (grisé entièrement) plutôt que start==end : plus
+    # explicite pour le calcul de grisage et pour l'UI (case à cocher, pas
+    # une plage vide à interpréter).
+    enabled = models.BooleanField(default=True)
+    start = models.TimeField(default=time(9, 0))
+    end = models.TimeField(default=time(18, 0))
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user", "weekday"], name="uniq_working_hours_day"),
+        ]
+        ordering = ["weekday"]
+
+    def __str__(self):
+        return f"{self.user} — {self.get_weekday_display()}"
+
+
+class WorkingHoursWeekOverride(UUIDModel, TimeStampedModel):
+    """Exception ponctuelle au modèle hebdomadaire récurrent, pour une
+    semaine calendaire précise (`week_start` = lundi de cette semaine) —
+    retour direct : "on doit pouvoir le faire semaine par semaine" (congé,
+    semaine chargée...). Supprimée (vraie suppression, pas un statut) quand
+    l'utilisateur retire l'exception : même raisonnement que `WorkingHoursDay`
+    ci-dessus, c'est un réglage d'affichage, pas une donnée métier à tracer."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="working_hours_overrides"
+    )
+    week_start = models.DateField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user", "week_start"], name="uniq_working_hours_week_override"),
+        ]
+        ordering = ["week_start"]
+
+    def __str__(self):
+        return f"{self.user} — semaine du {self.week_start}"
+
+
+class WorkingHoursOverrideDay(UUIDModel, TimeStampedModel):
+    """Un jour de l'exception `WorkingHoursWeekOverride` — même forme que
+    `WorkingHoursDay`, portée à la semaine plutôt qu'au modèle de base."""
+
+    override = models.ForeignKey(WorkingHoursWeekOverride, on_delete=models.CASCADE, related_name="days")
+    weekday = models.PositiveSmallIntegerField(choices=WEEKDAY_CHOICES)
+    enabled = models.BooleanField(default=True)
+    start = models.TimeField(default=time(9, 0))
+    end = models.TimeField(default=time(18, 0))
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["override", "weekday"], name="uniq_working_hours_override_day"),
+        ]
+        ordering = ["weekday"]
+
+    def __str__(self):
+        return f"{self.override} — {self.get_weekday_display()}"

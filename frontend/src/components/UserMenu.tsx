@@ -20,7 +20,7 @@ interface UserMenuProps {
 }
 
 export function UserMenu({ onLoginClick }: UserMenuProps) {
-  const { users, currentUser, isAuthenticated, setCurrentUserId, clearCurrentUser, logout } = useCurrentUser();
+  const { currentUser, isAuthenticated, logout } = useCurrentUser();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -35,10 +35,6 @@ export function UserMenu({ onLoginClick }: UserMenuProps) {
   }, []);
 
   const label = currentUser ? displayName(currentUser) : "Aucun utilisateur";
-  // Un compte `pending` n'a pas encore accepté son invitation — voir
-  // CLAUDE.md > "Comptes et invitations" : "un compte activé devient
-  // simplement sélectionnable", pas avant.
-  const selectableUsers = users.filter((user) => user.account_status === "active");
 
   return (
     <div className="user-menu" ref={menuRef}>
@@ -73,38 +69,6 @@ export function UserMenu({ onLoginClick }: UserMenuProps) {
             >
               <LogIn size={14} strokeWidth={1.75} aria-hidden="true" />
               Se connecter
-            </button>
-          )}
-
-          <p className="user-menu__panel-label">Mode démo — se connecter en tant que</p>
-          <ul className="user-menu__list">
-            {selectableUsers.map((user) => (
-              <li key={user.id}>
-                <button
-                  type="button"
-                  className="user-menu__option"
-                  onClick={() => {
-                    setCurrentUserId(user.id);
-                    setOpen(false);
-                  }}
-                >
-                  <span className="user-menu__avatar user-menu__avatar--sm">{initials(displayName(user))}</span>
-                  {displayName(user)}
-                </button>
-              </li>
-            ))}
-          </ul>
-          {currentUser && !isAuthenticated && (
-            <button
-              type="button"
-              className="user-menu__logout"
-              onClick={() => {
-                clearCurrentUser();
-                setOpen(false);
-              }}
-            >
-              <LogOut size={14} strokeWidth={1.75} aria-hidden="true" />
-              Quitter le mode démo
             </button>
           )}
         </div>

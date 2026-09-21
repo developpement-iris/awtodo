@@ -50,8 +50,10 @@ type SortKey = "delay" | "priority" | null;
 // `TasksListPage` : "Titre" et la colonne d'actions restent obligatoires,
 // "owner" couvre la colonne Projet (liste principale) OU Groupe (boîte de
 // réception) selon le contexte — c'est visuellement la même colonne, un seul
-// réglage la contrôle dans les deux tableaux.
-type IncidentColumnKey = "ref" | "owner" | "status" | "priority" | "delay";
+// réglage la contrôle dans les deux tableaux. "author"/"time_spent" ajoutées
+// après coup (même retour que Tâches : "il manque des critères") démarrent
+// masquées, le reste visible par défaut (comportement inchangé).
+type IncidentColumnKey = "ref" | "owner" | "status" | "priority" | "delay" | "author" | "time_spent";
 
 const INCIDENT_COLUMNS: ColumnDef<IncidentColumnKey>[] = [
   { key: "ref", label: "Réf." },
@@ -59,8 +61,11 @@ const INCIDENT_COLUMNS: ColumnDef<IncidentColumnKey>[] = [
   { key: "status", label: "Statut" },
   { key: "priority", label: "Priorité" },
   { key: "delay", label: "Délai" },
+  { key: "author", label: "Auteur du signalement" },
+  { key: "time_spent", label: "Temps passé" },
 ];
 const INCIDENT_COLUMN_KEYS = INCIDENT_COLUMNS.map((c) => c.key);
+const INCIDENT_COLUMNS_DEFAULT_VISIBLE: IncidentColumnKey[] = ["ref", "owner", "status", "priority", "delay"];
 
 function sortIncidents(list: Incident[], sortKey: SortKey, reversed: boolean): Incident[] {
   if (!sortKey) return list;
@@ -137,6 +142,8 @@ function IncidentRow({
             </time>
           </td>
         )}
+        {visibleColumns.has("author") && <td>{incident.author_name || "—"}</td>}
+        {visibleColumns.has("time_spent") && <td>{incident.time_spent ? `${incident.time_spent} h` : "—"}</td>}
         <td className="incidents-page__actions">
           {incident.permissions.can_start && (
             <button
@@ -226,7 +233,7 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
   const [visibleColumns, setVisibleColumns] = useColumnPreferences<IncidentColumnKey>(
     "incidents",
     INCIDENT_COLUMN_KEYS,
-    INCIDENT_COLUMN_KEYS,
+    INCIDENT_COLUMNS_DEFAULT_VISIBLE,
   );
 
   const effectiveProjectFilter = scopedProject?.id ?? projectFilter;
@@ -288,12 +295,19 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
 
   useEffect(() => {
     if (!focusIncidentId) return;
+    // Garantit que l'incident ciblé est inclus dans le fetch quel que soit
+    // son statut — même correctif que `TasksListPage` (voir son commentaire).
+    setStatusFilter(new Set(INCIDENT_STATUS_FILTER_OPTIONS.map((o) => o.value)));
     setExpandedIncidentId(focusIncidentId);
+  }, [focusIncidentId]);
+
+  useEffect(() => {
+    if (!focusIncidentId || !incidents || !incidents.some((i) => i.id === focusIncidentId)) return;
     const timeout = window.setTimeout(() => {
       document.getElementById(`incident-row-${focusIncidentId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 50);
     return () => window.clearTimeout(timeout);
-  }, [focusIncidentId]);
+  }, [focusIncidentId, incidents]);
 
   useEffect(() => {
     if (!expandedIncidentId) return;
@@ -541,6 +555,8 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
                 {visibleColumns.has("status") && <th>Statut</th>}
                 {visibleColumns.has("priority") && <th>Priorité</th>}
                 {visibleColumns.has("delay") && <th>Délai</th>}
+                {visibleColumns.has("author") && <th>Auteur du signalement</th>}
+                {visibleColumns.has("time_spent") && <th>Temps passé</th>}
                 <th></th>
               </tr>
             </thead>
@@ -594,6 +610,8 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
                       </button>
                     </th>
                   )}
+                  {visibleColumns.has("author") && <th>Auteur du signalement</th>}
+                  {visibleColumns.has("time_spent") && <th>Temps passé</th>}
                   <th></th>
                 </tr>
               </thead>

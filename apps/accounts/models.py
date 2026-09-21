@@ -1,5 +1,5 @@
 import uuid
-from datetime import time, timedelta
+from datetime import timedelta
 
 from django.contrib.auth.models import AbstractUser
 from django.db import models
@@ -164,12 +164,14 @@ class User(UUIDModel, AbstractUser):
     # Exposé sur `UserSerializer` (pas seulement `MeSerializer`) : un
     # calendrier partagé affiche la couleur choisie par son propriétaire aux
     # personnes avec qui il partage, ce n'est pas une donnée privée comme
-    # `email_notifications_enabled`. Les horaires de travail, eux, ne servent
-    # qu'à griser SA PROPRE grille (jamais celle d'un calendrier partagé) —
-    # restent donc scopés à `MeSerializer` uniquement.
+    # `email_notifications_enabled`. Les horaires de travail (modèle
+    # hebdomadaire + exceptions par semaine, retour direct le même jour :
+    # "un seul horaire pour toute la semaine" était trop rigide) vivent
+    # depuis dans `apps.planning` (`WorkingHoursDay`/`WorkingHoursWeekOverride`)
+    # plutôt qu'ici — champs scalaires `work_hours_start/end` retirés du
+    # même coup, `apps.planning` dépend déjà de `apps.accounts`, jamais
+    # l'inverse.
     planning_color = models.CharField(max_length=7, blank=True, default="")
-    work_hours_start = models.TimeField(default=time(9, 0))
-    work_hours_end = models.TimeField(default=time(18, 0))
 
     def __str__(self):
         return self.get_username()
