@@ -27,6 +27,7 @@ import { useCurrentUser } from "../../context/CurrentUserContext";
 import { useToast } from "../../context/ToastContext";
 import type { ViewName } from "../../types/navigation";
 import type { CalendarBundle, Me, ScheduledBlock, Task, WorkingHoursDay } from "../../types/watodo";
+import { TaskCardDialog } from "../tasks/TaskCardDialog";
 import { BlockDialog } from "./BlockDialog";
 import {
   addDays,
@@ -104,6 +105,7 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
     | { kind: "block"; block: ScheduledBlock }
     | { kind: "share" }
     | { kind: "preferences" }
+    | { kind: "task"; taskId: string }
     | null
   >(null);
   // Réglages personnels du planning (couleur, horaires de travail) —
@@ -533,18 +535,19 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
           onClose={() => setDialog(null)}
           onSaved={reload}
           onOpenTarget={
-            onNavigate
-              ? () => {
-                  setDialog(null);
-                  if (dialog.block.task) {
-                    onNavigate("tasks", { taskId: dialog.block.task.id });
-                  } else if (dialog.block.incident) {
-                    onNavigate("incidents", { incidentId: dialog.block.incident.id });
+            dialog.block.task
+              ? () => setDialog({ kind: "task", taskId: dialog.block.task!.id })
+              : dialog.block.incident && onNavigate
+                ? () => {
+                    setDialog(null);
+                    onNavigate("incidents", { incidentId: dialog.block.incident!.id });
                   }
-                }
-              : undefined
+                : undefined
           }
         />
+      )}
+      {dialog?.kind === "task" && (
+        <TaskCardDialog taskId={dialog.taskId} onClose={() => setDialog(null)} onChanged={reload} />
       )}
       {dialog?.kind === "share" && <SharePanel onClose={() => setDialog(null)} onChanged={reload} />}
       {dialog?.kind === "preferences" && me && (

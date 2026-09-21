@@ -1,0 +1,68 @@
+.task-card-dialog__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(36, 28, 28, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  z-index: 50;
+}
+
+.task-card-dialog {
+  width: 100%;
+  max-width: 640px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-overlay);
+}
+
+.task-card-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-5) 0;
+}
+
+.task-card-dialog__title {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.task-card-dialog__close {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  flex: none;
+  transition: color var(--transition-fast);
+}
+
+.task-card-dialog__close:hover {
+  color: var(--color-text);
+}
+
+.task-card-dialog__message {
+  margin: var(--space-3) var(--space-5) 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.task-card-dialog__message--error {
+  color: var(--tone-error-text);
+}
+
+/* `.task-accordion__inner` porte déjà un `border-top` (pensé pour suivre une
+   ligne de tableau) — ici il n'y a rien au-dessus dans la carte elle-même,
+   seulement le titre : on le retire pour ne pas laisser un filet flottant. */
+.task-card-dialog .task-accordion__inner {
+  border-top: none;
+  padding-top: var(--space-3);
+}
