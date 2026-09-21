@@ -220,6 +220,22 @@ class IncidentLifecycleApiTests(APITestCase):
         # 404, pas 403 : même raison que test_outsider_cannot_start_incident.
         self.assertEqual(response.status_code, 404)
 
+    def test_list_filters_by_assigned_to(self):
+        """Panneau "À planifier" du planning (session du 2026-09-21) —
+        `GET /incidents/?assigned_to=<id>` ne renvoie que les incidents
+        assignés à cet utilisateur."""
+        mine = self.make_incident()
+        self.client.post(f"/api/v1/incidents/{mine.id}/claim/", **self.as_user(self.member))
+        someone_elses = self.make_incident()
+
+        response = self.client.get(
+            f"/api/v1/incidents/?assigned_to={self.member.id}", **self.as_user(self.member)
+        )
+
+        ids = [item["id"] for item in response.json()]
+        self.assertIn(str(mine.id), ids)
+        self.assertNotIn(str(someone_elses.id), ids)
+
     def test_assignee_can_change_priority(self):
         incident = self.make_incident()
         self.client.post(f"/api/v1/incidents/{incident.id}/claim/", **self.as_user(self.member))

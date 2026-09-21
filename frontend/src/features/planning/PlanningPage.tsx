@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   createBlock,
   getCalendar,
+  getIncidents,
   getMe,
   getTasks,
   getWorkingHours,
@@ -20,13 +21,14 @@ import {
   updateEvent,
   updateProjectPlanningEntry,
 } from "../../api/client";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../../components/Accordion";
 import { Checkbox } from "../../components/Checkbox";
 import { LoadingTransition } from "../../components/LoadingTransition";
 import { SkeletonRows } from "../../components/Skeleton";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 import { useToast } from "../../context/ToastContext";
 import type { ViewName } from "../../types/navigation";
-import type { CalendarBundle, Me, ScheduledBlock, Task, WorkingHoursDay } from "../../types/watodo";
+import type { CalendarBundle, Incident, Me, ScheduledBlock, Task, WorkingHoursDay } from "../../types/watodo";
 import { TaskCardDialog } from "../tasks/TaskCardDialog";
 import { BlockDialog } from "./BlockDialog";
 import {
@@ -55,14 +57,27 @@ import { WeekGrid } from "./WeekGrid";
 import "./planning.css";
 
 const SCHEDULABLE_TASK_STATUSES = new Set(["assignee", "en_cours"]);
+const SCHEDULABLE_INCIDENT_STATUSES = new Set(["signale", "en_cours"]);
 const HOUR_MS = 60 * 60 * 1000;
 
 type ViewMode = "week" | "month";
 
-function UnscheduledTask({ task, blockCount }: { task: Task; blockCount: number }) {
+type UnscheduledItemProps =
+  | { kind: "task"; task: Task; blockCount: number }
+  | { kind: "incident"; incident: Incident; blockCount: number };
+
+// Généralisé de "UnscheduledTask" (tâches uniquement) pour couvrir aussi les
+// incidents — retour direct : "il y a un onglet avec des tâches à choisir,
+// j'aimerais qu'il y ait tâches ET incidents". Le glisser-déposer distingue
+// les deux via `data.kind` (voir `handleDragEnd`).
+function UnscheduledItem(props: UnscheduledItemProps) {
+  const item = props.kind === "task" ? props.task : props.incident;
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: `unsched:task:${task.id}`,
-    data: { type: "external", task },
+    id: `unsched:${props.kind}:${item.id}`,
+    data:
+      props.kind === "task"
+        ? { type: "external", kind: "task", task: props.task }
+        : { type: "external", kind: "incident", incident: props.incident },
   });
   return (
     <li
@@ -72,11 +87,11 @@ function UnscheduledTask({ task, blockCount }: { task: Task; blockCount: number 
       {...listeners}
       {...attributes}
     >
-      <span className={`planning-unsched__prio planning-unsched__prio--${task.priority}`} />
-      <span className="planning-unsched__title">{task.title}</span>
-      {blockCount > 0 && (
+      <span className={`planning-unsched__prio planning-unsched__prio--${item.priority}`} />
+      <span className="planning-unsched__title">{item.title}</span>
+      {props.blockCount > 0 && (
         <span className="planning-unsched__count" title="Créneaux déjà posés">
-          {blockCount}
+          {props.blockCount}
         </span>
       )}
     </li>
@@ -94,6 +109,7 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
   const [cursor, setCursor] = useState(() => startOfDay(new Date()));
   const [bundle, setBundle] = useState<CalendarBundle | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [hiddenCalendars, setHiddenCalendars] = useState<Set<string>>(new Set());
@@ -168,6 +184,13 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
     getTasks({ assignee: currentUser.id })
       .then((data) => setTasks(data.filter((t) => SCHEDULABLE_TASK_STATUSES.has(t.status))))
       .catch(() => setTasks([]));
+  }, [currentUser, reloadKey]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    getIncidents({ assigned_to: currentUser.id, status: Array.from(SCHEDULABLE_INCIDENT_STATUSES) })
+      .then(setIncidents)
+      .catch(() => setIncidents([]));
   }, [currentUser, reloadKey]);
 
   // Liste des calendriers : le mien + un par personne qui partage avec moi.
@@ -247,6 +270,14 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
     return map;
   }, [bundle]);
 
+  const blockCountByIncident = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const b of bundle?.blocks ?? []) {
+      if (b.incident) map.set(b.incident.id, (map.get(b.incident.id) ?? 0) + 1);
+    }
+    return map;
+  }, [bundle]);
+
   function toggleCalendar(id: string) {
     setHiddenCalendars((current) => {
       const next = new Set(current);
@@ -257,7 +288,8 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
   }
 
   type DragData =
-    | { type: "external"; task: Task }
+    | { type: "external"; kind: "task"; task: Task }
+    | { type: "external"; kind: "incident"; incident: Incident }
     | { type: "move"; item: CalendarItem }
     | { type: "resize"; item: CalendarItem };
 
@@ -291,7 +323,11 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
       if (data.type === "external") {
         const start = isoAt(drop.dayIso, drop.minutes);
         const end = new Date(new Date(start).getTime() + HOUR_MS).toISOString();
-        await createBlock({ task: data.task.id, start, end });
+        if (data.kind === "task") {
+          await createBlock({ task: data.task.id, start, end });
+        } else {
+          await createBlock({ incident: data.incident.id, start, end });
+        }
         showToast("Créneau ajouté.");
       } else if (data.type === "move") {
         const { item } = data;
@@ -468,14 +504,52 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
             <section className="planning-unsched">
               <h2 className="planning-side__heading">À planifier</h2>
               <p className="planning-side__hint">
-                Glissez une tâche sur le calendrier. Une même tâche peut recevoir plusieurs créneaux.
+                Glissez un élément sur le calendrier. Un même élément peut recevoir plusieurs créneaux.
               </p>
-              <ul className="planning-unsched__list">
-                {tasks.map((task) => (
-                  <UnscheduledTask key={task.id} task={task} blockCount={blockCountByTask.get(task.id) ?? 0} />
-                ))}
-                {tasks.length === 0 && <li className="planning-side__empty">Aucune tâche à planifier.</li>}
-              </ul>
+              <Accordion type="multiple" defaultValue={["tasks", "incidents"]}>
+                <AccordionItem value="tasks">
+                  <AccordionTrigger>
+                    Tâches
+                    {tasks.length > 0 && <span className="planning-unsched__accordion-count">{tasks.length}</span>}
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <ul className="planning-unsched__list">
+                      {tasks.map((task) => (
+                        <UnscheduledItem
+                          key={task.id}
+                          kind="task"
+                          task={task}
+                          blockCount={blockCountByTask.get(task.id) ?? 0}
+                        />
+                      ))}
+                      {tasks.length === 0 && <li className="planning-side__empty">Aucune tâche à planifier.</li>}
+                    </ul>
+                  </AccordionContent>
+                </AccordionItem>
+                <AccordionItem value="incidents">
+                  <AccordionTrigger>
+                    Incidents
+                    {incidents.length > 0 && (
+                      <span className="planning-unsched__accordion-count">{incidents.length}</span>
+                    )}
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <ul className="planning-unsched__list">
+                      {incidents.map((incident) => (
+                        <UnscheduledItem
+                          key={incident.id}
+                          kind="incident"
+                          incident={incident}
+                          blockCount={blockCountByIncident.get(incident.id) ?? 0}
+                        />
+                      ))}
+                      {incidents.length === 0 && (
+                        <li className="planning-side__empty">Aucun incident à planifier.</li>
+                      )}
+                    </ul>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
             </section>
           </aside>
 

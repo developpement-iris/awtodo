@@ -376,6 +376,8 @@ export interface Incident {
   status: "signale" | "en_cours" | "resolu" | "archive";
   status_display: string;
   external_reference_id: string | null;
+  assigned_to: string | null;
+  assigned_to_name: string | null;
   /** Auteur du signalement transmis par l'outil de ticketing (vide sinon). */
   author_name: string;
   author_email: string;

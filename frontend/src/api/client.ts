@@ -432,6 +432,7 @@ export function getTasks(filters: TaskFilters = {}): Promise<Task[]> {
 interface IncidentFilters {
   project?: string;
   status?: string[];
+  assigned_to?: string;
   [key: string]: string | string[] | undefined;
 }
 

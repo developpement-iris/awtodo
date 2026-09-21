@@ -192,6 +192,18 @@
   background: var(--color-accent);
 }
 
+.planning-unsched__accordion-count {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  background: var(--tone-neutral-bg);
+  border-radius: 999px;
+  padding: 0 6px;
+  min-width: 16px;
+  text-align: center;
+}
+
 .planning-unsched__count {
   margin-left: auto;
   font-family: var(--font-mono);

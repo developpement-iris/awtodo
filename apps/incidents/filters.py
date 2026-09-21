@@ -11,4 +11,7 @@ class IncidentFilterSet(DefaultActiveStatusFilterMixin, django_filters.FilterSet
 
     class Meta:
         model = Incident
-        fields = ["project", "status", "team"]
+        # "assigned_to" ajouté pour le panneau "À planifier" du planning
+        # (session du 2026-09-21) — mêmes incidents que ceux que je peux
+        # glisser sur mon calendrier.
+        fields = ["project", "status", "team", "assigned_to"]
