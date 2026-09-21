@@ -2,7 +2,7 @@ import { Document, HeadingLevel, Packer, Paragraph } from "docx";
 import { FileDown, Pencil } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getSpecSections, updateSpecSection } from "../../api/client";
-import { Checkbox } from "../../components/Checkbox";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../../components/Accordion";
 import { MarkdownView } from "../../components/MarkdownView";
 import { SkeletonRows } from "../../components/Skeleton";
 import { useToast } from "../../context/ToastContext";
@@ -69,15 +69,14 @@ function SpecSectionBlock({
 }: SpecSectionBlockProps) {
   return (
     <div className="spec-tab__block">
-      <div className="spec-tab__block-header">
-        <h3>{section.label}</h3>
-        {!isEditing && canEdit && (
+      {!isEditing && canEdit && (
+        <div className="spec-tab__block-header">
           <button type="button" className="spec-tab__block-edit" onClick={onEditStart}>
             <Pencil size={13} strokeWidth={1.75} aria-hidden="true" />
             Modifier
           </button>
-        )}
-      </div>
+        </div>
+      )}
       {isEditing ? (
         <div className="spec-tab__block-editor">
           <textarea
@@ -187,6 +186,30 @@ export function SpecTab({ project }: SpecTabProps) {
     }
   }
 
+  // Ouvrir/fermer une section EST l'action d'inclusion (remplace la case à
+  // cocher du sommaire, retour direct — "plutôt que cocher sur les cases à
+  // déplier, ce serait mieux d'avoir un accordéon") : un chef de projet voit
+  // les 12 sections, déplier une section vide l'ajoute au cahier des
+  // charges, la replier l'en retire. Un lecteur (pas `can_edit_spec`) ne
+  // voit que les sections déjà actives, dépliables librement sans effet de
+  // bord (accordéon non contrôlé, aucun appel réseau).
+  function handleAccordionChange(nextOpen: string[]) {
+    const nextSet = new Set(nextOpen);
+    const currentActive = new Set<string>(activeSections.map((section) => section.section_key));
+    for (const key of nextSet) {
+      if (!currentActive.has(key)) {
+        handleToggle(key as SpecSectionKey, true);
+        return;
+      }
+    }
+    for (const key of currentActive) {
+      if (!nextSet.has(key)) {
+        handleToggle(key as SpecSectionKey, false);
+        return;
+      }
+    }
+  }
+
   return (
     <div className="spec-tab">
       <div className="spec-tab__toolbar">
@@ -203,55 +226,61 @@ export function SpecTab({ project }: SpecTabProps) {
 
       {error && <p className="spec-tab__message spec-tab__message--error">{error}</p>}
 
-      <div className="spec-tab__layout">
-        <nav className="spec-tab__summary" aria-label="Sommaire du cahier des charges">
-          <h3 className="spec-tab__summary-title">Sommaire</h3>
-          {sections === null ? (
-            <SkeletonRows rows={6} />
-          ) : (
-            <ul className="spec-tab__summary-list">
-              {sections.map((section) => (
-                <li key={section.section_key}>
-                  <label className="spec-tab__summary-item">
-                    <Checkbox
-                      checked={section.is_active}
-                      disabled={!canEdit || pendingKey === section.section_key}
-                      onCheckedChange={(checked) => handleToggle(section.section_key, checked)}
-                      aria-label={section.label}
-                    />
-                    {section.label}
-                  </label>
-                </li>
-              ))}
-            </ul>
-          )}
-        </nav>
-
-        <div className="spec-tab__notebook">
-          {sections === null ? (
-            <SkeletonRows rows={8} />
-          ) : activeSections.length === 0 ? (
-            <p className="spec-tab__message">
-              Cochez une ou plusieurs sections dans le sommaire pour commencer le cahier des charges.
-            </p>
-          ) : (
-            activeSections.map((section) => (
-              <SpecSectionBlock
-                key={section.section_key}
-                section={section}
-                canEdit={canEdit}
-                isEditing={editingKey === section.section_key}
-                draft={draft}
-                saving={pendingKey === section.section_key}
-                onEditStart={() => handleEditStart(section)}
-                onDraftChange={setDraft}
-                onSave={() => handleEditSave(section.section_key)}
-                onCancel={handleEditCancel}
-              />
-            ))
-          )}
-        </div>
-      </div>
+      {sections === null ? (
+        <SkeletonRows rows={8} />
+      ) : canEdit ? (
+        <Accordion
+          value={activeSections.map((section) => section.section_key)}
+          onValueChange={handleAccordionChange}
+          className="spec-tab__accordion"
+        >
+          {sections.map((section) => (
+            <AccordionItem key={section.section_key} value={section.section_key}>
+              <AccordionTrigger>{section.label}</AccordionTrigger>
+              <AccordionContent>
+                <SpecSectionBlock
+                  section={section}
+                  canEdit={canEdit}
+                  isEditing={editingKey === section.section_key}
+                  draft={draft}
+                  saving={pendingKey === section.section_key}
+                  onEditStart={() => handleEditStart(section)}
+                  onDraftChange={setDraft}
+                  onSave={() => handleEditSave(section.section_key)}
+                  onCancel={handleEditCancel}
+                />
+              </AccordionContent>
+            </AccordionItem>
+          ))}
+        </Accordion>
+      ) : activeSections.length === 0 ? (
+        <p className="spec-tab__message">Aucune section renseignée pour l'instant.</p>
+      ) : (
+        <Accordion
+          type="multiple"
+          defaultValue={activeSections.map((section) => section.section_key)}
+          className="spec-tab__accordion"
+        >
+          {activeSections.map((section) => (
+            <AccordionItem key={section.section_key} value={section.section_key}>
+              <AccordionTrigger>{section.label}</AccordionTrigger>
+              <AccordionContent>
+                <SpecSectionBlock
+                  section={section}
+                  canEdit={canEdit}
+                  isEditing={false}
+                  draft={draft}
+                  saving={false}
+                  onEditStart={() => undefined}
+                  onDraftChange={setDraft}
+                  onSave={() => undefined}
+                  onCancel={handleEditCancel}
+                />
+              </AccordionContent>
+            </AccordionItem>
+          ))}
+        </Accordion>
+      )}
     </div>
   );
 }

@@ -20,24 +20,42 @@ interface AccordionProps {
   /** "multiple" (défaut) : plusieurs sections ouvertes à la fois — "single" : une seule. */
   type?: "single" | "multiple";
   defaultValue?: string[];
+  /** Mode contrôlé (ex. `SpecTab` : ouvrir/fermer EST l'action d'inclure/
+   * exclure une section du cahier des charges, l'état vit côté serveur) —
+   * fournir `value`+`onValueChange` ensemble, sinon l'accordéon gère son
+   * propre état (mode non contrôlé, ex. le panneau "À planifier" du
+   * planning). */
+  value?: string[];
+  onValueChange?: (next: string[]) => void;
   className?: string;
   children: ReactNode;
 }
 
-export function Accordion({ type = "multiple", defaultValue = [], className, children }: AccordionProps) {
-  const [openValues, setOpenValues] = useState<Set<string>>(new Set(defaultValue));
+export function Accordion({
+  type = "multiple",
+  defaultValue = [],
+  value,
+  onValueChange,
+  className,
+  children,
+}: AccordionProps) {
+  const [internalValues, setInternalValues] = useState<Set<string>>(new Set(defaultValue));
+  const controlled = value !== undefined;
+  const openValues = controlled ? new Set(value) : internalValues;
 
-  function toggle(value: string) {
-    setOpenValues((current) => {
-      const next = new Set(current);
-      if (next.has(value)) {
-        next.delete(value);
-      } else {
-        if (type === "single") next.clear();
-        next.add(value);
-      }
-      return next;
-    });
+  function toggle(item: string) {
+    const next = new Set(openValues);
+    if (next.has(item)) {
+      next.delete(item);
+    } else {
+      if (type === "single") next.clear();
+      next.add(item);
+    }
+    if (controlled) {
+      onValueChange?.(Array.from(next));
+    } else {
+      setInternalValues(next);
+    }
   }
 
   return (
