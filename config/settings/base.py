@@ -45,6 +45,10 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # En tout premier : doit rester le middleware le plus externe pour
+    # s'appliquer même aux réponses court-circuitées par WhiteNoise (fichiers
+    # statiques) plus bas dans la pile — voir apps/common/middleware.py.
+    "apps.common.middleware.SecurityHeadersMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -120,6 +124,14 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = "static/"
+
+# WhiteNoise ajoute par défaut `Access-Control-Allow-Origin: *` sur TOUS les
+# fichiers statiques (pensé pour les polices chargées depuis un autre
+# domaine) — inutile ici, les polices sont déjà auto-hébergées sur le même
+# domaine que le frontend (voir CLAUDE.md > "Stack technique"). C'est la
+# cause du CORS wildcard sur les assets relevé par l'audit ZAP du
+# 2026-09-21 (ex. /favicon-32.png), pas une config CORS applicative.
+WHITENOISE_ALLOW_ALL_ORIGINS = False
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
