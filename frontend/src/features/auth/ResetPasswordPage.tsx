@@ -29,6 +29,20 @@ export function ResetPasswordPage({ token }: ResetPasswordPageProps) {
 
   const isUsable = reset !== null && reset.status === "pending" && !reset.is_expired;
 
+  // Redirection automatique vers la connexion une fois le mot de passe
+  // changé (retour direct) — cette page est atteinte hors de l'état `Route`
+  // de l'app (match d'URL brute, voir App.tsx), donc une vraie navigation
+  // plutôt qu'un `setRoute` interne. Délai court pour laisser le message de
+  // confirmation visible un instant, et un lien manuel en repli si jamais
+  // le délai est interrompu (ex. onglet en arrière-plan).
+  useEffect(() => {
+    if (!done) return;
+    const timeout = window.setTimeout(() => {
+      window.location.assign("/");
+    }, 2000);
+    return () => window.clearTimeout(timeout);
+  }, [done]);
+
   async function handleConfirm() {
     if (password !== passwordConfirm) {
       setError("Les deux mots de passe ne correspondent pas.");
@@ -97,8 +111,15 @@ export function ResetPasswordPage({ token }: ResetPasswordPageProps) {
           <div className="reset-password-page__success">
             <CheckCircle2 size={32} strokeWidth={1.75} aria-hidden="true" />
             <p className="reset-password-page__message">
-              Mot de passe mis à jour. Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.
+              Mot de passe mis à jour. Redirection vers la connexion…
             </p>
+            <button
+              type="button"
+              className="reset-password-page__button"
+              onClick={() => window.location.assign("/")}
+            >
+              Se connecter maintenant
+            </button>
           </div>
         )}
       </div>
