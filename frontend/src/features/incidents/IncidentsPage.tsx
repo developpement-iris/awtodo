@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, ArrowUpDown, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { AnimatePresence } from "motion/react";
 import { useEffect, useState, type ReactNode } from "react";
 import {
@@ -19,13 +19,16 @@ import { ColumnPicker, type ColumnDef } from "../../components/ColumnPicker";
 import { Combobox } from "../../components/Combobox";
 import { LoadingTransition } from "../../components/LoadingTransition";
 import { SkeletonTable } from "../../components/Skeleton";
+import { SortableColumnHeader } from "../../components/SortableColumnHeader";
 import { StatusBadge } from "../../components/StatusBadge";
 import { StatusFilterDropdown } from "../../components/StatusFilterDropdown";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 import { useToast } from "../../context/ToastContext";
 import { useColumnPreferences } from "../../hooks/useColumnPreferences";
+import { useSort, type SortDirection } from "../../hooks/useSort";
 import { incidentStatusIcon, incidentStatusTone, priorityRank, priorityTone } from "../../lib/badges";
 import { formatRelativeTime } from "../../lib/relativeTime";
+import { compareNullableNumbers } from "../../lib/sortCompare";
 import { defaultStatusSelection, INCIDENT_STATUS_FILTER_OPTIONS } from "../../lib/statusFilterOptions";
 import type { AuditLogEntry, Incident, IncidentComment, Project } from "../../types/watodo";
 import { IncidentAccordion } from "./IncidentAccordion";
@@ -43,8 +46,6 @@ function buildCreatePayload(values: IncidentCreateFormValues): IncidentCreatePay
   if (values.external_reference_id.trim()) payload.external_reference_id = values.external_reference_id.trim();
   return payload;
 }
-
-type SortKey = "delay" | "priority" | null;
 
 // Colonnes personnalisables (session du 2026-09-18) — mêmes principes que
 // `TasksListPage` : "Titre" et la colonne d'actions restent obligatoires,
@@ -67,15 +68,43 @@ const INCIDENT_COLUMNS: ColumnDef<IncidentColumnKey>[] = [
 const INCIDENT_COLUMN_KEYS = INCIDENT_COLUMNS.map((c) => c.key);
 const INCIDENT_COLUMNS_DEFAULT_VISIBLE: IncidentColumnKey[] = ["ref", "owner", "status", "priority", "delay"];
 
-function sortIncidents(list: Incident[], sortKey: SortKey, reversed: boolean): Incident[] {
-  if (!sortKey) return list;
-  const sorted = [...list].sort((a, b) => {
-    if (sortKey === "delay") {
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+// Tri par colonne — mêmes principes que `TasksListPage` (voir son
+// commentaire) : priorité par rang, "owner" (Projet) résolu comme dans le
+// rendu de la ligne, délai par date réelle (pas la chaîne relative
+// affichée), le reste alphabétique.
+type IncidentSortKey = "title" | IncidentColumnKey;
+
+function compareIncidents(
+  a: Incident,
+  b: Incident,
+  key: IncidentSortKey,
+  direction: SortDirection,
+  projectNameById: Map<string, string>,
+): number {
+  const sign = direction === "asc" ? 1 : -1;
+  switch (key) {
+    case "title":
+      return sign * a.title.localeCompare(b.title, "fr");
+    case "ref":
+      return sign * (a.external_reference_id ?? "").localeCompare(b.external_reference_id ?? "", "fr");
+    case "owner": {
+      const labelA = a.project ? (projectNameById.get(a.project) ?? "") : (a.team_name ?? "");
+      const labelB = b.project ? (projectNameById.get(b.project) ?? "") : (b.team_name ?? "");
+      return sign * labelA.localeCompare(labelB, "fr");
     }
-    return priorityRank(a.priority) - priorityRank(b.priority);
-  });
-  return reversed ? sorted.reverse() : sorted;
+    case "status":
+      return sign * a.status_display.localeCompare(b.status_display, "fr");
+    case "priority":
+      return sign * (priorityRank(a.priority) - priorityRank(b.priority));
+    case "delay":
+      return sign * (new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    case "author":
+      return sign * (a.author_name ?? "").localeCompare(b.author_name ?? "", "fr");
+    case "time_spent":
+      return compareNullableNumbers(a.time_spent, b.time_spent, direction);
+    default:
+      return 0;
+  }
 }
 
 interface IncidentRowProps {
@@ -223,8 +252,7 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
   const [resolveSubmitting, setResolveSubmitting] = useState(false);
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [sortKey, setSortKey] = useState<SortKey>(null);
-  const [sortReversed, setSortReversed] = useState(false);
+  const { sortKey, direction, toggle: toggleSort } = useSort<IncidentSortKey>();
   const [expandedIncidentId, setExpandedIncidentId] = useState<string | null>(null);
   const [comments, setComments] = useState<IncidentComment[] | null>(null);
   const [commentsError, setCommentsError] = useState<string | null>(null);
@@ -343,24 +371,6 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
 
   function toggleExpanded(incidentId: string) {
     setExpandedIncidentId((current) => (current === incidentId ? null : incidentId));
-  }
-
-  function handleSortClick(key: Exclude<SortKey, null>) {
-    if (sortKey === key) {
-      setSortReversed((current) => !current);
-    } else {
-      setSortKey(key);
-      setSortReversed(false);
-    }
-  }
-
-  function sortIcon(key: Exclude<SortKey, null>) {
-    if (sortKey !== key) return <ArrowUpDown size={12} strokeWidth={1.75} aria-hidden="true" />;
-    return sortReversed ? (
-      <ArrowUp size={12} strokeWidth={1.75} aria-hidden="true" />
-    ) : (
-      <ArrowDown size={12} strokeWidth={1.75} aria-hidden="true" />
-    );
   }
 
   async function handleStart(incident: Incident) {
@@ -492,7 +502,10 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
   }
 
   const projectNameById = new Map(projects.map((project) => [project.id, project.name]));
-  const displayedIncidents = incidents ? sortIncidents(incidents, sortKey, sortReversed) : null;
+  const displayedIncidents =
+    incidents && sortKey
+      ? [...incidents].sort((a, b) => compareIncidents(a, b, sortKey, direction, projectNameById))
+      : incidents;
   // Titre + actions (toujours affichés) + colonnes optionnelles visibles —
   // "owner" (Projet) n'existe pas du tout sur un projet déjà scopé, quel que
   // soit le réglage de colonnes.
@@ -592,26 +605,28 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
             <table className="incidents-page__table">
               <thead>
                 <tr>
-                  <th>Titre</th>
-                  {visibleColumns.has("ref") && <th>Réf.</th>}
-                  {!scopedProject && visibleColumns.has("owner") && <th>Projet</th>}
-                  {visibleColumns.has("status") && <th>Statut</th>}
+                  <SortableColumnHeader label="Titre" columnKey="title" sortKey={sortKey} direction={direction} onSort={toggleSort} />
+                  {visibleColumns.has("ref") && (
+                    <SortableColumnHeader label="Réf." columnKey="ref" sortKey={sortKey} direction={direction} onSort={toggleSort} />
+                  )}
+                  {!scopedProject && visibleColumns.has("owner") && (
+                    <SortableColumnHeader label="Projet" columnKey="owner" sortKey={sortKey} direction={direction} onSort={toggleSort} />
+                  )}
+                  {visibleColumns.has("status") && (
+                    <SortableColumnHeader label="Statut" columnKey="status" sortKey={sortKey} direction={direction} onSort={toggleSort} />
+                  )}
                   {visibleColumns.has("priority") && (
-                    <th>
-                      <button type="button" className="incidents-page__sort" onClick={() => handleSortClick("priority")}>
-                        Priorité {sortIcon("priority")}
-                      </button>
-                    </th>
+                    <SortableColumnHeader label="Priorité" columnKey="priority" sortKey={sortKey} direction={direction} onSort={toggleSort} />
                   )}
                   {visibleColumns.has("delay") && (
-                    <th>
-                      <button type="button" className="incidents-page__sort" onClick={() => handleSortClick("delay")}>
-                        Délai {sortIcon("delay")}
-                      </button>
-                    </th>
+                    <SortableColumnHeader label="Délai" columnKey="delay" sortKey={sortKey} direction={direction} onSort={toggleSort} />
                   )}
-                  {visibleColumns.has("author") && <th>Auteur du signalement</th>}
-                  {visibleColumns.has("time_spent") && <th>Temps passé</th>}
+                  {visibleColumns.has("author") && (
+                    <SortableColumnHeader label="Auteur du signalement" columnKey="author" sortKey={sortKey} direction={direction} onSort={toggleSort} />
+                  )}
+                  {visibleColumns.has("time_spent") && (
+                    <SortableColumnHeader label="Temps passé" columnKey="time_spent" sortKey={sortKey} direction={direction} onSort={toggleSort} />
+                  )}
                   <th></th>
                 </tr>
               </thead>

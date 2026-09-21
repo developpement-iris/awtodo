@@ -15,15 +15,18 @@ import { Combobox } from "../../components/Combobox";
 import { InlineEditableText } from "../../components/InlineEditableText";
 import { LoadingTransition } from "../../components/LoadingTransition";
 import { SkeletonTable } from "../../components/Skeleton";
+import { SortableColumnHeader } from "../../components/SortableColumnHeader";
 import { StatusBadge } from "../../components/StatusBadge";
 import { StatusFilterDropdown } from "../../components/StatusFilterDropdown";
 import { TypeBadge } from "../../components/TypeBadge";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 import { useToast } from "../../context/ToastContext";
 import { useColumnPreferences } from "../../hooks/useColumnPreferences";
-import { priorityTone, statusTone, taskStatusIcon } from "../../lib/badges";
+import { useSort, type SortDirection } from "../../hooks/useSort";
+import { priorityRank, priorityTone, statusTone, taskStatusIcon } from "../../lib/badges";
+import { compareNullableNumbers, compareNullableStrings } from "../../lib/sortCompare";
 import { defaultStatusSelection, TASK_STATUS_FILTER_OPTIONS } from "../../lib/statusFilterOptions";
-import type { AuditLogEntry, Project, Task, TaskComment, Team } from "../../types/watodo";
+import type { AuditLogEntry, Project, Task, TaskComment, Team, User } from "../../types/watodo";
 import { CompleteDialog } from "./CompleteDialog";
 import { RejectDialog } from "./RejectDialog";
 import { TaskAccordion } from "./TaskAccordion";
@@ -85,6 +88,63 @@ function formatHours(value: string | null): string {
   return `${value} h`;
 }
 
+function displayName(user: User): string {
+  return `${user.first_name} ${user.last_name}`.trim() || user.username;
+}
+
+// Tri par colonne (retour direct : "il faut pouvoir trier selon une
+// colonne... si je clique sur priorité, classement par priorité, par ordre
+// alphabétique pour les autres colonnes"). Priorité par rang (même helper
+// que les badges), dates/nombres par ordre naturel (valeurs manquantes
+// toujours en dernier, quel que soit le sens), le reste par ordre
+// alphabétique sur le libellé affiché.
+type TaskSortKey = "title" | TaskColumnKey;
+
+function compareTasks(
+  a: Task,
+  b: Task,
+  key: TaskSortKey,
+  direction: SortDirection,
+  projectNameById: Map<string, string>,
+): number {
+  const sign = direction === "asc" ? 1 : -1;
+  switch (key) {
+    case "title":
+      return sign * a.title.localeCompare(b.title, "fr");
+    case "ref":
+      return sign * (a.external_reference_id ?? "").localeCompare(b.external_reference_id ?? "", "fr");
+    case "type":
+      return sign * a.task_type_display.localeCompare(b.task_type_display, "fr");
+    case "status":
+      return sign * a.status_display.localeCompare(b.status_display, "fr");
+    case "priority":
+      return sign * (priorityRank(a.priority) - priorityRank(b.priority));
+    case "assignee":
+      return (
+        sign *
+        (a.assignee ? displayName(a.assignee) : "").localeCompare(
+          b.assignee ? displayName(b.assignee) : "",
+          "fr",
+        )
+      );
+    case "project":
+      return (
+        sign *
+        (projectNameById.get(a.project) ?? "").localeCompare(projectNameById.get(b.project) ?? "", "fr")
+      );
+    case "deadline":
+      return compareNullableStrings(a.deadline, b.deadline, direction);
+    case "estimated_hours":
+      return compareNullableNumbers(a.estimated_hours, b.estimated_hours, direction);
+    case "time_spent":
+      return compareNullableNumbers(a.time_spent, b.time_spent, direction);
+    case "version":
+      return sign * a.version_label.localeCompare(b.version_label, "fr");
+    default:
+      return 0;
+  }
+}
+
 interface TasksListPageProps {
   /** Depuis une notification "tâche" : ouvre directement cette tâche et
    * l'amène à l'écran, symétrique à `focusIncidentId` sur `IncidentsPage`. */
@@ -111,6 +171,7 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
     TASK_COLUMN_KEYS,
     TASK_COLUMNS_DEFAULT_VISIBLE,
   );
+  const { sortKey, direction, toggle: toggleSort } = useSort<TaskSortKey>();
 
   const myTeams = currentUser?.teams ?? [];
   const activeTeam = selectedTeam || myTeams[0] || "";
@@ -278,6 +339,7 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
 
   const projectNameById = new Map(projects.map((project) => [project.id, project.name]));
   const teamNameById = new Map(teams.map((team) => [team.id, team.name]));
+  const sortedTasks = sortKey && tasks ? [...tasks].sort((a, b) => compareTasks(a, b, sortKey, direction, projectNameById)) : tasks;
 
   return (
     <div className="tasks-list-page">
@@ -336,25 +398,45 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
             </p>
           )}
 
-          {tasks && tasks.length > 0 && (
+          {sortedTasks && sortedTasks.length > 0 && (
             <table className="tasks-list-page__table">
               <thead>
                 <tr>
-                  <th>Titre</th>
-                  {visibleColumns.has("ref") && <th>Réf.</th>}
-                  {visibleColumns.has("type") && <th>Type</th>}
-                  {visibleColumns.has("status") && <th>Statut</th>}
-                  {visibleColumns.has("priority") && <th>Priorité</th>}
-                  {visibleColumns.has("assignee") && <th>Assigné à</th>}
-                  {visibleColumns.has("project") && <th>Projet</th>}
-                  {visibleColumns.has("deadline") && <th>Échéance</th>}
-                  {visibleColumns.has("estimated_hours") && <th>Temps estimé</th>}
-                  {visibleColumns.has("time_spent") && <th>Temps passé</th>}
-                  {visibleColumns.has("version") && <th>Version</th>}
+                  <SortableColumnHeader label="Titre" columnKey="title" sortKey={sortKey} direction={direction} onSort={toggleSort} />
+                  {visibleColumns.has("ref") && (
+                    <SortableColumnHeader label="Réf." columnKey="ref" sortKey={sortKey} direction={direction} onSort={toggleSort} />
+                  )}
+                  {visibleColumns.has("type") && (
+                    <SortableColumnHeader label="Type" columnKey="type" sortKey={sortKey} direction={direction} onSort={toggleSort} />
+                  )}
+                  {visibleColumns.has("status") && (
+                    <SortableColumnHeader label="Statut" columnKey="status" sortKey={sortKey} direction={direction} onSort={toggleSort} />
+                  )}
+                  {visibleColumns.has("priority") && (
+                    <SortableColumnHeader label="Priorité" columnKey="priority" sortKey={sortKey} direction={direction} onSort={toggleSort} />
+                  )}
+                  {visibleColumns.has("assignee") && (
+                    <SortableColumnHeader label="Assigné à" columnKey="assignee" sortKey={sortKey} direction={direction} onSort={toggleSort} />
+                  )}
+                  {visibleColumns.has("project") && (
+                    <SortableColumnHeader label="Projet" columnKey="project" sortKey={sortKey} direction={direction} onSort={toggleSort} />
+                  )}
+                  {visibleColumns.has("deadline") && (
+                    <SortableColumnHeader label="Échéance" columnKey="deadline" sortKey={sortKey} direction={direction} onSort={toggleSort} />
+                  )}
+                  {visibleColumns.has("estimated_hours") && (
+                    <SortableColumnHeader label="Temps estimé" columnKey="estimated_hours" sortKey={sortKey} direction={direction} onSort={toggleSort} />
+                  )}
+                  {visibleColumns.has("time_spent") && (
+                    <SortableColumnHeader label="Temps passé" columnKey="time_spent" sortKey={sortKey} direction={direction} onSort={toggleSort} />
+                  )}
+                  {visibleColumns.has("version") && (
+                    <SortableColumnHeader label="Version" columnKey="version" sortKey={sortKey} direction={direction} onSort={toggleSort} />
+                  )}
                 </tr>
               </thead>
               <tbody>
-                {tasks.map((task) => (
+                {sortedTasks.map((task) => (
                   <Fragment key={task.id}>
                     <tr
                       id={`task-row-${task.id}`}
@@ -398,7 +480,7 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
                       {visibleColumns.has("assignee") && (
                         <td>
                           {task.assignee
-                            ? `${task.assignee.first_name} ${task.assignee.last_name}`.trim() || task.assignee.username
+                            ? displayName(task.assignee)
                             : <span className="tasks-list-page__empty-cell">Non assignée</span>}
                         </td>
                       )}

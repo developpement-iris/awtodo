@@ -133,6 +133,15 @@ Demande directe : pouvoir choisir, par utilisateur, quelles colonnes afficher su
 - **`TasksListPage`** : "Titre" reste obligatoire (identifiant de ligne, édition inline) ; Réf./Type/Statut/Priorité/Assigné à/Projet sont optionnelles, toutes visibles par défaut (comportement inchangé pour qui n'a jamais rien réglé).
 - **`IncidentsPage`** : même principe, colonne "owner" partagée entre les deux tableaux de l'écran (Projet dans la liste principale, Groupe dans la boîte de réception — visuellement la même colonne, un seul réglage la contrôle) ; absente d'office sur un projet scopé (`scopedProject`, onglet Incidents d'un hub projet), quel que soit le réglage. La colonne Actions reste toujours affichée.
 
+### Tri par colonne des listes (implémenté — session du 2026-09-21)
+
+Demande directe : "il faut pouvoir trier selon une colonne. si je clique sur 'priorité', classement par priorité, par ordre alphabétique pr les autres colonnes". Cliquer un en-tête trie par cette colonne ; recliquer inverse le sens (`asc`/`desc`) ; l'icône flèche double devient une flèche simple orientée sur la colonne active.
+
+- **Nouveau hook `useSort`** (`hooks/useSort.ts`) : ne porte que `{sortKey, direction}` + `toggle(key)` — générique sur l'ensemble de clés de l'écran appelant, pas de logique de comparaison (trop spécifique à chaque colonne pour une abstraction commune).
+- **Nouveau composant `SortableColumnHeader`** (`components/SortableColumnHeader.tsx`) : remplace le `<th>` brut, bouton pleine-cellule (même gabarit que l'ancien `.incidents-page__sort`, désormais partagé) avec icône `ArrowUpDown`/`ArrowUp`/`ArrowDown` (`lucide-react`) selon l'état.
+- **Comparateurs par écran** (`TasksListPage`/`IncidentsPage`, fonction `compareTasks`/`compareIncidents`) : priorité triée par rang (`priorityRank`, même helper que les badges — pas alphabétique sur le libellé, l'ordre métier prime), échéance/date par valeur chronologique réelle (pas la chaîne relative affichée pour "Délai"), temps estimé/passé numériquement, tout le reste (titre, réf., type, statut, assigné, projet, version, auteur) par ordre alphabétique (`localeCompare("fr")`) sur le libellé affiché. Valeurs manquantes toujours en fin de liste, quel que soit le sens (`lib/sortCompare.ts`, `compareNullableNumbers`/`compareNullableStrings`, partagé entre les deux écrans).
+- **Portée** : les deux tableaux de tâches/incidents "principaux" sont triables sur toutes leurs colonnes visibles (y compris Titre). La boîte de réception des incidents (`inboxIncidents`, tableau secondaire de `IncidentsPage`) reste non triable dans cette passe — volume généralement faible, pas demandé explicitement.
+
 ### Page de connexion — panneau oblique (implémenté — session du 10/08/2026)
 
 Reprise de `maquette-login-oblique.html` (fournie par l'utilisateur, copiée à la racine du repo). Consigne explicite et inhabituelle par rapport à toutes les passes précédentes : **adapter les polices à la charte, mais pas les couleurs**. Appliqué à la lettre :
