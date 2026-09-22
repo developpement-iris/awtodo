@@ -66,7 +66,10 @@ class MeSerializer(UserSerializer):
     l'écran Paramètres (mot de passe, préférences)."""
 
     class Meta(UserSerializer.Meta):
-        fields = UserSerializer.Meta.fields + ["email_notifications_enabled"]
+        fields = UserSerializer.Meta.fields + [
+            "email_notifications_enabled",
+            "outlook_calendar_sync_enabled",
+        ]
 
 
 class ChangePasswordSerializer(serializers.Serializer):
@@ -82,11 +85,14 @@ class PlanningPreferencesSerializer(serializers.Serializer):
     """`planning_color` accepte une chaîne vide : c'est la façon de revenir à
     "pas de couleur choisie" (repli sur l'accent thémé). Les horaires de
     travail sont gérés séparément, voir `apps.planning.views.WorkingHoursView`
-    (modèle hebdomadaire + exceptions, pas juste deux champs scalaires)."""
+    (modèle hebdomadaire + exceptions, pas juste deux champs scalaires).
+    `outlook_calendar_sync_enabled` (session du 2026-09-22) : scaffolding,
+    n'a encore aucun effet réel — voir `apps.planning.signals`."""
 
     planning_color = serializers.RegexField(
         r"^(#[0-9A-Fa-f]{6})?$", required=False, allow_blank=True
     )
+    outlook_calendar_sync_enabled = serializers.BooleanField(required=False)
 
 
 class TeamMembershipSerializer(serializers.ModelSerializer):

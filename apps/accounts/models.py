@@ -173,6 +173,13 @@ class User(UUIDModel, AbstractUser):
     # l'inverse.
     planning_color = models.CharField(max_length=7, blank=True, default="")
 
+    # Synchronisation Outlook, sens unique Awtodo → Outlook (scaffolding,
+    # session du 2026-09-22 — voir `apps.planning.signals` pour le détail du
+    # câblage prévu au déploiement). Simple opt-in scalaire comme
+    # `planning_color`/`email_notifications_enabled`, pas de modélisation
+    # relationnelle nécessaire ici.
+    outlook_calendar_sync_enabled = models.BooleanField(default=False)
+
     def __str__(self):
         return self.get_username()
 

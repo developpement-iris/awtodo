@@ -25,6 +25,9 @@ export interface User {
 // pour un autre utilisateur).
 export interface Me extends User {
   email_notifications_enabled: boolean;
+  /** Synchronisation Outlook, sens unique Awtodo → Outlook (scaffolding,
+   * session du 2026-09-22) — n'a encore aucun effet réel côté backend. */
+  outlook_calendar_sync_enabled: boolean;
 }
 
 // Connexion par mot de passe — voir docs/organisation-et-comptes.md >

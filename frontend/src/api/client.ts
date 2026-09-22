@@ -381,9 +381,15 @@ export function updateNotificationPreferences(emailNotificationsEnabled: boolean
 // d'`undefined`, pour revenir à l'accent thémé par défaut. Les horaires de
 // travail sont gérées à part, voir `getWorkingHours`/`updateWorkingHours`
 // ci-dessous (modèle hebdomadaire + exceptions, pas un simple champ).
-export function updatePlanningPreferences(input: { planningColor?: string }): Promise<Me> {
-  const body: Record<string, string> = {};
+export function updatePlanningPreferences(input: {
+  planningColor?: string;
+  outlookCalendarSyncEnabled?: boolean;
+}): Promise<Me> {
+  const body: Record<string, string | boolean> = {};
   if (input.planningColor !== undefined) body.planning_color = input.planningColor;
+  if (input.outlookCalendarSyncEnabled !== undefined) {
+    body.outlook_calendar_sync_enabled = input.outlookCalendarSyncEnabled;
+  }
   return patchJson<Me>("/accounts/me/planning-preferences/", body);
 }
 

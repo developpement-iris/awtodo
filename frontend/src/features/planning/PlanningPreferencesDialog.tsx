@@ -38,6 +38,7 @@ export function PlanningPreferencesDialog({
 }: PlanningPreferencesDialogProps) {
   const [color, setColor] = useState(me.planning_color);
   const [colorSaving, setColorSaving] = useState(false);
+  const [outlookSyncSaving, setOutlookSyncSaving] = useState(false);
 
   const [targetUserId, setTargetUserId] = useState(""); // "" = moi-même
   const [scope, setScope] = useState<Scope>("base");
@@ -83,6 +84,18 @@ export function PlanningPreferencesDialog({
       setError(err instanceof Error ? err.message : "Enregistrement impossible.");
     } finally {
       setColorSaving(false);
+    }
+  }
+
+  async function handleToggleOutlookSync(checked: boolean) {
+    setOutlookSyncSaving(true);
+    setError(null);
+    try {
+      onSaved(await updatePlanningPreferences({ outlookCalendarSyncEnabled: checked }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Enregistrement impossible.");
+    } finally {
+      setOutlookSyncSaving(false);
     }
   }
 
@@ -176,6 +189,24 @@ export function PlanningPreferencesDialog({
                 )}
               </div>
             </div>
+          )}
+
+          {!targetUserId && (
+            <label className="planning-field planning-field--inline planning-field--align-top">
+              <Checkbox
+                checked={me.outlook_calendar_sync_enabled}
+                onCheckedChange={handleToggleOutlookSync}
+                disabled={outlookSyncSaving}
+                aria-label="Synchroniser mon calendrier vers Outlook"
+              />
+              <span>
+                Synchroniser mon calendrier vers Outlook
+                <span className="planning-field__hint">
+                  Awtodo → Outlook uniquement (création, modification, suppression). Pas encore actif — en
+                  attente de la connexion Microsoft.
+                </span>
+              </span>
+            </label>
           )}
 
           <div className="planning-field">

@@ -294,15 +294,21 @@ def update_notification_preferences(*, actor, email_notifications_enabled):
     return actor
 
 
-def update_planning_preferences(*, actor, planning_color=None):
+def update_planning_preferences(*, actor, planning_color=None, outlook_calendar_sync_enabled=None):
     """Mise à jour partielle — `planning_color=""` est une valeur valide
     (retour à l'accent thémé par défaut), distincte de `None` (champ non
     fourni). Les horaires de travail sont gérées à part, voir
     `apps.planning.services.update_working_hours`."""
     _require_actor(actor)
+    update_fields = []
     if planning_color is not None:
         actor.planning_color = planning_color
-        actor.save(update_fields=["planning_color"])
+        update_fields.append("planning_color")
+    if outlook_calendar_sync_enabled is not None:
+        actor.outlook_calendar_sync_enabled = outlook_calendar_sync_enabled
+        update_fields.append("outlook_calendar_sync_enabled")
+    if update_fields:
+        actor.save(update_fields=update_fields)
     return actor
 
 

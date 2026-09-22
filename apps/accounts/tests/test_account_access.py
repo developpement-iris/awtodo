@@ -216,3 +216,18 @@ class PlanningPreferenceServiceTests(TestCase):
 
         self.assertEqual(updated.planning_color, "")
 
+    def test_update_outlook_calendar_sync_enabled(self):
+        self.assertFalse(self.user.outlook_calendar_sync_enabled)
+
+        updated = update_planning_preferences(actor=self.user, outlook_calendar_sync_enabled=True)
+
+        self.assertTrue(updated.outlook_calendar_sync_enabled)
+
+    def test_planning_color_and_outlook_sync_updated_independently(self):
+        update_planning_preferences(actor=self.user, planning_color="#7A4F9E")
+
+        updated = update_planning_preferences(actor=self.user, outlook_calendar_sync_enabled=True)
+
+        self.assertEqual(updated.planning_color, "#7A4F9E")
+        self.assertTrue(updated.outlook_calendar_sync_enabled)
+

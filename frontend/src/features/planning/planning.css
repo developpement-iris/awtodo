@@ -729,6 +729,20 @@
   gap: var(--space-2);
 }
 
+.planning-field--align-top {
+  align-items: flex-start;
+  color: var(--color-text);
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.planning-field__hint {
+  display: block;
+  font-size: 0.76rem;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
 .planning-field-label {
   font-size: 0.82rem;
   color: var(--color-text-muted);

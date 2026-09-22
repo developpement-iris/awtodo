@@ -25,7 +25,12 @@ from .models import (
     WorkingHoursOverrideDay,
     WorkingHoursWeekOverride,
 )
-from .signals import event_participant_invited
+from .signals import (
+    calendar_event_cancelled,
+    calendar_event_created,
+    calendar_event_updated,
+    event_participant_invited,
+)
 
 
 class PlanningPermissionError(Exception):
@@ -427,7 +432,7 @@ def create_event(*, actor, title, start, end, all_day=False, description="", loc
         raise PlanningValidationError("Le titre est obligatoire.")
     _validate_window(start, end)
     rule = _validate_recurrence_rule(recurrence_rule, start)
-    return CalendarEvent.objects.create(
+    event = CalendarEvent.objects.create(
         owner=actor,
         title=title.strip()[:255],
         description=description or "",
@@ -437,6 +442,8 @@ def create_event(*, actor, title, start, end, all_day=False, description="", loc
         all_day=all_day,
         recurrence_rule=rule,
     )
+    calendar_event_created.send(sender=CalendarEvent, event=event, actor=actor)
+    return event
 
 
 _UNSET = object()
@@ -476,6 +483,7 @@ def update_event(
         if recurrence_rule is not _UNSET:
             event.recurrence_rule = _validate_recurrence_rule(recurrence_rule, new_start)
         event.save()
+    calendar_event_updated.send(sender=CalendarEvent, event=event, actor=actor)
     return event
 
 
@@ -483,6 +491,7 @@ def cancel_event(*, actor, event):
     _ensure_can_edit_event(actor, event)
     event.status = "annule"
     event.save(update_fields=["status", "updated_at"])
+    calendar_event_cancelled.send(sender=CalendarEvent, event=event, actor=actor)
     return event
 
 

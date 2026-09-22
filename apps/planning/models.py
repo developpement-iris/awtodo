@@ -64,6 +64,11 @@ class CalendarEvent(UUIDModel, TimeStampedModel, StatusLifecycleModel, Recurring
     description = models.TextField(blank=True, default="")
     location = models.CharField(max_length=255, blank=True, default="")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="confirme")
+    # Synchronisation Outlook (scaffolding, session du 2026-09-22, sens
+    # unique Awtodo → Outlook) — id de l'événement côté Graph une fois créé
+    # là-bas, vide tant que la synchro réelle n'est pas câblée. Voir
+    # `apps.planning.signals` pour le détail du câblage prévu au déploiement.
+    outlook_event_id = models.CharField(max_length=200, blank=True, default="")
 
     class Meta:
         default_manager_name = "all_objects"
