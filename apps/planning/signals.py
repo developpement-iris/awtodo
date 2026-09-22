@@ -2,6 +2,8 @@ import django.dispatch
 from django.db import transaction
 from django.dispatch import receiver
 
+from apps.accounts.signals import outlook_calendar_sync_enabled_activated
+
 # Émis par `apps.planning.services.add_participant` quand un utilisateur est
 # invité à un événement. Consommé par `apps.notifications` (plus haut dans la
 # hiérarchie de dépendances — l'inverse serait interdit).
@@ -47,3 +49,18 @@ def sync_event_updated_to_outlook(sender, event, actor=None, **kwargs):
 @receiver(calendar_event_cancelled)
 def sync_event_cancelled_to_outlook(sender, event, actor=None, **kwargs):
     _enqueue_outlook_sync(event, "cancelled")
+
+
+@receiver(outlook_calendar_sync_enabled_activated)
+def backfill_outlook_sync_on_activation(sender, user, **kwargs):
+    """Rattrape les événements déjà existants la première fois qu'un
+    utilisateur active la synchro — sans ça, seuls les événements créés
+    *après* l'activation apparaîtraient côté Outlook (remonté directement :
+    "ça synchronise pas mes événements déjà existants ?")."""
+
+    def _dispatch():
+        from .tasks import backfill_user_outlook_sync
+
+        backfill_user_outlook_sync.delay(str(user.id))
+
+    transaction.on_commit(_dispatch)

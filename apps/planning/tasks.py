@@ -64,3 +64,22 @@ def sync_calendar_event_to_outlook(event_id, action):
             CalendarEvent.all_objects.filter(id=event.id).update(outlook_event_id=outlook_id)
     except GraphSyncError:
         logger.exception("Synchronisation Outlook échouée pour l'événement %s (action=%s).", event_id, action)
+
+
+@shared_task
+def backfill_user_outlook_sync(user_id):
+    """Rattrape les événements créés **avant** l'activation de la synchro —
+    les signaux `calendar_event_*` ne se redéclenchent pas tout seuls pour
+    l'historique. Déclenchée une seule fois, quand `outlook_calendar_sync_enabled`
+    bascule de False à True (voir `apps.accounts.services.update_planning_preferences`
+    et `apps.planning.signals`), jamais à chaque sauvegarde de préférence.
+
+    Ne synchronise que les événements actifs (`status="confirme"`), non
+    récurrents et pas déjà rattachés à un id Graph — appelle simplement la
+    tâche de synchro unitaire pour chacun, en `created` (mêmes garde-fous,
+    mêmes erreurs avalées)."""
+    events = CalendarEvent.objects.filter(
+        owner_id=user_id, recurrence_rule="", outlook_event_id=""
+    ).values_list("id", flat=True)
+    for event_id in events:
+        sync_calendar_event_to_outlook(str(event_id), "created")

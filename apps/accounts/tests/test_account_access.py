@@ -1,6 +1,7 @@
 """Session du 2026-09-16 : couper l'accès d'un compte (réversible), et
 l'écran Paramètres (mot de passe / préférences de notification)."""
 
+from django.dispatch import Signal
 from django.test import TestCase, override_settings
 from rest_framework.test import APITestCase
 
@@ -15,6 +16,7 @@ from apps.accounts.services import (
     update_notification_preferences,
     update_planning_preferences,
 )
+from apps.accounts.signals import outlook_calendar_sync_enabled_activated
 
 
 class DeactivateAccountTests(TestCase):
@@ -230,4 +232,44 @@ class PlanningPreferenceServiceTests(TestCase):
 
         self.assertEqual(updated.planning_color, "#7A4F9E")
         self.assertTrue(updated.outlook_calendar_sync_enabled)
+
+    def test_activating_outlook_sync_emits_signal_once(self):
+        catcher = _Catcher(outlook_calendar_sync_enabled_activated)
+        try:
+            update_planning_preferences(actor=self.user, outlook_calendar_sync_enabled=True)
+            self.assertEqual(len(catcher.received), 1)
+            self.assertEqual(catcher.received[0]["user"], self.user)
+        finally:
+            catcher.disconnect()
+
+    def test_reactivating_outlook_sync_does_not_re_emit_signal(self):
+        update_planning_preferences(actor=self.user, outlook_calendar_sync_enabled=True)
+        catcher = _Catcher(outlook_calendar_sync_enabled_activated)
+        try:
+            update_planning_preferences(actor=self.user, outlook_calendar_sync_enabled=True)
+            self.assertEqual(len(catcher.received), 0)
+        finally:
+            catcher.disconnect()
+
+    def test_toggling_outlook_sync_off_does_not_emit_signal(self):
+        update_planning_preferences(actor=self.user, outlook_calendar_sync_enabled=True)
+        catcher = _Catcher(outlook_calendar_sync_enabled_activated)
+        try:
+            update_planning_preferences(actor=self.user, outlook_calendar_sync_enabled=False)
+            self.assertEqual(len(catcher.received), 0)
+        finally:
+            catcher.disconnect()
+
+
+class _Catcher:
+    def __init__(self, signal: Signal):
+        self.signal = signal
+        self.received = []
+        signal.connect(self._handler, weak=False)
+
+    def _handler(self, sender, **kwargs):
+        self.received.append(kwargs)
+
+    def disconnect(self):
+        self.signal.disconnect(self._handler)
 

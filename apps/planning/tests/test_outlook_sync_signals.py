@@ -4,10 +4,13 @@ récepteur planifie bien une tâche Celery après commit sans jamais lever
 d'exception — voir `apps/planning/tests/test_outlook_sync_tasks.py` pour le
 comportement de la tâche elle-même (appels Graph mockés)."""
 
+from unittest.mock import patch
+
 from django.dispatch import Signal
 from django.test import TestCase
 
 from apps.accounts.models import User
+from apps.accounts.services import update_planning_preferences
 from apps.planning.services import cancel_event, create_event, update_event
 from apps.planning.signals import calendar_event_cancelled, calendar_event_created, calendar_event_updated
 
@@ -92,3 +95,18 @@ class OutlookSyncSignalTests(TestCase):
             cancel_event(actor=self.user, event=event)
         event.refresh_from_db()
         self.assertEqual(event.outlook_event_id, "")
+
+    @patch("apps.planning.tasks.backfill_user_outlook_sync.delay")
+    def test_activating_sync_schedules_backfill_after_commit(self, mock_delay):
+        with self.captureOnCommitCallbacks(execute=True):
+            update_planning_preferences(actor=self.user, outlook_calendar_sync_enabled=True)
+        mock_delay.assert_called_once_with(str(self.user.id))
+
+    @patch("apps.planning.tasks.backfill_user_outlook_sync.delay")
+    def test_reactivating_sync_does_not_reschedule_backfill(self, mock_delay):
+        with self.captureOnCommitCallbacks(execute=True):
+            update_planning_preferences(actor=self.user, outlook_calendar_sync_enabled=True)
+        mock_delay.reset_mock()
+        with self.captureOnCommitCallbacks(execute=True):
+            update_planning_preferences(actor=self.user, outlook_calendar_sync_enabled=True)
+        mock_delay.assert_not_called()

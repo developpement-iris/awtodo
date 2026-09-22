@@ -12,6 +12,7 @@ from django.utils import timezone
 from django.utils.html import escape
 
 from .models import PASSWORD_RESET_TOKEN_LIFETIME, Invitation, Organisation, PasswordResetRequest, Team, TeamMembership, User
+from .signals import outlook_calendar_sync_enabled_activated
 
 
 class AccountPermissionError(Exception):
@@ -304,11 +305,20 @@ def update_planning_preferences(*, actor, planning_color=None, outlook_calendar_
     if planning_color is not None:
         actor.planning_color = planning_color
         update_fields.append("planning_color")
+    # Bascule False → True seulement : sert à déclencher un backfill des
+    # événements déjà existants (voir apps.planning.signals) — un True → True
+    # (l'utilisateur rouvre juste le panneau) ne doit pas re-synchroniser
+    # tout son calendrier à chaque enregistrement.
+    sync_just_activated = bool(
+        outlook_calendar_sync_enabled and not actor.outlook_calendar_sync_enabled
+    )
     if outlook_calendar_sync_enabled is not None:
         actor.outlook_calendar_sync_enabled = outlook_calendar_sync_enabled
         update_fields.append("outlook_calendar_sync_enabled")
     if update_fields:
         actor.save(update_fields=update_fields)
+    if sync_just_activated:
+        outlook_calendar_sync_enabled_activated.send(sender=User, user=actor)
     return actor
 
 
