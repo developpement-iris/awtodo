@@ -92,9 +92,9 @@ Deux modes, via un filtre sur l'écran "Tâches" (liste simple, pas le Kanban) :
 - **`default_organisation_id()`** (`apps/accounts/models.py`) : valeur par défaut pratique sur les 3 champs `organisation` ci-dessus (résout vers la première `Organisation` existante) — évite d'imposer `organisation=...` à chaque `User.objects.create_user(...)`/`Team.objects.create(...)`/`Project.objects.create(...)` existant dans ~10 fichiers de tests et le script de seed. N'affaiblit pas la contrainte NOT NULL en base ; un appelant qui veut une organisation précise (ex. `create_organisation`) la passe explicitement et prime sur ce défaut. Cohérent avec le principe déjà écrit plus haut dans ce fichier ("Awtodo reste un outil interne à une seule entreprise en usage réel") : il n'existe concrètement qu'une organisation à la fois tant que ce chantier n'est pas allé plus loin.
 - **Tous les endpoints `accounts` (`/organisations/`, `/teams/`, `/invitations/`, `/users/...`) vivent sous `/api/v1/accounts/...`**, pas à la racine `/api/v1/...` comme les tableaux d'endpoints de ce fichier le laissent parfois entendre (`POST /api/v1/organisations/` → en réalité `POST /api/v1/accounts/organisations/`) — conséquence mécanique de `config/urls.py`, qui registre déjà chaque app sous son propre préfixe (`accounts/`, `projects/`, `tasks/`...), pas une déviation décidée cette session.
 
-## Écran Administration (organisation) — 4 sous-sections unifiées
+## Écran Administration (organisation) — 5 sous-sections unifiées
 
-**Statut : implémenté (session du 2026-08-04, soir).** Un seul écran "Administration" dans la sidebar (distinct de l'onglet "Administration" du hub projet, qui reste séparé — voir plus bas), visible pour tout utilisateur ayant au moins un droit d'administration (`organisation_role` ≠ `membre`, ou `is_platform_admin`). Les sous-sections visibles dépendent du rang de l'utilisateur courant :
+**Statut : implémenté (session du 2026-08-04, soir ; 5ᵉ sous-section ajoutée le 2026-09-22).** Un seul écran "Administration" dans la sidebar (distinct de l'onglet "Administration" du hub projet, qui reste séparé — voir plus bas), visible pour tout utilisateur ayant au moins un droit d'administration (`organisation_role` ≠ `membre`, ou `is_platform_admin`). Les sous-sections visibles dépendent du rang de l'utilisateur courant :
 
 ### 1. Membres (organisation) — implémenté, session du 06/08/2026
 Visible par `admin`. Liste des utilisateurs de l'organisation, gestion de leur `organisation_role`.
@@ -119,7 +119,11 @@ Visible par `admin`/`chef_de_projet`. Liste des groupes de l'organisation, créa
 ### 3. Invitations
 Visible par `admin`/`chef_de_projet`. Voir section dédiée ci-dessous.
 
-### 4. Organisations
+### 4. Intégrations (ajouté — session du 2026-09-22)
+
+Visible par `admin` d'organisation ou `is_platform_admin` (même droit que le backend `is_organisation_admin`). Un seul bloc pour l'instant : configuration de la connexion Office 365 (`O365Connection` — tenant/client/secret Microsoft Graph, un seul jeu d'identifiants par organisation), déplacée ici **depuis l'onglet Communication d'un projet** suite à un retour direct de l'utilisateur ("on fout pas ça dans Communication, une connexion par organisation n'a rien à faire dans un écran par projet"). Sert à la fois à l'envoi de mails/Teams (module Communication, toujours pas câblé) et à la synchronisation Outlook du planning (câblée, voir `docs/modeles-et-api.md` > "Synchronisation Outlook"). L'onglet Communication d'un projet garde un statut en lecture seule (configurée/non configurée) pointant vers cet écran, sans formulaire d'édition. Aucun changement d'API — `O365Connection` reste organisation-scoped comme avant, seul l'emplacement de l'écran d'édition a bougé.
+
+### 5. Organisations
 **Visible uniquement par `is_platform_admin`.** Liste de toutes les organisations existantes, et création d'une nouvelle organisation.
 - `POST /api/v1/organisations/` : réservé à `is_platform_admin`. **Le formulaire de création inclut directement les informations du premier utilisateur admin de cette nouvelle organisation** (nom, email) — créés dans la même transaction, ce nouvel utilisateur reçoit `organisation_role=admin` sur l'organisation qui vient d'être créée. Nécessaire car le flux d'invitation classique (voir ci-dessous) suppose déjà un admin existant dans l'organisation cible, ce qui est impossible pour une organisation qui vient de naître.
 - `GET /api/v1/organisations/` : réservé à `is_platform_admin`.

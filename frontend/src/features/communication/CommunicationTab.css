@@ -30,6 +30,11 @@
   background: var(--color-surface);
 }
 
+.communication-tab__section--compact {
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+}
+
 .communication-tab__section-header {
   display: flex;
   align-items: center;
@@ -61,36 +66,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-}
-
-/* --- Connexion O365 -------------------------------------------------- */
-
-.communication-tab__o365-summary dl {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
-  margin: 0;
-}
-
-.communication-tab__o365-summary dt {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--color-text-muted);
-}
-
-.communication-tab__o365-summary dd {
-  margin: 2px 0 0;
-  font-size: 0.86rem;
-  color: var(--color-text);
-  font-family: var(--font-mono);
-}
-
-.communication-tab__o365-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: var(--space-3);
 }
 
 /* --- Canaux ------------------------------------------------------------ */
@@ -291,9 +266,5 @@
 @media (max-width: 720px) {
   .communication-tab__form-row {
     flex-direction: column;
-  }
-
-  .communication-tab__o365-summary dl {
-    grid-template-columns: 1fr;
   }
 }

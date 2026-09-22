@@ -7,13 +7,11 @@ import {
   getO365Connection,
   getProjectCommunicationChannels,
   getProjectCommunicationMessages,
-  updateO365Connection,
 } from "../../api/client";
 import { Checkbox } from "../../components/Checkbox";
 import { Combobox } from "../../components/Combobox";
 import { Skeleton } from "../../components/Skeleton";
 import { StatusBadge } from "../../components/StatusBadge";
-import { useCurrentUser } from "../../context/CurrentUserContext";
 import { useToast } from "../../context/ToastContext";
 import type { CommunicationChannel, CommunicationChannelType, CommunicationMessage, O365Connection, Project } from "../../types/watodo";
 import "./CommunicationTab.css";
@@ -38,11 +36,9 @@ function displayName(user: { first_name: string; last_name: string; username: st
 }
 
 export function CommunicationTab({ project }: CommunicationTabProps) {
-  const { currentUser } = useCurrentUser();
   const { showToast } = useToast();
   const canManage = project.permissions.can_manage_project_communication;
   const canSend = project.permissions.can_send_project_communication;
-  const isOrgAdmin = Boolean(currentUser?.is_platform_admin || currentUser?.organisation_role === "admin");
 
   const [connection, setConnection] = useState<O365Connection | null>(null);
   const [channels, setChannels] = useState<CommunicationChannel[] | null>(null);
@@ -70,46 +66,6 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
   }, [project.id, reloadKey]);
 
   const activeChannels = useMemo(() => (channels ?? []).filter((c) => c.status === "active"), [channels]);
-
-  // --- Connexion Office 365 (admin d'organisation) -----------------------
-  const [o365Editing, setO365Editing] = useState(false);
-  const [o365Form, setO365Form] = useState({ tenant_id: "", client_id: "", client_secret: "", sender_mailbox: "" });
-  const [o365Busy, setO365Busy] = useState(false);
-
-  function startO365Edit() {
-    if (!connection) return;
-    setO365Form({
-      tenant_id: connection.tenant_id,
-      client_id: connection.client_id,
-      client_secret: "",
-      sender_mailbox: connection.sender_mailbox,
-    });
-    setO365Editing(true);
-  }
-
-  async function handleO365Save() {
-    setO365Busy(true);
-    setError(null);
-    try {
-      const payload: Record<string, string> = { ...o365Form };
-      if (!payload.client_secret) delete payload.client_secret; // ne pas écraser un secret déjà saisi
-      setConnection(await updateO365Connection(payload));
-      setO365Editing(false);
-      showToast("Connexion Office 365 mise à jour.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec de la mise à jour.");
-    } finally {
-      setO365Busy(false);
-    }
-  }
-
-  async function handleO365Toggle(enabled: boolean) {
-    try {
-      setConnection(await updateO365Connection({ is_enabled: enabled }));
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Échec de la mise à jour.");
-    }
-  }
 
   // --- Canaux --------------------------------------------------------
   const [channelType, setChannelType] = useState<CommunicationChannelType>("email");
@@ -199,8 +155,9 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
 
       {error && <p className="communication-tab__error">{error}</p>}
 
-      {/* --- Connexion Office 365 ------------------------------------ */}
-      <section className="communication-tab__section">
+      {/* --- Connexion Office 365 (lecture seule — configuration dans
+          Administration > Intégrations, réservée à un admin d'organisation) */}
+      <section className="communication-tab__section communication-tab__section--compact">
         <div className="communication-tab__section-header">
           <h3>
             <Plug size={16} strokeWidth={1.75} aria-hidden="true" />
@@ -213,102 +170,16 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
             />
           )}
         </div>
-        <p className="communication-tab__hint">
-          Connexion Microsoft Graph, valable pour toute l'organisation (un seul jeu d'identifiants,
-          renseigné une fois). Réservée à un administrateur d'organisation.
-        </p>
-
         {!connection && (
           <div className="communication-tab__skeleton">
-            <Skeleton height="20px" />
+            <Skeleton height="16px" />
           </div>
         )}
-
-        {connection && !o365Editing && (
-          <div className="communication-tab__o365-summary">
-            <dl>
-              <div>
-                <dt>Tenant</dt>
-                <dd>{connection.tenant_id || "—"}</dd>
-              </div>
-              <div>
-                <dt>Client ID</dt>
-                <dd>{connection.client_id || "—"}</dd>
-              </div>
-              <div>
-                <dt>Secret</dt>
-                <dd>{connection.has_client_secret ? "•••••••• (enregistré)" : "—"}</dd>
-              </div>
-              <div>
-                <dt>Boîte expéditrice</dt>
-                <dd>{connection.sender_mailbox || "—"}</dd>
-              </div>
-            </dl>
-            {isOrgAdmin && (
-              <div className="communication-tab__o365-actions">
-                <label className="communication-tab__switch-row">
-                  <Checkbox checked={connection.is_enabled} onCheckedChange={handleO365Toggle} aria-label="Activer la connexion" />
-                  <span>Activée</span>
-                </label>
-                <button type="button" className="communication-tab__btn" onClick={startO365Edit}>
-                  Modifier
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {connection && o365Editing && (
-          <div className="communication-tab__form">
-            <div className="communication-tab__form-row">
-              <label className="communication-tab__field">
-                <span>Tenant ID</span>
-                <input
-                  value={o365Form.tenant_id}
-                  onChange={(e) => setO365Form((f) => ({ ...f, tenant_id: e.target.value }))}
-                />
-              </label>
-              <label className="communication-tab__field">
-                <span>Client ID</span>
-                <input
-                  value={o365Form.client_id}
-                  onChange={(e) => setO365Form((f) => ({ ...f, client_id: e.target.value }))}
-                />
-              </label>
-            </div>
-            <div className="communication-tab__form-row">
-              <label className="communication-tab__field">
-                <span>Client secret</span>
-                <input
-                  type="password"
-                  placeholder={connection.has_client_secret ? "Laisser vide pour conserver l'actuel" : ""}
-                  value={o365Form.client_secret}
-                  onChange={(e) => setO365Form((f) => ({ ...f, client_secret: e.target.value }))}
-                />
-              </label>
-              <label className="communication-tab__field">
-                <span>Boîte expéditrice</span>
-                <input
-                  type="email"
-                  value={o365Form.sender_mailbox}
-                  onChange={(e) => setO365Form((f) => ({ ...f, sender_mailbox: e.target.value }))}
-                />
-              </label>
-            </div>
-            <div className="communication-tab__form-footer">
-              <button type="button" className="communication-tab__btn" onClick={() => setO365Editing(false)} disabled={o365Busy}>
-                Annuler
-              </button>
-              <button
-                type="button"
-                className="communication-tab__btn communication-tab__btn--primary"
-                onClick={handleO365Save}
-                disabled={o365Busy}
-              >
-                Enregistrer
-              </button>
-            </div>
-          </div>
+        {connection && (
+          <p className="communication-tab__hint">
+            Un seul jeu d'identifiants Microsoft Graph pour toute l'organisation, géré depuis
+            Administration &gt; Intégrations (réservé à un administrateur d'organisation).
+          </p>
         )}
       </section>
 
