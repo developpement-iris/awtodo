@@ -1,7 +1,8 @@
-"""Scaffolding de la synchronisation Outlook (session du 2026-09-22, sens
-unique Awtodo → Outlook). Vérifie seulement que les signaux sont bien émis
-aux bons moments — le récepteur reste volontairement inerte tant que Graph
-n'est pas câblé (voir `apps.planning.signals`), rien à tester côté effet."""
+"""Synchronisation Outlook (session du 2026-09-22, sens unique Awtodo →
+Outlook). Vérifie que les signaux sont bien émis aux bons moments, et que le
+récepteur planifie bien une tâche Celery après commit sans jamais lever
+d'exception — voir `apps/planning/tests/test_outlook_sync_tasks.py` pour le
+comportement de la tâche elle-même (appels Graph mockés)."""
 
 from django.dispatch import Signal
 from django.test import TestCase
@@ -73,16 +74,21 @@ class OutlookSyncSignalTests(TestCase):
         finally:
             catcher.disconnect()
 
-    def test_inert_receiver_does_not_raise(self):
-        # Le récepteur connecté par défaut (`sync_event_to_outlook`) ne doit
-        # rien casser tant qu'il est inerte — pas de credentials, pas
-        # d'appel réseau.
-        event = create_event(
-            actor=self.user,
-            title="Point équipe",
-            start="2026-10-01T09:00:00+02:00",
-            end="2026-10-01T10:00:00+02:00",
-        )
-        update_event(actor=self.user, event=event, title="Renommé")
-        cancel_event(actor=self.user, event=event)
+    def test_default_receivers_never_raise_without_o365_config(self):
+        # Aucune `O365Connection` configurée pour l'organisation de l'acteur,
+        # `outlook_calendar_sync_enabled` toujours False par défaut sur
+        # `User` — la tâche planifiée après commit doit se contenter de ne
+        # rien faire, jamais lever.
+        with self.captureOnCommitCallbacks(execute=True):
+            event = create_event(
+                actor=self.user,
+                title="Point équipe",
+                start="2026-10-01T09:00:00+02:00",
+                end="2026-10-01T10:00:00+02:00",
+            )
+        with self.captureOnCommitCallbacks(execute=True):
+            update_event(actor=self.user, event=event, title="Renommé")
+        with self.captureOnCommitCallbacks(execute=True):
+            cancel_event(actor=self.user, event=event)
+        event.refresh_from_db()
         self.assertEqual(event.outlook_event_id, "")

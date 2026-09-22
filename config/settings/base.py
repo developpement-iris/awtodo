@@ -205,3 +205,19 @@ CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
 # défaut : dès qu'un vrai ESP sera câblé en production, l'email reprend la
 # main sans rien changer d'autre. Activé dans `dev.py` et `staging.py`.
 PASSWORD_RESET_DIRECT_LINK = env.bool("PASSWORD_RESET_DIRECT_LINK", default=False)
+
+# Celery — pas de broker Redis provisionné pour l'instant (session du
+# 2026-09-22, synchronisation Outlook). `CELERY_TASK_ALWAYS_EAGER=True`
+# exécute une tâche immédiatement, dans le même processus qui l'a déclenchée,
+# sans passer par un broker — la tâche reste écrite comme une vraie tâche
+# Celery (`@shared_task`, déclenchée par `.delay(...)` après
+# `transaction.on_commit`), prête à basculer en réellement asynchrone
+# (Redis + `celery -A config worker`) en repassant ce réglage à False une
+# fois `CELERY_BROKER_URL` renseigné, sans toucher au code métier. Chaque
+# tâche (voir `apps.planning.tasks`) avale ses propres erreurs : un incident
+# de synchro externe ne doit jamais faire échouer l'action Awtodo qui l'a
+# déclenché, y compris en mode eager où une exception non rattrapée
+# remonterait dans la requête HTTP.
+CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="memory://")
+CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", default=True)
+CELERY_TASK_EAGER_PROPAGATES = env.bool("CELERY_TASK_EAGER_PROPAGATES", default=False)

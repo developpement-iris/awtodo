@@ -202,8 +202,9 @@ export function PlanningPreferencesDialog({
               <span>
                 Synchroniser mon calendrier vers Outlook
                 <span className="planning-field__hint">
-                  Awtodo → Outlook uniquement (création, modification, suppression). Pas encore actif — en
-                  attente de la connexion Microsoft.
+                  Awtodo → Outlook uniquement (création, modification, suppression), jamais l'inverse. Les
+                  événements récurrents ne sont pas synchronisés pour l'instant. Nécessite que la connexion
+                  Office 365 de l'organisation soit configurée et activée par un administrateur.
                 </span>
               </span>
             </label>

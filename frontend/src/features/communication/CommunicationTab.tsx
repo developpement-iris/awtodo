@@ -192,8 +192,9 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
   return (
     <div className="communication-tab">
       <p className="communication-tab__intro">
-        Communiquez autour de ce projet par mail ou vers un canal Teams. La connexion Office 365 et l'envoi
-        réel seront activés au déploiement — les messages composés ici restent en attente pour l'instant.
+        Communiquez autour de ce projet par mail ou vers un canal Teams. Cette connexion Office 365 est aussi
+        celle utilisée par la synchronisation Outlook du planning (voir « Mon planning »). L'envoi de mails et
+        de messages Teams reste en attente ici, câblage prévu au déploiement.
       </p>
 
       {error && <p className="communication-tab__error">{error}</p>}
