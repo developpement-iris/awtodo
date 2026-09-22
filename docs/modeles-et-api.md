@@ -790,3 +790,47 @@ Voir `docs/organisation-et-comptes.md` pour le détail produit de ces trois chan
 - **Frontend** : case "Synchroniser mon calendrier vers Outlook" dans `PlanningPreferencesDialog.tsx` (panneau "Mon planning"), à côté de la couleur de calendrier — texte précisant la limite sur les événements récurrents et le prérequis de connexion Office 365 côté organisation.
 - **Configuration de `O365Connection` scindée entre deux écrans, à la demande de l'utilisateur.** D'abord entièrement déplacée vers Administration, puis nuancée dans la foulée ("boîte expéditrice doit être dans Communication, pas tout le monde n'utilise la même") : `tenant_id`/`client_id`/`client_secret`/`is_enabled` dans la nouvelle sous-section « Intégrations » de l'écran Administration (`frontend/src/features/administration/IntegrationsSection.tsx`, visible si `is_platform_admin` ou `organisation_role === "admin"`) ; `sender_mailbox` reste éditable dans `CommunicationTab.tsx` (onglet Communication d'un projet), toujours réservé à un admin d'organisation (même endpoint, même garde backend — aucun assouplissement). Aucun changement d'API dans les deux cas, `O365Connection` reste un modèle unique organisation-scoped — seul l'endroit d'édition de chaque champ a bougé. **Limite backend non résolue, signalée par l'utilisateur lui-même** : `sender_mailbox` reste une valeur unique par organisation malgré son édition "par projet" — une vraie boîte par projet impliquerait une autorisation Graph `Send As`/`Send on Behalf` par boîte, explicitement mise en attente (chantier Communication complet, différé).
 - **Tests** : `apps/planning/tests/test_outlook_sync_signals.py` (les 3 signaux sont bien émis, les récepteurs planifient la tâche sans jamais lever) ; `apps/planning/tests/test_outlook_sync_tasks.py` (nouveau — comportement de la tâche avec les appels Graph mockés : opt-in désactivé, connexion non configurée, création/modification/annulation, événement récurrent ignoré, erreur Graph avalée) ; `apps/accounts/tests/test_account_access.py::PlanningPreferenceServiceTests` (cas pour `outlook_calendar_sync_enabled`).
+
+### Requêtes Microsoft Graph exactes (`apps/planning/graph_client.py`)
+
+**Authentification** — une acquisition de token par appel (pas de cache de token entre appels dans cette passe, `msal` s'occupe de son propre cache interne côté process) :
+
+```
+ConfidentialClientApplication(
+    client_id=connection.client_id,
+    client_credential=connection.client_secret,
+    authority=f"https://login.microsoftonline.com/{connection.tenant_id}",
+).acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+```
+
+`.default` = toutes les permissions d'application déjà consenties par l'admin (ici juste `Calendars.ReadWrite`) — pas de scope explicite à lister à la main. Le token obtenu est renvoyé en en-tête `Authorization: Bearer <token>` sur chaque appel ci-dessous.
+
+**Base URL** : `https://graph.microsoft.com/v1.0`
+
+| Signal / action | Requête | Condition |
+|---|---|---|
+| `calendar_event_created` (`event.outlook_event_id` vide) | `POST /users/{owner.email}/events` | — |
+| `calendar_event_updated` (`event.outlook_event_id` déjà renseigné) | `PATCH /users/{owner.email}/events/{outlook_event_id}` | — |
+| `calendar_event_updated` (pas encore d'`outlook_event_id`, ex. créé pendant une panne Graph) | `POST /users/{owner.email}/events` | traité comme une création tardive |
+| `calendar_event_cancelled` | `DELETE /users/{owner.email}/events/{outlook_event_id}` | seulement si `outlook_event_id` non vide ; `404` traité comme un succès (déjà supprimé côté Outlook) |
+
+`{owner.email}` fait office d'UPN Microsoft (confirmé identique à l'email Awtodo pour ce tenant — voir plus haut).
+
+**Corps de la requête** (identique pour `POST`/`PATCH`, construit par `_event_payload`) :
+
+```json
+{
+  "subject": "<event.title>",
+  "body": { "contentType": "text", "content": "<event.description>" },
+  "start": { "dateTime": "<event.start.isoformat()>", "timeZone": "Europe/Paris" },
+  "end": { "dateTime": "<event.end.isoformat()>", "timeZone": "Europe/Paris" },
+  "isAllDay": "<event.all_day>",
+  "location": { "displayName": "<event.location>" }
+}
+```
+
+`location` omis du corps si `event.location` est vide (pas de clé envoyée plutôt qu'une chaîne vide). Pas de champ `recurrence` — cohérent avec la limite v1 ci-dessus (les événements récurrents ne déclenchent aucun appel).
+
+**Gestion des réponses** : tout `status_code >= 400` lève `GraphSyncError` (message + 300 premiers caractères du corps de réponse, journalisés par la tâche puis avalés) — sauf `404` sur le `DELETE`, traité comme neutre. L'id Graph retourné par le `POST` (`response.json()["id"]`) est stocké dans `CalendarEvent.outlook_event_id` via un `.update()` ciblé (pas un `.save()` complet, pour ne pas re-déclencher de signal).
+
+**Timeout** : 10 secondes par appel (`requests`, pas de retry applicatif dans cette passe — une tâche Celery qui échoue silencieusement plutôt que de bloquer ou de re-tenter indéfiniment).
