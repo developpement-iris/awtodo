@@ -36,7 +36,16 @@ class O365Connection(UUIDModel, TimeStampedModel):
 
     @property
     def is_configured(self):
-        return bool(self.tenant_id and self.client_id and self.client_secret and self.sender_mailbox)
+        # `sender_mailbox` volontairement exclu (session du 2026-09-22, suite
+        # Outlook) : c'est une donnée du futur envoi de mails uniquement (et
+        # depuis, éditée depuis l'onglet Communication d'un projet, pas ici),
+        # pas un prérequis pour authentifier l'app contre Graph — la synchro
+        # Outlook du planning n'en a jamais eu besoin
+        # (`apps.planning.tasks.sync_calendar_event_to_outlook` ne regarde
+        # que ces trois champs + `is_enabled`). L'inclure ici rendait ce
+        # badge "Non configurée" trompeur pour quiconque n'utilise que la
+        # synchro calendrier sans avoir renseigné de boîte expéditrice.
+        return bool(self.tenant_id and self.client_id and self.client_secret)
 
 
 class CommunicationChannel(UUIDModel, TimeStampedModel, StatusLifecycleModel):
