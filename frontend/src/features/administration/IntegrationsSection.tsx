@@ -13,7 +13,7 @@ export function IntegrationsSection() {
   const [connection, setConnection] = useState<O365Connection | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState({ tenant_id: "", client_id: "", client_secret: "", sender_mailbox: "" });
+  const [form, setForm] = useState({ tenant_id: "", client_id: "", client_secret: "" });
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -28,7 +28,6 @@ export function IntegrationsSection() {
       tenant_id: connection.tenant_id,
       client_id: connection.client_id,
       client_secret: "",
-      sender_mailbox: connection.sender_mailbox,
     });
     setEditing(true);
   }
@@ -60,9 +59,10 @@ export function IntegrationsSection() {
   return (
     <div className="integrations-section">
       <p className="integrations-section__intro">
-        Un seul jeu d'identifiants Microsoft Graph pour toute l'organisation — sert à la fois à
-        l'envoi de mails/Teams (onglet Communication des projets) et à la synchronisation Outlook du
-        planning (« Mon planning »). Réservé à un administrateur d'organisation.
+        Identifiants Microsoft Graph (tenant, application, secret) pour toute l'organisation — sert à
+        la synchronisation Outlook du planning (« Mon planning ») et, plus tard, à l'envoi de
+        mails/Teams (module Communication). Réservé à un administrateur d'organisation. La boîte
+        expéditrice pour les mails se configure par projet, dans l'onglet Communication.
       </p>
 
       {error && <p className="integrations-section__error">{error}</p>}
@@ -102,10 +102,6 @@ export function IntegrationsSection() {
                 <dt>Secret</dt>
                 <dd>{connection.has_client_secret ? "•••••••• (enregistré)" : "—"}</dd>
               </div>
-              <div>
-                <dt>Boîte expéditrice</dt>
-                <dd>{connection.sender_mailbox || "—"}</dd>
-              </div>
             </dl>
             <div className="integrations-section__actions">
               <label className="integrations-section__switch-row">
@@ -131,25 +127,15 @@ export function IntegrationsSection() {
                 <input value={form.client_id} onChange={(e) => setForm((f) => ({ ...f, client_id: e.target.value }))} />
               </label>
             </div>
-            <div className="integrations-section__form-row">
-              <label className="integrations-section__field">
-                <span>Client secret</span>
-                <input
-                  type="password"
-                  placeholder={connection.has_client_secret ? "Laisser vide pour conserver l'actuel" : ""}
-                  value={form.client_secret}
-                  onChange={(e) => setForm((f) => ({ ...f, client_secret: e.target.value }))}
-                />
-              </label>
-              <label className="integrations-section__field">
-                <span>Boîte expéditrice</span>
-                <input
-                  type="email"
-                  value={form.sender_mailbox}
-                  onChange={(e) => setForm((f) => ({ ...f, sender_mailbox: e.target.value }))}
-                />
-              </label>
-            </div>
+            <label className="integrations-section__field">
+              <span>Client secret</span>
+              <input
+                type="password"
+                placeholder={connection.has_client_secret ? "Laisser vide pour conserver l'actuel" : ""}
+                value={form.client_secret}
+                onChange={(e) => setForm((f) => ({ ...f, client_secret: e.target.value }))}
+              />
+            </label>
             <div className="integrations-section__form-footer">
               <button type="button" className="integrations-section__btn" onClick={() => setEditing(false)} disabled={busy}>
                 Annuler

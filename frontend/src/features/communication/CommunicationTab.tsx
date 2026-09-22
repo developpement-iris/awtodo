@@ -7,11 +7,13 @@ import {
   getO365Connection,
   getProjectCommunicationChannels,
   getProjectCommunicationMessages,
+  updateO365Connection,
 } from "../../api/client";
 import { Checkbox } from "../../components/Checkbox";
 import { Combobox } from "../../components/Combobox";
 import { Skeleton } from "../../components/Skeleton";
 import { StatusBadge } from "../../components/StatusBadge";
+import { useCurrentUser } from "../../context/CurrentUserContext";
 import { useToast } from "../../context/ToastContext";
 import type { CommunicationChannel, CommunicationChannelType, CommunicationMessage, O365Connection, Project } from "../../types/watodo";
 import "./CommunicationTab.css";
@@ -36,9 +38,11 @@ function displayName(user: { first_name: string; last_name: string; username: st
 }
 
 export function CommunicationTab({ project }: CommunicationTabProps) {
+  const { currentUser } = useCurrentUser();
   const { showToast } = useToast();
   const canManage = project.permissions.can_manage_project_communication;
   const canSend = project.permissions.can_send_project_communication;
+  const isOrgAdmin = Boolean(currentUser?.is_platform_admin || currentUser?.organisation_role === "admin");
 
   const [connection, setConnection] = useState<O365Connection | null>(null);
   const [channels, setChannels] = useState<CommunicationChannel[] | null>(null);
@@ -55,6 +59,39 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
       .then(setConnection)
       .catch(() => undefined);
   }, [reloadKey]);
+
+  // --- Boîte expéditrice (admin d'organisation) --------------------------
+  // Rattachée au même O365Connection organisation-scoped que la connexion
+  // Graph elle-même (voir Administration > Intégrations pour tenant/client/
+  // secret) — champ affiché/édité ici plutôt que là-bas car c'est la seule
+  // donnée de la connexion qui varie d'un usage à l'autre (remonté
+  // directement). ⚠️ Limite assumée : le modèle ne porte qu'une seule
+  // valeur pour toute l'organisation, pas encore une par projet — une vraie
+  // boîte par projet nécessiterait sa propre autorisation d'envoi (permission
+  // "Send As"/"Send on Behalf" par boîte), en attente, chantier Communication
+  // plus large, non traité ici.
+  const [senderEditing, setSenderEditing] = useState(false);
+  const [senderMailbox, setSenderMailbox] = useState("");
+  const [senderBusy, setSenderBusy] = useState(false);
+
+  function startSenderEdit() {
+    setSenderMailbox(connection?.sender_mailbox ?? "");
+    setSenderEditing(true);
+  }
+
+  async function handleSaveSender() {
+    setSenderBusy(true);
+    setError(null);
+    try {
+      setConnection(await updateO365Connection({ sender_mailbox: senderMailbox.trim() }));
+      setSenderEditing(false);
+      showToast("Boîte expéditrice mise à jour.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Échec de la mise à jour.");
+    } finally {
+      setSenderBusy(false);
+    }
+  }
 
   useEffect(() => {
     getProjectCommunicationChannels(project.id)
@@ -176,10 +213,47 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
           </div>
         )}
         {connection && (
-          <p className="communication-tab__hint">
-            Un seul jeu d'identifiants Microsoft Graph pour toute l'organisation, géré depuis
-            Administration &gt; Intégrations (réservé à un administrateur d'organisation).
-          </p>
+          <>
+            <p className="communication-tab__hint">
+              Identifiants Microsoft Graph gérés depuis Administration &gt; Intégrations (réservé à un
+              administrateur d'organisation). La boîte expéditrice ci-dessous se configure ici, par projet.
+            </p>
+            <div className="communication-tab__sender-row">
+              <span className="communication-tab__sender-label">Boîte expéditrice</span>
+              {!senderEditing && (
+                <>
+                  <span className="communication-tab__sender-value">{connection.sender_mailbox || "—"}</span>
+                  {isOrgAdmin && (
+                    <button type="button" className="communication-tab__btn" onClick={startSenderEdit}>
+                      Modifier
+                    </button>
+                  )}
+                </>
+              )}
+              {senderEditing && (
+                <>
+                  <input
+                    type="email"
+                    className="communication-tab__sender-input"
+                    value={senderMailbox}
+                    onChange={(e) => setSenderMailbox(e.target.value)}
+                    placeholder="equipe@reparstores.com"
+                  />
+                  <button type="button" className="communication-tab__btn" onClick={() => setSenderEditing(false)} disabled={senderBusy}>
+                    Annuler
+                  </button>
+                  <button
+                    type="button"
+                    className="communication-tab__btn communication-tab__btn--primary"
+                    onClick={handleSaveSender}
+                    disabled={senderBusy}
+                  >
+                    Enregistrer
+                  </button>
+                </>
+              )}
+            </div>
+          </>
         )}
       </section>
 
