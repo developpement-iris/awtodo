@@ -1,6 +1,6 @@
 import { AlertTriangle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { addTaskComment, getTask, getTasks, updateTaskEstimatedHours } from "../../api/client";
+import { addTaskComment, getTask, getTasks, updateTaskDeadline, updateTaskEstimatedHours } from "../../api/client";
 import { LoadingTransition } from "../../components/LoadingTransition";
 import { SkeletonRows } from "../../components/Skeleton";
 import { useToast } from "../../context/ToastContext";
@@ -180,6 +180,15 @@ export function RoadmapView({ project, versionId }: RoadmapViewProps) {
     }
   }
 
+  async function handleSaveDeadline(task: Task, value: string | null) {
+    setActionError(null);
+    try {
+      updateTaskLocally(await updateTaskDeadline(task.id, value));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "La mise à jour de l'échéance a échoué.");
+    }
+  }
+
   async function handleAddComment(content: string) {
     if (!openTask?.id) return;
     setCommentSubmitting(true);
@@ -320,6 +329,7 @@ export function RoadmapView({ project, versionId }: RoadmapViewProps) {
           onStart={handleStart}
           onComplete={setCompletingTask}
           onSaveEstimatedHours={handleSaveEstimatedHours}
+          onSaveDeadline={handleSaveDeadline}
           comments={comments}
           commentsError={commentsError}
           commentSubmitting={commentSubmitting}

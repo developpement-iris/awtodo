@@ -300,6 +300,7 @@ export interface ProjectVersion {
 export interface TaskPermissions {
   can_rename: boolean;
   can_edit_description: boolean;
+  can_edit_deadline: boolean;
   can_comment: boolean;
   can_validate: boolean;
   can_reject: boolean;

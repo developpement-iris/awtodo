@@ -558,6 +558,12 @@ export function updateTaskEstimatedHours(taskId: string, estimatedHours: string 
   return postJson<Task>(`/tasks/${taskId}/update-estimated-hours/`, { estimated_hours: estimatedHours });
 }
 
+// Réservé au chef de projet (voir `task.permissions.can_edit_deadline`) —
+// `deadline` au format "YYYY-MM-DD", ou `null` pour supprimer l'échéance.
+export function updateTaskDeadline(taskId: string, deadline: string | null): Promise<Task> {
+  return postJson<Task>(`/tasks/${taskId}/update-deadline/`, { deadline });
+}
+
 // Fiche utilisateur (écran Administration > Membres) — voir
 // docs/organisation-et-comptes.md. Réservé à `organisation_role=admin`.
 export function getUserAssignedTasks(userId: string): Promise<Task[]> {

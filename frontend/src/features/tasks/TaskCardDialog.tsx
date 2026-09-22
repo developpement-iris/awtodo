@@ -1,7 +1,14 @@
 import { X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
-import { addTaskComment, getProject, getTask, updateTaskDescription, updateTaskEstimatedHours } from "../../api/client";
+import {
+  addTaskComment,
+  getProject,
+  getTask,
+  updateTaskDeadline,
+  updateTaskDescription,
+  updateTaskEstimatedHours,
+} from "../../api/client";
 import type { Task, TaskDetail, User } from "../../types/watodo";
 import { CompleteDialog } from "./CompleteDialog";
 import { RejectDialog } from "./RejectDialog";
@@ -109,6 +116,10 @@ export function TaskCardDialog({ taskId, onClose, onChanged }: TaskCardDialogPro
     updateTaskLocally(await updateTaskEstimatedHours(current.id, value));
   }
 
+  async function handleSaveDeadline(current: Task, value: string | null) {
+    updateTaskLocally(await updateTaskDeadline(current.id, value));
+  }
+
   async function handleAddComment(content: string) {
     if (!task) return;
     setCommentSubmitting(true);
@@ -182,6 +193,7 @@ export function TaskCardDialog({ taskId, onClose, onChanged }: TaskCardDialogPro
                 onComplete={setCompletingTask}
                 onSaveDescription={handleSaveDescription}
                 onSaveEstimatedHours={handleSaveEstimatedHours}
+                onSaveDeadline={handleSaveDeadline}
                 comments={task.comments}
                 commentsError={commentsError}
                 commentSubmitting={commentSubmitting}

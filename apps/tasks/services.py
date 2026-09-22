@@ -4,6 +4,7 @@ from decimal import Decimal, InvalidOperation
 from django.db.models import Count, F, Sum
 from django.db.models.functions import TruncWeek
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 
 from apps.common.audit import record_changes
 from apps.common.choices import PRIORITY_CHOICES
@@ -332,6 +333,7 @@ def get_task_permissions(user, task):
     return {
         "can_rename": can_rename_task(user, task),
         "can_edit_description": can_rename_task(user, task),
+        "can_edit_deadline": can_edit_deadline_task(user, task),
         "can_comment": can_comment_task(user, task),
         "can_validate": can_validate_task(user, task),
         "can_reject": can_reject_task(user, task),
@@ -431,6 +433,39 @@ def update_task_description(*, actor, task, description):
 
     with record_changes(task, actor=actor):
         task.description = description.strip()
+        task.save()
+    return task
+
+
+def _ensure_can_edit_deadline(actor, task):
+    """Réservé au chef de projet — à la différence du titre/description/temps
+    estimé (n'importe quel membre), une échéance engage la planification du
+    projet, retour direct : "droit sur la fonction propre au rôle chef de
+    projet"."""
+    _require_manager(actor, task.project)
+
+
+def can_edit_deadline_task(user, task):
+    return _check(_ensure_can_edit_deadline, user, task)
+
+
+def update_task_deadline(*, actor, task, deadline):
+    """`deadline` accepte une chaîne "YYYY-MM-DD", un objet `date`, ou une
+    valeur vide/`None` pour supprimer l'échéance — même tolérance d'entrée
+    que `update_task_estimated_hours` (conversion faite ici, pas dans la vue,
+    pas de serializer dédié pour ces petites mises à jour de champ)."""
+    _ensure_can_edit_deadline(actor, task)
+
+    if deadline in (None, ""):
+        deadline = None
+    elif isinstance(deadline, str):
+        parsed = parse_date(deadline)
+        if parsed is None:
+            raise InvalidTransitionError("Date d'échéance invalide (format AAAA-MM-JJ attendu).")
+        deadline = parsed
+
+    with record_changes(task, actor=actor):
+        task.deadline = deadline
         task.save()
     return task
 

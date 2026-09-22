@@ -14,6 +14,7 @@ import {
   getTask,
   getTasks,
   renameTask,
+  updateTaskDeadline,
   updateTaskEstimatedHours,
   type TaskCreatePayload,
 } from "../../api/client";
@@ -230,6 +231,15 @@ export function KanbanBoard({ project, versionId }: KanbanBoardProps) {
     }
   }
 
+  async function handleSaveDeadline(task: Task, value: string | null) {
+    setActionError(null);
+    try {
+      updateTaskLocally(await updateTaskDeadline(task.id, value));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "La mise à jour de l'échéance a échoué.");
+    }
+  }
+
   async function handleAddComment(content: string) {
     if (!openTask?.id) return;
     setCommentSubmitting(true);
@@ -317,6 +327,7 @@ export function KanbanBoard({ project, versionId }: KanbanBoardProps) {
           onStart={handleStart}
           onComplete={setCompletingTask}
           onSaveEstimatedHours={handleSaveEstimatedHours}
+          onSaveDeadline={handleSaveDeadline}
           comments={comments}
           commentsError={commentsError}
           commentSubmitting={commentSubmitting}

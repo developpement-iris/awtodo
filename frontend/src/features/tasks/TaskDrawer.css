@@ -158,6 +158,31 @@
   cursor: not-allowed;
 }
 
+.task-drawer__deadline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.task-drawer__deadline-clear {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.task-drawer__deadline-clear:hover:not(:disabled) {
+  color: var(--tone-error-text);
+}
+
+.task-drawer__deadline-clear:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .task-drawer__meta-note {
   font-size: 12px;
   color: var(--color-text-muted);

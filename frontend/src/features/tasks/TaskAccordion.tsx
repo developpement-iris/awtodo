@@ -2,6 +2,7 @@ import { ChevronUp } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { Combobox } from "../../components/Combobox";
+import { DatePickerField } from "../../components/DatePickerField";
 import { InlineEditableText } from "../../components/InlineEditableText";
 import { InlineEditableTextarea } from "../../components/InlineEditableTextarea";
 import { StatusBadge } from "../../components/StatusBadge";
@@ -13,6 +14,10 @@ import "./TaskAccordion.css";
 
 function displayName(user: User): string {
   return `${user.first_name} ${user.last_name}`.trim() || user.username;
+}
+
+function formatDeadline(deadline: string): string {
+  return new Date(deadline).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
 }
 
 interface TaskAccordionProps {
@@ -27,6 +32,7 @@ interface TaskAccordionProps {
   onComplete: (task: Task) => void;
   onSaveDescription: (task: Task, description: string) => void;
   onSaveEstimatedHours: (task: Task, value: string | null) => void;
+  onSaveDeadline: (task: Task, value: string | null) => void;
   auditLog: AuditLogEntry[];
   comments: TaskComment[] | null;
   commentsError: string | null;
@@ -52,6 +58,7 @@ export function TaskAccordion({
   onComplete,
   onSaveDescription,
   onSaveEstimatedHours,
+  onSaveDeadline,
   auditLog,
   comments,
   commentsError,
@@ -214,6 +221,33 @@ export function TaskAccordion({
             <p className="task-accordion__meta">
               Réel : {task.time_spent ? `${task.time_spent} h` : "—"} (renseigné à la clôture)
             </p>
+          </section>
+
+          <section className="task-accordion__section">
+            <h3 className="task-accordion__section-title">Échéance</h3>
+            {task.permissions.can_edit_deadline ? (
+              <div className="task-accordion__deadline">
+                <DatePickerField
+                  value={task.deadline ?? ""}
+                  onChange={(value) => onSaveDeadline(task, value || null)}
+                  disabled={pending}
+                />
+                {task.deadline && (
+                  <button
+                    type="button"
+                    className="task-accordion__deadline-clear"
+                    onClick={() => onSaveDeadline(task, null)}
+                    disabled={pending}
+                  >
+                    Effacer
+                  </button>
+                )}
+              </div>
+            ) : (
+              <p className="task-accordion__meta">
+                {task.deadline ? formatDeadline(task.deadline) : "Aucune échéance."}
+              </p>
+            )}
           </section>
         </div>
 

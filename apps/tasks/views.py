@@ -35,6 +35,7 @@ from .services import (
     reject_task,
     rename_task,
     start_task,
+    update_task_deadline,
     update_task_description,
     update_task_estimated_hours,
     validate_task,
@@ -191,6 +192,19 @@ class TaskViewSet(ListOnlyFilterMixin, mixins.ListModelMixin, mixins.RetrieveMod
             update_task_estimated_hours(
                 actor=request.user, task=task, estimated_hours=request.data.get("estimated_hours")
             )
+        except TaskPermissionError as exc:
+            return Response({"detail": str(exc)}, status=403)
+        except InvalidTransitionError as exc:
+            return Response({"detail": str(exc)}, status=400)
+
+        return Response(self.get_serializer(task).data)
+
+    @action(detail=True, methods=["post"], url_path="update-deadline")
+    def update_deadline(self, request, pk=None):
+        task = self.get_object()
+
+        try:
+            update_task_deadline(actor=request.user, task=task, deadline=request.data.get("deadline"))
         except TaskPermissionError as exc:
             return Response({"detail": str(exc)}, status=403)
         except InvalidTransitionError as exc:

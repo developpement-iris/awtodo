@@ -7,6 +7,7 @@ import {
   getTasks,
   getTeams,
   renameTask,
+  updateTaskDeadline,
   updateTaskDescription,
   updateTaskEstimatedHours,
 } from "../../api/client";
@@ -323,6 +324,15 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
     }
   }
 
+  async function handleSaveDeadline(task: Task, value: string | null) {
+    setActionError(null);
+    try {
+      updateTaskLocally(await updateTaskDeadline(task.id, value));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "La mise à jour de l'échéance a échoué.");
+    }
+  }
+
   async function handleAddComment(content: string) {
     if (!expandedTaskId) return;
     setCommentSubmitting(true);
@@ -508,6 +518,7 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
                               onComplete={setCompletingTask}
                               onSaveDescription={handleSaveDescription}
                               onSaveEstimatedHours={handleSaveEstimatedHours}
+                              onSaveDeadline={handleSaveDeadline}
                               comments={comments}
                               commentsError={commentsError}
                               commentSubmitting={commentSubmitting}
