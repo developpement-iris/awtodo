@@ -4,6 +4,8 @@
 `Mail.Send` pour `apps.communication` — un seul jeu d'identifiants par
 organisation (`O365Connection`), pas de consentement par utilisateur."""
 
+from datetime import datetime
+
 import requests
 from msal import ConfidentialClientApplication
 
@@ -14,6 +16,99 @@ _REQUEST_TIMEOUT = 10
 
 class GraphSyncError(Exception):
     """Config manquante, échec d'authentification, ou appel Graph en échec."""
+
+
+# --- Récurrence : RRULE (sous-ensemble produit par l'éditeur, voir
+# frontend/src/features/planning/recurrence.ts) → motif Graph -------------
+#
+# Graph n'accepte pas une chaîne RRULE : il attend un objet structuré
+# {pattern, range}. `build_graph_recurrence` ne traduit que le sous-ensemble
+# que l'éditeur front peut réellement produire (FREQ daily/weekly/monthly/
+# yearly, INTERVAL, BYDAY sur weekly uniquement, fin par UNTIL ou COUNT) —
+# une RRULE plus riche passée directement par l'API (le backend l'accepte,
+# voir _validate_recurrence_rule) renvoie `None`, et l'appelant doit alors
+# ignorer la synchro de cet événement plutôt que d'envoyer un motif
+# approximatif à Outlook.
+
+_BYDAY_TO_GRAPH = {
+    "MO": "monday",
+    "TU": "tuesday",
+    "WE": "wednesday",
+    "TH": "thursday",
+    "FR": "friday",
+    "SA": "saturday",
+    "SU": "sunday",
+}
+_WEEKDAY_INDEX_TO_GRAPH = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+_FREQ_TO_GRAPH_TYPE = {
+    "DAILY": "daily",
+    "WEEKLY": "weekly",
+    "MONTHLY": "absoluteMonthly",
+    "YEARLY": "absoluteYearly",
+}
+_SUPPORTED_RRULE_KEYS = {"FREQ", "INTERVAL", "BYDAY", "UNTIL", "COUNT"}
+
+
+def _parse_rrule_params(rule):
+    params = {}
+    for part in rule.split(";"):
+        if "=" not in part:
+            continue
+        key, _, value = part.partition("=")
+        params[key.strip().upper()] = value.strip()
+    return params
+
+
+def build_graph_recurrence(event):
+    """Renvoie le `{pattern, range}` Graph pour `event.recurrence_rule`, ou
+    `None` si la règle n'est pas dans le sous-ensemble traduit (voir
+    ci-dessus)."""
+    params = _parse_rrule_params(event.recurrence_rule)
+    if not params or not set(params).issubset(_SUPPORTED_RRULE_KEYS):
+        return None
+
+    graph_type = _FREQ_TO_GRAPH_TYPE.get(params.get("FREQ", ""))
+    if graph_type is None:
+        return None
+
+    try:
+        interval = int(params.get("INTERVAL", 1) or 1)
+    except ValueError:
+        return None
+    pattern = {"type": graph_type, "interval": interval}
+
+    if graph_type == "weekly":
+        byday = params.get("BYDAY")
+        if byday:
+            days = [_BYDAY_TO_GRAPH.get(code) for code in byday.split(",")]
+            if None in days:
+                return None
+        else:
+            days = [_WEEKDAY_INDEX_TO_GRAPH[event.start.weekday()]]
+        pattern["daysOfWeek"] = days
+    elif graph_type in ("absoluteMonthly", "absoluteYearly"):
+        pattern["dayOfMonth"] = event.start.day
+        if graph_type == "absoluteYearly":
+            pattern["month"] = event.start.month
+
+    start_date = event.start.date().isoformat()
+    until = params.get("UNTIL")
+    count = params.get("COUNT")
+    if until:
+        try:
+            end_date = datetime.strptime(until[:8], "%Y%m%d").date().isoformat()
+        except ValueError:
+            return None
+        range_ = {"type": "endDate", "startDate": start_date, "endDate": end_date}
+    elif count:
+        try:
+            range_ = {"type": "numbered", "startDate": start_date, "numberOfOccurrences": int(count)}
+        except ValueError:
+            return None
+    else:
+        range_ = {"type": "noEnd", "startDate": start_date}
+
+    return {"pattern": pattern, "range": range_}
 
 
 def _acquire_token(connection):
@@ -45,6 +140,10 @@ def _event_payload(event):
     }
     if event.location:
         payload["location"] = {"displayName": event.location}
+    if event.recurrence_rule:
+        recurrence = build_graph_recurrence(event)
+        if recurrence:
+            payload["recurrence"] = recurrence
     return payload
 
 

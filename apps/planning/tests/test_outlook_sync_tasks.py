@@ -78,8 +78,25 @@ class OutlookSyncTaskTests(TestCase):
         self.assertEqual(self.event.outlook_event_id, "")
 
     @patch("apps.planning.tasks.create_graph_event")
-    def test_skips_recurring_event(self, mock_create):
+    def test_skips_recurring_event_outside_translated_subset(self, mock_create):
+        # BYMONTHDAY n'est pas dans le sous-ensemble traduit vers Graph (pas
+        # produit par l'éditeur front, mais l'API l'accepte) — doit rester
+        # ignoré, pas envoyé avec un motif approximatif.
         self._enable_sync()
+        recurring = create_event(
+            actor=self.user,
+            title="Point mensuel",
+            start=parse_datetime("2026-10-15T09:00:00+02:00"),
+            end=parse_datetime("2026-10-15T10:00:00+02:00"),
+            recurrence_rule="FREQ=MONTHLY;BYMONTHDAY=15",
+        )
+        sync_calendar_event_to_outlook(str(recurring.id), "created")
+        mock_create.assert_not_called()
+
+    @patch("apps.planning.tasks.create_graph_event")
+    def test_syncs_recurring_event_within_translated_subset(self, mock_create):
+        self._enable_sync()
+        mock_create.return_value = "graph-event-recurring"
         recurring = create_event(
             actor=self.user,
             title="Point hebdo",
@@ -88,7 +105,9 @@ class OutlookSyncTaskTests(TestCase):
             recurrence_rule="FREQ=WEEKLY;BYDAY=FR",
         )
         sync_calendar_event_to_outlook(str(recurring.id), "created")
-        mock_create.assert_not_called()
+        mock_create.assert_called_once()
+        recurring.refresh_from_db()
+        self.assertEqual(recurring.outlook_event_id, "graph-event-recurring")
 
     @patch("apps.planning.tasks.create_graph_event")
     def test_graph_error_is_caught_not_raised(self, mock_create):
@@ -149,13 +168,28 @@ class OutlookBackfillTaskTests(TestCase):
         mock_create.assert_not_called()
 
     @patch("apps.planning.tasks.create_graph_event")
-    def test_skips_recurring_and_cancelled_events(self, mock_create):
-        create_event(
+    def test_backfills_translatable_recurring_events(self, mock_create):
+        mock_create.return_value = "graph-event-recurring"
+        recurring = create_event(
             actor=self.user,
             title="Récurrent",
             start=parse_datetime("2026-10-01T09:00:00+02:00"),
             end=parse_datetime("2026-10-01T10:00:00+02:00"),
             recurrence_rule="FREQ=WEEKLY;BYDAY=FR",
+        )
+        backfill_user_outlook_sync(str(self.user.id))
+        mock_create.assert_called_once()
+        recurring.refresh_from_db()
+        self.assertEqual(recurring.outlook_event_id, "graph-event-recurring")
+
+    @patch("apps.planning.tasks.create_graph_event")
+    def test_skips_untranslatable_recurring_and_cancelled_events(self, mock_create):
+        create_event(
+            actor=self.user,
+            title="Mensuel",
+            start=parse_datetime("2026-10-01T09:00:00+02:00"),
+            end=parse_datetime("2026-10-01T10:00:00+02:00"),
+            recurrence_rule="FREQ=MONTHLY;BYMONTHDAY=1",
         )
         cancelled = create_event(
             actor=self.user, title="Annulé", start="2026-10-02T09:00:00+02:00", end="2026-10-02T10:00:00+02:00"

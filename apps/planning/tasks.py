@@ -4,7 +4,7 @@ from celery import shared_task
 
 from apps.communication.services import get_o365_connection
 
-from .graph_client import GraphSyncError, create_graph_event, delete_graph_event, update_graph_event
+from .graph_client import GraphSyncError, build_graph_recurrence, create_graph_event, delete_graph_event, update_graph_event
 from .models import CalendarEvent
 
 logger = logging.getLogger(__name__)
@@ -24,10 +24,16 @@ def sync_calendar_event_to_outlook(event_id, action):
     processus que la requête HTTP tant qu'aucun broker Redis n'est
     provisionné).
 
-    Limite v1 assumée : les événements récurrents ne sont pas synchronisés
-    (traduire une RRULE iCal en motif de récurrence Graph n'a pas pu être
-    vérifié faute d'accès à une vraie boîte Outlook — plutôt que risquer une
-    série mal traduite côté Outlook, la synchro est ignorée et journalisée).
+    Événements récurrents : synchronisés si `event.recurrence_rule` entre
+    dans le sous-ensemble traduit vers le motif de récurrence Graph (voir
+    `apps.planning.graph_client.build_graph_recurrence` — FREQ daily/weekly/
+    monthly/yearly, INTERVAL, BYDAY sur weekly, fin par UNTIL ou COUNT :
+    exactement ce que produit l'éditeur front). Une RRULE plus riche passée
+    directement par l'API (le backend l'accepte, l'éditeur non) est ignorée
+    et journalisée plutôt que d'envoyer un motif approximatif à Outlook —
+    toute la série se synchronise comme un seul événement Graph, jamais
+    occurrence par occurrence (cohérent avec "l'édition ne porte jamais sur
+    une occurrence isolée").
     """
     try:
         event = CalendarEvent.all_objects.select_related("owner", "owner__organisation").get(id=event_id)
@@ -37,9 +43,10 @@ def sync_calendar_event_to_outlook(event_id, action):
     owner = event.owner
     if not owner.outlook_calendar_sync_enabled:
         return
-    if event.recurrence_rule:
+    if event.recurrence_rule and build_graph_recurrence(event) is None:
         logger.info(
-            "Synchro Outlook ignorée pour l'événement récurrent %s (v1 : événements ponctuels uniquement).",
+            "Synchro Outlook ignorée pour l'événement récurrent %s : règle de récurrence hors du "
+            "sous-ensemble traduit vers Graph.",
             event_id,
         )
         return
@@ -74,12 +81,10 @@ def backfill_user_outlook_sync(user_id):
     bascule de False à True (voir `apps.accounts.services.update_planning_preferences`
     et `apps.planning.signals`), jamais à chaque sauvegarde de préférence.
 
-    Ne synchronise que les événements actifs (`status="confirme"`), non
-    récurrents et pas déjà rattachés à un id Graph — appelle simplement la
-    tâche de synchro unitaire pour chacun, en `created` (mêmes garde-fous,
-    mêmes erreurs avalées)."""
-    events = CalendarEvent.objects.filter(
-        owner_id=user_id, recurrence_rule="", outlook_event_id=""
-    ).values_list("id", flat=True)
+    Ne synchronise que les événements actifs (`status="confirme"`) pas déjà
+    rattachés à un id Graph — appelle simplement la tâche de synchro unitaire
+    pour chacun, en `created` (mêmes garde-fous, mêmes erreurs avalées, y
+    compris le tri récurrence traduisible/non traduisible)."""
+    events = CalendarEvent.objects.filter(owner_id=user_id, outlook_event_id="").values_list("id", flat=True)
     for event_id in events:
         sync_calendar_event_to_outlook(str(event_id), "created")
