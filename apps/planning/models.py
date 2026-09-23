@@ -79,6 +79,77 @@ class CalendarEvent(UUIDModel, TimeStampedModel, StatusLifecycleModel, Recurring
         return f"{self.title} — {self.owner}"
 
 
+class CalendarEventOccurrenceOverride(UUIDModel, TimeStampedModel):
+    """Une occurrence d'une série (`CalendarEvent.recurrence_rule`) qui
+    diverge du modèle — équivalent du RECURRENCE-ID iCal (session du
+    2026-09-23, remonté directement : "si on modifie un évènement de la
+    série, ça ne doit modifier que l'évènement, pareil pour la
+    suppression"). Modifier ou annuler UNE occurrence crée cette ligne ;
+    toute occurrence sans ligne correspondante reste définie par le
+    modèle (`CalendarEvent`) tel quel.
+
+    `original_start` est la clé stable qui identifie "quelle occurrence"
+    — l'heure de début qu'elle aurait eue SANS override, calculée depuis
+    la RRULE d'origine. Elle ne bouge jamais, même si `start` (l'heure
+    réelle affichée) est déplacée par l'override.
+
+    Simplification assumée : une fois overridée, une occurrence devient
+    **entièrement indépendante** du modèle pour tous ses champs (copie
+    complète à la création de l'override, pas un diff partiel) — un futur
+    renommage de la série n'affecte donc plus les occurrences déjà
+    overridées. Plus simple à raisonner et à synchroniser qu'un héritage
+    de champs partiel, assumé comme un compromis correct pour ce
+    périmètre (Outlook fonctionne globalement pareil en pratique).
+
+    Jamais supprimée physiquement — `is_cancelled` plutôt qu'un retrait de
+    la ligne, cohérent avec la règle générale."""
+
+    event = models.ForeignKey(CalendarEvent, on_delete=models.CASCADE, related_name="occurrence_overrides")
+    original_start = models.DateTimeField()
+    is_cancelled = models.BooleanField(default=False)
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True, default="")
+    location = models.CharField(max_length=255, blank=True, default="")
+    start = models.DateTimeField()
+    end = models.DateTimeField()
+    all_day = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["original_start"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["event", "original_start"], name="eventoccurrenceoverride_unique_event_original_start"
+            ),
+        ]
+
+    def __str__(self):
+        return f"Occurrence {self.original_start} — {self.event}"
+
+
+class EventOccurrenceOutlookSync(UUIDModel, TimeStampedModel):
+    """Id Graph d'UNE occurrence modifiée/annulée, par destinataire (session
+    du 2026-09-23) — même principe que `EventParticipantOutlookSync`, mais
+    Graph modélise nativement une occurrence isolée d'une série via un id
+    d'« instance » distinct de celui du modèle (résolu via
+    `GET /events/{master}/instances`, voir `apps.planning.graph_client`)."""
+
+    override = models.ForeignKey(
+        CalendarEventOccurrenceOverride, on_delete=models.CASCADE, related_name="outlook_syncs"
+    )
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    outlook_event_id = models.CharField(max_length=200, blank=True, default="")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["override", "user"], name="eventoccurrenceoutlooksync_unique_override_user"
+            ),
+        ]
+
+    def __str__(self):
+        return f"Synchro Outlook — {self.override} → {self.user}"
+
+
 class EventParticipant(UUIDModel, TimeStampedModel, StatusLifecycleModel):
     """Invitation d'un utilisateur à un `CalendarEvent`. L'organisateur ajoute
     et retire ; le participant ne peut que répondre (`response`)."""

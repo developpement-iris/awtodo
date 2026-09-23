@@ -9,6 +9,7 @@ from unittest.mock import patch
 from django.dispatch import Signal
 from django.test import TestCase
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from apps.accounts.models import User
 from apps.accounts.services import update_planning_preferences
@@ -16,14 +17,18 @@ from apps.planning.services import (
     add_participant,
     cancel_block,
     cancel_event,
+    cancel_event_occurrence,
     create_block,
     create_event,
     remove_participant,
     update_event,
+    update_event_occurrence,
 )
 from apps.planning.signals import (
     calendar_event_cancelled,
     calendar_event_created,
+    calendar_event_occurrence_cancelled,
+    calendar_event_occurrence_updated,
     calendar_event_updated,
     scheduled_block_cancelled,
     scheduled_block_created,
@@ -247,3 +252,54 @@ class EventParticipantOutlookSyncSignalTests(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             cancel_event(actor=self.organizer, event=self.event)
         mock_delay.assert_called_once_with(str(self.event.id), "cancelled")
+
+
+class EventOccurrenceOutlookSyncSignalTests(TestCase):
+    """Occurrence unique d'une série (session du 2026-09-23, RECURRENCE-ID)
+    — les signaux dédiés se déclenchent, jamais ceux de la série entière."""
+
+    def setUp(self):
+        self.organizer = User.objects.create_user(username="occurrence-organizer")
+        self.event = create_event(
+            actor=self.organizer,
+            title="Daily",
+            start=parse_datetime("2026-10-01T09:00:00+02:00"),
+            end=parse_datetime("2026-10-01T09:15:00+02:00"),
+            recurrence_rule="FREQ=DAILY;COUNT=5",
+        )
+
+    @patch("apps.planning.tasks.sync_event_occurrence_to_all_participants_outlook.delay")
+    @patch("apps.planning.tasks.sync_event_occurrence_to_outlook.delay")
+    def test_updating_one_occurrence_schedules_occurrence_sync(self, mock_owner_delay, mock_participants_delay):
+        with self.captureOnCommitCallbacks(execute=True):
+            override = update_event_occurrence(
+                actor=self.organizer,
+                event=self.event,
+                occurrence_start=parse_datetime("2026-10-02T09:00:00+02:00"),
+                title="Daily (exceptionnel)",
+            )
+        mock_owner_delay.assert_called_once_with(str(override.id), "updated")
+        mock_participants_delay.assert_called_once_with(str(override.id), "updated")
+
+    @patch("apps.planning.tasks.sync_event_occurrence_to_all_participants_outlook.delay")
+    @patch("apps.planning.tasks.sync_event_occurrence_to_outlook.delay")
+    def test_cancelling_one_occurrence_schedules_occurrence_sync(self, mock_owner_delay, mock_participants_delay):
+        with self.captureOnCommitCallbacks(execute=True):
+            override = cancel_event_occurrence(
+                actor=self.organizer,
+                event=self.event,
+                occurrence_start=parse_datetime("2026-10-03T09:00:00+02:00"),
+            )
+        mock_owner_delay.assert_called_once_with(str(override.id), "cancelled")
+        mock_participants_delay.assert_called_once_with(str(override.id), "cancelled")
+
+    @patch("apps.planning.tasks.sync_calendar_event_to_outlook.delay")
+    def test_updating_one_occurrence_does_not_schedule_whole_series_sync(self, mock_series_delay):
+        with self.captureOnCommitCallbacks(execute=True):
+            update_event_occurrence(
+                actor=self.organizer,
+                event=self.event,
+                occurrence_start=parse_datetime("2026-10-02T09:00:00+02:00"),
+                title="Daily (exceptionnel)",
+            )
+        mock_series_delay.assert_not_called()

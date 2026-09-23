@@ -19,6 +19,13 @@ calendar_event_created = django.dispatch.Signal()
 calendar_event_updated = django.dispatch.Signal()
 calendar_event_cancelled = django.dispatch.Signal()
 
+# Occurrence unique d'une série modifiée/annulée (session du 2026-09-23,
+# RECURRENCE-ID — voir `CalendarEventOccurrenceOverride`). Émis par
+# `update_event_occurrence`/`cancel_event_occurrence`.
+# kwargs : event, override, actor
+calendar_event_occurrence_updated = django.dispatch.Signal()
+calendar_event_occurrence_cancelled = django.dispatch.Signal()
+
 # Synchronisation Outlook des créneaux de tâche/incident (session du
 # 2026-09-23). Un créneau n'a jamais qu'un seul destinataire (son
 # propriétaire) — pas de partage possible pour une tâche/un incident,
@@ -103,6 +110,26 @@ def sync_removed_participant_to_outlook(sender, event, participant, actor=None, 
     # Retiré de l'événement Awtodo → sa copie Outlook personnelle est
     # supprimée (pas l'événement des autres participants/de l'organisateur).
     _enqueue_participant_outlook_sync(event, participant, "cancelled")
+
+
+def _enqueue_occurrence_outlook_sync(override, action):
+    def _dispatch():
+        from .tasks import sync_event_occurrence_to_all_participants_outlook, sync_event_occurrence_to_outlook
+
+        sync_event_occurrence_to_outlook.delay(str(override.id), action)
+        sync_event_occurrence_to_all_participants_outlook.delay(str(override.id), action)
+
+    transaction.on_commit(_dispatch)
+
+
+@receiver(calendar_event_occurrence_updated)
+def sync_occurrence_updated_to_outlook(sender, event, override, actor=None, **kwargs):
+    _enqueue_occurrence_outlook_sync(override, "updated")
+
+
+@receiver(calendar_event_occurrence_cancelled)
+def sync_occurrence_cancelled_to_outlook(sender, event, override, actor=None, **kwargs):
+    _enqueue_occurrence_outlook_sync(override, "cancelled")
 
 
 def _enqueue_block_outlook_sync(block, action):

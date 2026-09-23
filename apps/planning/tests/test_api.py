@@ -99,6 +99,92 @@ class PlanningApiTests(APITestCase):
         self.assertEqual(len(cal["events"]), 5)
         self.assertTrue(all(o["is_recurring"] for o in cal["events"]))
 
+    def test_update_single_occurrence_does_not_affect_the_series(self):
+        # "si on modifie un évènement de la série, ça ne doit modifier que
+        # l'évènement" — session du 2026-09-23.
+        self._as(self.member)
+        self.client.post(
+            "/api/v1/planning/events/",
+            {
+                "title": "Daily",
+                "start": "2026-06-01T09:00:00+02:00",
+                "end": "2026-06-01T09:15:00+02:00",
+                "recurrence_rule": "FREQ=DAILY;COUNT=5",
+            },
+            format="json",
+        )
+        event_id = CalendarEvent.objects.get(title="Daily").id
+        r = self.client.post(
+            f"/api/v1/planning/events/{event_id}/occurrences/update/",
+            {"occurrence_start": "2026-06-02T09:00:00+02:00", "title": "Daily (exceptionnel)"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        cal = self._calendar(self.member).data
+        titles = sorted(o["title"] for o in cal["events"])
+        self.assertEqual(titles, ["Daily", "Daily", "Daily", "Daily", "Daily (exceptionnel)"])
+        # Le titre de la série elle-même (édition classique, "toute la
+        # série") reste inchangé.
+        self.assertEqual(CalendarEvent.objects.get(title__startswith="Daily").title, "Daily")
+
+    def test_cancel_single_occurrence_removes_only_that_one(self):
+        self._as(self.member)
+        self.client.post(
+            "/api/v1/planning/events/",
+            {
+                "title": "Daily",
+                "start": "2026-06-01T09:00:00+02:00",
+                "end": "2026-06-01T09:15:00+02:00",
+                "recurrence_rule": "FREQ=DAILY;COUNT=5",
+            },
+            format="json",
+        )
+        event_id = CalendarEvent.objects.get(title="Daily").id
+        r = self.client.post(
+            f"/api/v1/planning/events/{event_id}/occurrences/cancel/",
+            {"occurrence_start": "2026-06-03T09:00:00+02:00"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 204)
+        cal = self._calendar(self.member).data
+        self.assertEqual(len(cal["events"]), 4)
+        self.assertNotIn("2026-06-03", [o["start"][:10] for o in cal["events"]])
+
+    def test_occurrence_update_rejects_non_recurring_event(self):
+        self._as(self.member)
+        r = self.client.post(
+            "/api/v1/planning/events/",
+            {"title": "Ponctuel", "start": "2026-06-01T09:00:00+02:00", "end": "2026-06-01T10:00:00+02:00"},
+            format="json",
+        )
+        event_id = r.data["id"]
+        r = self.client.post(
+            f"/api/v1/planning/events/{event_id}/occurrences/update/",
+            {"occurrence_start": "2026-06-01T09:00:00+02:00", "title": "X"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+
+    def test_occurrence_update_rejects_date_outside_series(self):
+        self._as(self.member)
+        self.client.post(
+            "/api/v1/planning/events/",
+            {
+                "title": "Daily",
+                "start": "2026-06-01T09:00:00+02:00",
+                "end": "2026-06-01T09:15:00+02:00",
+                "recurrence_rule": "FREQ=DAILY;COUNT=5",
+            },
+            format="json",
+        )
+        event_id = CalendarEvent.objects.get(title="Daily").id
+        r = self.client.post(
+            f"/api/v1/planning/events/{event_id}/occurrences/update/",
+            {"occurrence_start": "2026-07-15T09:00:00+02:00", "title": "X"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+
     def test_invalid_recurrence_rule_rejected(self):
         self._as(self.member)
         r = self.client.post(

@@ -11,10 +11,19 @@ from .graph_client import (
     create_graph_block_event,
     create_graph_event,
     delete_graph_event,
+    delete_graph_occurrence,
     update_graph_block_event,
     update_graph_event,
+    upsert_graph_occurrence,
 )
-from .models import CalendarEvent, EventParticipant, EventParticipantOutlookSync, ScheduledBlock
+from .models import (
+    CalendarEvent,
+    CalendarEventOccurrenceOverride,
+    EventOccurrenceOutlookSync,
+    EventParticipant,
+    EventParticipantOutlookSync,
+    ScheduledBlock,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +171,125 @@ def sync_event_to_all_participants_outlook(event_id, action):
     participant_ids = EventParticipant.objects.filter(event_id=event_id).values_list("user_id", flat=True)
     for user_id in participant_ids:
         sync_event_participant_to_outlook(event_id, str(user_id), action)
+
+
+@shared_task
+def sync_event_occurrence_to_outlook(override_id, action):
+    """Reflète **une occurrence isolée** d'une série (session du 2026-09-23
+    — "si on modifie un évènement de la série, ça ne doit modifier que
+    l'évènement") côté Outlook, pour l'organisateur. Cible l'instance Graph
+    propre à cette occurrence (`apps.planning.graph_client`, résolue via
+    `/events/{master}/instances`) plutôt que le modèle — le reste de la
+    série reste intact.
+
+    ⚠️ Best-effort, non vérifié contre un vrai tenant. Ne fait rien si la
+    série elle-même n'est pas encore synchronisée (`event.outlook_event_id`
+    vide) — rien à cibler côté Graph. N'échoue jamais bruyamment (voir
+    `sync_calendar_event_to_outlook`)."""
+    try:
+        override = CalendarEventOccurrenceOverride.objects.select_related(
+            "event", "event__owner", "event__owner__organisation"
+        ).get(id=override_id)
+    except CalendarEventOccurrenceOverride.DoesNotExist:
+        return
+
+    event = override.event
+    owner = event.owner
+    if not owner.outlook_calendar_sync_enabled or not event.outlook_event_id:
+        return
+
+    connection = _get_ready_connection(owner.organisation)
+    if connection is None:
+        return
+
+    upn = owner.email
+    if not upn:
+        return
+
+    sync_row, _ = EventOccurrenceOutlookSync.objects.get_or_create(override=override, user=owner)
+
+    try:
+        if action == "cancelled":
+            delete_graph_occurrence(
+                connection, upn, event.outlook_event_id, override.original_start, sync_row.outlook_event_id or None
+            )
+            EventOccurrenceOutlookSync.objects.filter(id=sync_row.id).update(outlook_event_id="")
+        else:
+            instance_id = upsert_graph_occurrence(
+                connection, upn, event.outlook_event_id, override.original_start, override
+            )
+            EventOccurrenceOutlookSync.objects.filter(id=sync_row.id).update(outlook_event_id=instance_id)
+    except GraphSyncError:
+        logger.exception("Synchronisation Outlook échouée pour l'occurrence %s (action=%s).", override_id, action)
+
+
+@shared_task
+def sync_event_occurrence_for_participant_outlook(override_id, user_id, action):
+    """Même chose que `sync_event_occurrence_to_outlook`, mais pour la copie
+    d'un participant — cible l'instance Graph de SA propre copie de la
+    série (`EventParticipantOutlookSync`), pas celle de l'organisateur."""
+    try:
+        override = CalendarEventOccurrenceOverride.objects.select_related("event").get(id=override_id)
+    except CalendarEventOccurrenceOverride.DoesNotExist:
+        return
+    try:
+        recipient = User.objects.select_related("organisation").get(id=user_id)
+    except User.DoesNotExist:
+        return
+
+    if not recipient.outlook_calendar_sync_enabled:
+        return
+
+    participant_sync = EventParticipantOutlookSync.objects.filter(event=override.event, user=recipient).first()
+    if participant_sync is None or not participant_sync.outlook_event_id:
+        return  # la copie de ce participant n'est pas (encore) synchronisée
+
+    connection = _get_ready_connection(recipient.organisation)
+    if connection is None:
+        return
+
+    upn = recipient.email
+    if not upn:
+        return
+
+    sync_row, _ = EventOccurrenceOutlookSync.objects.get_or_create(override=override, user=recipient)
+
+    try:
+        if action == "cancelled":
+            delete_graph_occurrence(
+                connection,
+                upn,
+                participant_sync.outlook_event_id,
+                override.original_start,
+                sync_row.outlook_event_id or None,
+            )
+            EventOccurrenceOutlookSync.objects.filter(id=sync_row.id).update(outlook_event_id="")
+        else:
+            instance_id = upsert_graph_occurrence(
+                connection, upn, participant_sync.outlook_event_id, override.original_start, override
+            )
+            EventOccurrenceOutlookSync.objects.filter(id=sync_row.id).update(outlook_event_id=instance_id)
+    except GraphSyncError:
+        logger.exception(
+            "Synchronisation Outlook échouée pour l'occurrence %s → participant %s (action=%s).",
+            override_id,
+            user_id,
+            action,
+        )
+
+
+@shared_task
+def sync_event_occurrence_to_all_participants_outlook(override_id, action):
+    """Fan-out de `sync_event_occurrence_for_participant_outlook` vers tous
+    les participants actifs de l'événement — même principe que
+    `sync_event_to_all_participants_outlook`, à l'échelle d'une occurrence."""
+    try:
+        override = CalendarEventOccurrenceOverride.objects.only("event_id").get(id=override_id)
+    except CalendarEventOccurrenceOverride.DoesNotExist:
+        return
+    participant_ids = EventParticipant.objects.filter(event_id=override.event_id).values_list("user_id", flat=True)
+    for user_id in participant_ids:
+        sync_event_occurrence_for_participant_outlook(override_id, str(user_id), action)
 
 
 @shared_task

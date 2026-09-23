@@ -25,6 +25,8 @@ from .serializers import (
     BlockCreateSerializer,
     BlockUpdateSerializer,
     EventCreateSerializer,
+    EventOccurrenceCancelSerializer,
+    EventOccurrenceUpdateSerializer,
     EventUpdateSerializer,
     ParticipantAddSerializer,
     ProjectEntryCreateSerializer,
@@ -133,6 +135,31 @@ class CalendarEventViewSet(_PlanningExceptionMixin, viewsets.GenericViewSet):
     def cancel(self, request, pk=None):
         event = self.get_object()
         services.cancel_event(actor=request.user, event=event)
+        return Response(status=204)
+
+    @action(detail=True, methods=["post"], url_path="occurrences/update")
+    def update_occurrence(self, request, pk=None):
+        """Modifie UNE occurrence de la série, pas toute la série (session
+        du 2026-09-23) — `occurrence_start` en body plutôt qu'en URL pour
+        éviter l'encodage d'un datetime dans un chemin."""
+        event = self.get_object()
+        serializer = EventOccurrenceUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = dict(serializer.validated_data)
+        occurrence_start = data.pop("occurrence_start")
+        services.update_event_occurrence(
+            actor=request.user, event=event, occurrence_start=occurrence_start, **data
+        )
+        return Response(services._event_detail_dict(event, actor=request.user))
+
+    @action(detail=True, methods=["post"], url_path="occurrences/cancel")
+    def cancel_occurrence(self, request, pk=None):
+        event = self.get_object()
+        serializer = EventOccurrenceCancelSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        services.cancel_event_occurrence(
+            actor=request.user, event=event, occurrence_start=serializer.validated_data["occurrence_start"]
+        )
         return Response(status=204)
 
     @action(detail=True, methods=["post"], url_path="participants")

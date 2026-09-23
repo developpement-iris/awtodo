@@ -514,6 +514,10 @@ export interface CalendarEventOccurrence {
   status: "confirme" | "annule";
   recurrence_rule: string;
   is_recurring: boolean;
+  /** Cette occurrence précise a été modifiée individuellement (session du
+   * 2026-09-23, RECURRENCE-ID) — distinct de `is_recurring`, qui reste vrai
+   * pour toutes les occurrences de la série. */
+  is_overridden: boolean;
   owner: CalendarUser;
   is_owner: boolean;
   read_only: boolean;

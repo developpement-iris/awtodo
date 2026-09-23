@@ -17,6 +17,7 @@ from apps.projects.services import is_project_manager, is_project_member
 
 from .models import (
     CalendarEvent,
+    CalendarEventOccurrenceOverride,
     CalendarShare,
     EventParticipant,
     ProjectPlanningEntry,
@@ -28,6 +29,8 @@ from .models import (
 from .signals import (
     calendar_event_cancelled,
     calendar_event_created,
+    calendar_event_occurrence_cancelled,
+    calendar_event_occurrence_updated,
     calendar_event_updated,
     event_participant_invited,
     event_participant_removed,
@@ -165,6 +168,34 @@ def expand_occurrences(sources, window_start, window_end):
     return results
 
 
+def _merge_calendar_event_occurrence_overrides(occurrences):
+    """Applique les `CalendarEventOccurrenceOverride` sur une liste
+    d'occurrences déjà expansées (voir `expand_occurrences`) : une
+    occurrence annulée disparaît, une occurrence modifiée prend les
+    valeurs de son override (voir `CalendarEventOccurrenceOverride` pour
+    le détail — indépendance complète une fois overridée). Sans effet sur
+    les occurrences d'un événement ponctuel (pas de recurrence_rule) ou
+    sans override correspondant."""
+    recurring_ids = {occ["source"].id for occ in occurrences if occ["source"].recurrence_rule}
+    if not recurring_ids:
+        return occurrences
+
+    overrides = {
+        (o.event_id, o.original_start): o
+        for o in CalendarEventOccurrenceOverride.objects.filter(event_id__in=recurring_ids)
+    }
+    merged = []
+    for occ in occurrences:
+        event = occ["source"]
+        override = overrides.get((event.id, occ["occurrence_start"])) if event.recurrence_rule else None
+        if override is None:
+            merged.append(occ)
+        elif not override.is_cancelled:
+            merged.append({**occ, "start": override.start, "end": override.end, "override": override})
+        # occurrence annulée : ni ajoutée, ni remplacée — disparaît de la liste
+    return merged
+
+
 # --- Mise en forme ---------------------------------------------------------
 
 
@@ -205,6 +236,7 @@ def _participants_payload(event):
 
 def _event_occurrence_dict(occ, *, actor, read_only=False):
     event = occ["source"]
+    override = occ.get("override")
     my_response = None
     if not read_only:
         mine = next(
@@ -218,13 +250,18 @@ def _event_occurrence_dict(occ, *, actor, read_only=False):
         "occurrence_start": _iso(occ["occurrence_start"]),
         "start": _iso(occ["start"]),
         "end": _iso(occ["end"]),
-        "all_day": event.all_day,
-        "title": event.title,
-        "description": event.description,
-        "location": event.location,
+        "all_day": override.all_day if override else event.all_day,
+        "title": override.title if override else event.title,
+        "description": override.description if override else event.description,
+        "location": override.location if override else event.location,
         "status": event.status,
         "recurrence_rule": event.recurrence_rule,
         "is_recurring": bool(event.recurrence_rule),
+        # Une occurrence overridée est éditable/annulable individuellement
+        # (voir "Occurrence unique" plus bas) — distinct de `is_recurring`,
+        # qui reste vrai pour toutes les occurrences de la série y compris
+        # celles qui n'ont jamais été modifiées.
+        "is_overridden": override is not None,
         "owner": _user_dict(event.owner),
         "is_owner": event.owner_id == actor.id,
         "read_only": read_only or event.owner_id != actor.id,
@@ -319,7 +356,7 @@ def get_calendar(*, actor, window_start, window_end, owner_ids=None, project_ids
         .select_related("owner")
         .prefetch_related("participants__user")
     )
-    event_occs = expand_occurrences(events, window_start, window_end)
+    event_occs = _merge_calendar_event_occurrence_overrides(expand_occurrences(events, window_start, window_end))
 
     # Créneaux tâches/incidents (non récurrents).
     blocks = (
@@ -352,7 +389,9 @@ def get_calendar(*, actor, window_start, window_end, owner_ids=None, project_ids
         shared_events = list(
             CalendarEvent.objects.filter(owner=share.owner).prefetch_related("participants__user")
         )
-        shared_occs = expand_occurrences(shared_events, window_start, window_end)
+        shared_occs = _merge_calendar_event_occurrence_overrides(
+            expand_occurrences(shared_events, window_start, window_end)
+        )
         # Créneaux tâches/incidents de l'`owner` — même superposition lecture
         # seule que ses événements libres (le partage donne à voir tout son
         # agenda, pas seulement ses rendez-vous).
@@ -509,6 +548,106 @@ def cancel_event(*, actor, event):
     event.save(update_fields=["status", "updated_at"])
     calendar_event_cancelled.send(sender=CalendarEvent, event=event, actor=actor)
     return event
+
+
+# --- Occurrence unique d'une série (RECURRENCE-ID, session du 2026-09-23) --
+#
+# "si on modifie un évènement de la série, ça ne doit modifier que
+# l'évènement (pareil pour la suppression)" — jusque-là, éditer/annuler
+# portait toujours sur toute la série (décision actée à la conception du
+# module Planning). `update_event`/`cancel_event` ci-dessus restent la
+# façon d'agir sur la série entière ; ce qui suit agit sur UNE occurrence.
+
+
+def _occurrence_duration(event):
+    local_start = timezone.localtime(event.start)
+    try:
+        recurrence = rrulestr(event.recurrence_rule, dtstart=local_start)
+    except (ValueError, TypeError):
+        raise PlanningValidationError("Règle de récurrence invalide.")
+    return recurrence
+
+
+def _ensure_valid_occurrence(event, occurrence_start):
+    if not event.recurrence_rule:
+        raise PlanningValidationError("Cet événement n'est pas une série récurrente.")
+    recurrence = _occurrence_duration(event)
+    local_occurrence = timezone.localtime(occurrence_start)
+    if not recurrence.between(local_occurrence, local_occurrence, inc=True):
+        raise PlanningValidationError("Cette date ne correspond à aucune occurrence de la série.")
+
+
+def _get_or_init_occurrence_override(event, occurrence_start):
+    """Première modification/annulation de cette occurrence → crée la ligne
+    avec un instantané complet des valeurs actuelles de la série (voir
+    `CalendarEventOccurrenceOverride`, indépendance assumée). Un appel
+    suivant sur la même occurrence retrouve la même ligne."""
+    _ensure_valid_occurrence(event, occurrence_start)
+    duration = event.end - event.start
+    override, _created = CalendarEventOccurrenceOverride.objects.get_or_create(
+        event=event,
+        original_start=occurrence_start,
+        defaults={
+            "title": event.title,
+            "description": event.description,
+            "location": event.location,
+            "start": occurrence_start,
+            "end": occurrence_start + duration,
+            "all_day": event.all_day,
+        },
+    )
+    return override
+
+
+def update_event_occurrence(
+    *,
+    actor,
+    event,
+    occurrence_start,
+    title=_UNSET,
+    description=_UNSET,
+    location=_UNSET,
+    start=_UNSET,
+    end=_UNSET,
+    all_day=_UNSET,
+):
+    _ensure_can_edit_event(actor, event)
+    override = _get_or_init_occurrence_override(event, occurrence_start)
+    if override.is_cancelled:
+        raise PlanningValidationError("Cette occurrence a été annulée.")
+    new_start = override.start if start is _UNSET else start
+    new_end = override.end if end is _UNSET else end
+    _validate_window(new_start, new_end)
+    if title is not _UNSET:
+        if not title or not title.strip():
+            raise PlanningValidationError("Le titre est obligatoire.")
+        override.title = title.strip()[:255]
+    if description is not _UNSET:
+        override.description = description or ""
+    if location is not _UNSET:
+        override.location = (location or "").strip()[:255]
+    if start is not _UNSET:
+        override.start = start
+    if end is not _UNSET:
+        override.end = end
+    if all_day is not _UNSET:
+        override.all_day = all_day
+    override.save()
+    calendar_event_occurrence_updated.send(
+        sender=CalendarEventOccurrenceOverride, event=event, override=override, actor=actor
+    )
+    return override
+
+
+def cancel_event_occurrence(*, actor, event, occurrence_start):
+    _ensure_can_edit_event(actor, event)
+    override = _get_or_init_occurrence_override(event, occurrence_start)
+    override.is_cancelled = True
+    override.save(update_fields=["is_cancelled", "updated_at"])
+    calendar_event_occurrence_cancelled.send(
+        sender=CalendarEventOccurrenceOverride, event=event, override=override, actor=actor
+    )
+    return override
 
 
 def add_participant(*, actor, event, user):

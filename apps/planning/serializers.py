@@ -50,6 +50,23 @@ class ParticipantAddSerializer(serializers.Serializer):
     user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
 
 
+class EventOccurrenceUpdateSerializer(serializers.Serializer):
+    """Modifie UNE occurrence d'une série, pas la série entière (session du
+    2026-09-23) — voir `apps.planning.services.update_event_occurrence`."""
+
+    occurrence_start = serializers.DateTimeField()
+    title = serializers.CharField(max_length=255, required=False)
+    description = serializers.CharField(required=False, allow_blank=True)
+    location = serializers.CharField(required=False, allow_blank=True)
+    start = serializers.DateTimeField(required=False)
+    end = serializers.DateTimeField(required=False)
+    all_day = serializers.BooleanField(required=False)
+
+
+class EventOccurrenceCancelSerializer(serializers.Serializer):
+    occurrence_start = serializers.DateTimeField()
+
+
 class RespondSerializer(serializers.Serializer):
     response = serializers.ChoiceField(choices=["accepte", "refuse"])
 

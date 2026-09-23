@@ -4,7 +4,8 @@
 `Mail.Send` pour `apps.communication` — un seul jeu d'identifiants par
 organisation (`O365Connection`), pas de consentement par utilisateur."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
+from datetime import timezone as dt_timezone
 
 import requests
 from msal import ConfidentialClientApplication
@@ -221,3 +222,85 @@ def create_graph_block_event(connection, upn, block):
 
 def update_graph_block_event(connection, upn, outlook_event_id, block):
     _patch_event(connection, upn, outlook_event_id, _block_payload(block))
+
+
+# --- Occurrence unique d'une série récurrente (session du 2026-09-23) -----
+#
+# ⚠️ Non vérifié contre un vrai tenant Outlook — best-effort, à confirmer au
+# premier usage réel (voir docs/modeles-et-api.md > "Synchronisation
+# Outlook"). Graph modélise nativement une occurrence isolée : chaque
+# instance d'une série a son propre id, distinct de celui du modèle
+# (`master_event_id`), résolu via `GET /events/{master}/instances`. PATCHer
+# ou DELETEer cet id-là (plutôt que celui du modèle) ne touche que cette
+# occurrence — exactement le comportement demandé côté Awtodo.
+
+
+def _occurrence_payload(override):
+    payload = {
+        "subject": override.title,
+        "body": {"contentType": "text", "content": override.description or ""},
+        "start": {"dateTime": override.start.isoformat(), "timeZone": "Europe/Paris"},
+        "end": {"dateTime": override.end.isoformat(), "timeZone": "Europe/Paris"},
+        "isAllDay": override.all_day,
+    }
+    if override.location:
+        payload["location"] = {"displayName": override.location}
+    return payload
+
+
+def _resolve_instance_id(connection, upn, master_event_id, occurrence_start):
+    """Renvoie l'id Graph de l'instance la plus proche de `occurrence_start`
+    dans la série `master_event_id`, ou `None` si Graph n'en renvoie aucune
+    dans la fenêtre (série pas encore répliquée côté Graph, par exemple).
+    Comparaison par instance la plus proche plutôt qu'une correspondance
+    exacte de chaîne — Graph renvoie ses horodatages dans le fuseau demandé
+    par l'en-tête `Prefer`, non envoyé ici (donc UTC), ce qui rend une
+    correspondance exacte fragile."""
+    window_start = occurrence_start - timedelta(hours=2)
+    window_end = occurrence_start + timedelta(hours=2)
+    response = requests.get(
+        f"{GRAPH_BASE_URL}/users/{upn}/events/{master_event_id}/instances",
+        headers=_headers(connection),
+        params={
+            "startDateTime": window_start.astimezone(dt_timezone.utc).isoformat(),
+            "endDateTime": window_end.astimezone(dt_timezone.utc).isoformat(),
+        },
+        timeout=_REQUEST_TIMEOUT,
+    )
+    if response.status_code >= 400:
+        raise GraphSyncError(f"Résolution d'occurrence Outlook échouée ({response.status_code}) : {response.text[:300]}")
+    instances = response.json().get("value", [])
+    if not instances:
+        return None
+
+    target = occurrence_start.astimezone(dt_timezone.utc)
+
+    def _distance(item):
+        try:
+            raw = item["start"]["dateTime"].split(".")[0]
+            dt = datetime.fromisoformat(raw).replace(tzinfo=dt_timezone.utc)
+        except (KeyError, ValueError):
+            return timedelta.max
+        return abs(dt - target)
+
+    return min(instances, key=_distance)["id"]
+
+
+def upsert_graph_occurrence(connection, upn, master_event_id, occurrence_start, override):
+    """PATCH l'instance Graph correspondant à `occurrence_start`. Renvoie
+    l'id Graph de l'instance (à mettre en cache pour éviter de la
+    re-résoudre à chaque appel)."""
+    instance_id = _resolve_instance_id(connection, upn, master_event_id, occurrence_start)
+    if instance_id is None:
+        raise GraphSyncError(
+            "Instance Outlook introuvable pour cette occurrence (série pas encore répliquée côté Graph ?)."
+        )
+    _patch_event(connection, upn, instance_id, _occurrence_payload(override))
+    return instance_id
+
+
+def delete_graph_occurrence(connection, upn, master_event_id, occurrence_start, cached_instance_id=None):
+    instance_id = cached_instance_id or _resolve_instance_id(connection, upn, master_event_id, occurrence_start)
+    if instance_id is None:
+        return  # déjà absent côté Outlook, rien à faire
+    delete_graph_event(connection, upn, instance_id)

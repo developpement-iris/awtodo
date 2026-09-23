@@ -793,6 +793,32 @@ export function cancelEvent(eventId: string): Promise<void> {
   return postJson<void>(`/planning/events/${eventId}/cancel/`, {});
 }
 
+export interface EventOccurrencePayload {
+  occurrence_start: string;
+  title?: string;
+  description?: string;
+  location?: string;
+  start?: string;
+  end?: string;
+  all_day?: boolean;
+  [key: string]: unknown;
+}
+
+/** Modifie UNE occurrence de la série, pas la série entière (session du
+ * 2026-09-23) — voir apps/planning/services.py::update_event_occurrence. */
+export function updateEventOccurrence(
+  eventId: string,
+  payload: EventOccurrencePayload,
+): Promise<CalendarEventDetail> {
+  return postJson<CalendarEventDetail>(`/planning/events/${eventId}/occurrences/update/`, payload);
+}
+
+export function cancelEventOccurrence(eventId: string, occurrenceStart: string): Promise<void> {
+  return postJson<void>(`/planning/events/${eventId}/occurrences/cancel/`, {
+    occurrence_start: occurrenceStart,
+  });
+}
+
 export function addEventParticipant(eventId: string, userId: string): Promise<CalendarEventDetail> {
   return postJson<CalendarEventDetail>(`/planning/events/${eventId}/participants/`, { user: userId });
 }

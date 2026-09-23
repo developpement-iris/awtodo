@@ -28,7 +28,15 @@ import { SkeletonRows } from "../../components/Skeleton";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 import { useToast } from "../../context/ToastContext";
 import type { ViewName } from "../../types/navigation";
-import type { CalendarBundle, Incident, Me, ScheduledBlock, Task, WorkingHoursDay } from "../../types/watodo";
+import type {
+  CalendarBundle,
+  CalendarEventOccurrence,
+  Incident,
+  Me,
+  ScheduledBlock,
+  Task,
+  WorkingHoursDay,
+} from "../../types/watodo";
 import { TaskCardDialog } from "../tasks/TaskCardDialog";
 import { BlockDialog } from "./BlockDialog";
 import {
@@ -42,6 +50,7 @@ import {
 } from "./calendarMath";
 import { isoAt, resolveDrop, resolveMove } from "./dndDrop";
 import { EventDialog } from "./EventDialog";
+import { EventOccurrenceDialog } from "./EventOccurrenceDialog";
 import { MonthGrid } from "./MonthGrid";
 import { PlanningPreferencesDialog } from "./PlanningPreferencesDialog";
 import { SharePanel } from "./SharePanel";
@@ -118,6 +127,8 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
   const [dialog, setDialog] = useState<
     | { kind: "create"; start: string; end: string }
     | { kind: "edit"; eventId: string }
+    | { kind: "occurrence-scope"; occurrence: CalendarEventOccurrence }
+    | { kind: "occurrence"; occurrence: CalendarEventOccurrence }
     | { kind: "block"; block: ScheduledBlock }
     | { kind: "share" }
     | { kind: "preferences" }
@@ -363,7 +374,15 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
 
   function handleItemClick(item: CalendarItem) {
     if (item.kind === "event") {
-      setDialog({ kind: "edit", eventId: item.id });
+      const occurrence = item.raw as CalendarEventOccurrence;
+      // Série récurrente : demander la portée avant d'éditer (session du
+      // 2026-09-23 — "si on modifie un évènement de la série, ça ne doit
+      // modifier que l'évènement"). Un événement ponctuel n'a pas ce choix.
+      if (occurrence.is_recurring) {
+        setDialog({ kind: "occurrence-scope", occurrence });
+      } else {
+        setDialog({ kind: "edit", eventId: item.id });
+      }
     } else if (item.kind === "shared") {
       // Événement d'un calendrier partagé : lecture seule. Pas d'appel à
       // `getEvent` — le propriétaire n'est ni moi (owner) ni un participant,
@@ -602,6 +621,47 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
           onClose={() => setDialog(null)}
           onSaved={reload}
         />
+      )}
+      {dialog?.kind === "occurrence-scope" && (
+        <div className="planning-dialog__overlay" onClick={() => setDialog(null)}>
+          <div
+            className="planning-dialog planning-dialog--narrow"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="planning-dialog__header">
+              <h2>Modifier l'événement</h2>
+            </div>
+            <div className="planning-dialog__body">
+              <p className="planning-dialog__muted">
+                « {dialog.occurrence.title} » fait partie d'une série récurrente. Que voulez-vous modifier ?
+              </p>
+              <div className="planning-dialog__footer">
+                <button type="button" className="planning-btn" onClick={() => setDialog(null)}>
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  className="planning-btn"
+                  onClick={() => setDialog({ kind: "occurrence", occurrence: dialog.occurrence })}
+                >
+                  Cette occurrence uniquement
+                </button>
+                <button
+                  type="button"
+                  className="planning-btn planning-btn--primary"
+                  onClick={() => setDialog({ kind: "edit", eventId: dialog.occurrence.id })}
+                >
+                  Toute la série
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {dialog?.kind === "occurrence" && (
+        <EventOccurrenceDialog occurrence={dialog.occurrence} onClose={() => setDialog(null)} onSaved={reload} />
       )}
       {dialog?.kind === "block" && (
         <BlockDialog
