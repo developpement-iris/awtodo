@@ -8,11 +8,20 @@ from unittest.mock import patch
 
 from django.dispatch import Signal
 from django.test import TestCase
+from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.accounts.services import update_planning_preferences
-from apps.planning.services import cancel_event, create_event, update_event
-from apps.planning.signals import calendar_event_cancelled, calendar_event_created, calendar_event_updated
+from apps.planning.services import cancel_block, cancel_event, create_block, create_event, update_event
+from apps.planning.signals import (
+    calendar_event_cancelled,
+    calendar_event_created,
+    calendar_event_updated,
+    scheduled_block_cancelled,
+    scheduled_block_created,
+)
+from apps.projects.models import Project, ProjectMembership, ProjectVersion
+from apps.tasks.models import Task
 
 
 class _SignalCatcher:
@@ -110,3 +119,50 @@ class OutlookSyncSignalTests(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             update_planning_preferences(actor=self.user, outlook_calendar_sync_enabled=True)
         mock_delay.assert_not_called()
+
+
+class ScheduledBlockOutlookSyncSignalTests(TestCase):
+    """Créneaux de tâche (session du 2026-09-23) — mêmes vérifications que
+    pour les événements libres, sur `scheduled_block_*`."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="block-sync-user")
+        project = Project.objects.create(name="P", project_type="collaboratif")
+        ProjectMembership.objects.create(project=project, user=self.user, role="membre")
+        version = ProjectVersion.objects.create(project=project, label="v1", is_current=True)
+        self.task = Task.objects.create(
+            project=project, version=version, title="Corriger le formulaire", task_type="correction", assignee=self.user
+        )
+
+    def _window(self):
+        start = timezone.now()
+        return start, start + timezone.timedelta(hours=1)
+
+    def test_create_block_emits_scheduled_block_created(self):
+        catcher = _SignalCatcher(scheduled_block_created)
+        try:
+            start, end = self._window()
+            block = create_block(actor=self.user, task=self.task, start=start, end=end)
+            self.assertEqual(len(catcher.received), 1)
+            self.assertEqual(catcher.received[0]["block"].id, block.id)
+        finally:
+            catcher.disconnect()
+
+    def test_cancel_block_emits_scheduled_block_cancelled(self):
+        start, end = self._window()
+        block = create_block(actor=self.user, task=self.task, start=start, end=end)
+        catcher = _SignalCatcher(scheduled_block_cancelled)
+        try:
+            cancel_block(actor=self.user, block=block)
+            self.assertEqual(len(catcher.received), 1)
+            self.assertEqual(catcher.received[0]["block"].id, block.id)
+        finally:
+            catcher.disconnect()
+
+    def test_default_receiver_never_raises_without_o365_config(self):
+        start, end = self._window()
+        with self.captureOnCommitCallbacks(execute=True):
+            block = create_block(actor=self.user, task=self.task, start=start, end=end)
+        with self.captureOnCommitCallbacks(execute=True):
+            cancel_block(actor=self.user, block=block)
+        self.assertEqual(block.outlook_syncs.count(), 0)

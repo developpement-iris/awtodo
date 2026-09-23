@@ -17,6 +17,16 @@ calendar_event_created = django.dispatch.Signal()
 calendar_event_updated = django.dispatch.Signal()
 calendar_event_cancelled = django.dispatch.Signal()
 
+# Synchronisation Outlook des créneaux de tâche/incident (session du
+# 2026-09-23) — même principe, mais un créneau se synchronise sur PLUSIEURS
+# calendriers Outlook (le propriétaire + chaque personne à qui il a partagé
+# son calendrier et qui a elle-même activé son opt-in), voir
+# `BlockOutlookSync`. Émis par `create_block`/`update_block`/`cancel_block`.
+# kwargs : block, actor
+scheduled_block_created = django.dispatch.Signal()
+scheduled_block_updated = django.dispatch.Signal()
+scheduled_block_cancelled = django.dispatch.Signal()
+
 
 def _enqueue_outlook_sync(event, action):
     """Planifie la tâche Celery après le commit de la transaction en cours —
@@ -49,6 +59,30 @@ def sync_event_updated_to_outlook(sender, event, actor=None, **kwargs):
 @receiver(calendar_event_cancelled)
 def sync_event_cancelled_to_outlook(sender, event, actor=None, **kwargs):
     _enqueue_outlook_sync(event, "cancelled")
+
+
+def _enqueue_block_outlook_sync(block, action):
+    def _dispatch():
+        from .tasks import sync_scheduled_block_to_outlook
+
+        sync_scheduled_block_to_outlook.delay(str(block.id), action)
+
+    transaction.on_commit(_dispatch)
+
+
+@receiver(scheduled_block_created)
+def sync_block_created_to_outlook(sender, block, actor=None, **kwargs):
+    _enqueue_block_outlook_sync(block, "created")
+
+
+@receiver(scheduled_block_updated)
+def sync_block_updated_to_outlook(sender, block, actor=None, **kwargs):
+    _enqueue_block_outlook_sync(block, "updated")
+
+
+@receiver(scheduled_block_cancelled)
+def sync_block_cancelled_to_outlook(sender, block, actor=None, **kwargs):
+    _enqueue_block_outlook_sync(block, "cancelled")
 
 
 @receiver(outlook_calendar_sync_enabled_activated)

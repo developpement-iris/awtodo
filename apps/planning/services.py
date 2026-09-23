@@ -30,6 +30,9 @@ from .signals import (
     calendar_event_created,
     calendar_event_updated,
     event_participant_invited,
+    scheduled_block_cancelled,
+    scheduled_block_created,
+    scheduled_block_updated,
 )
 
 
@@ -564,7 +567,9 @@ def create_block(*, actor, task=None, incident=None, start, end):
         raise PlanningValidationError("Un créneau porte sur exactement une tâche ou un incident.")
     _validate_window(start, end)
     _ensure_can_schedule(actor, task=task, incident=incident)
-    return ScheduledBlock.objects.create(owner=actor, task=task, incident=incident, start=start, end=end)
+    block = ScheduledBlock.objects.create(owner=actor, task=task, incident=incident, start=start, end=end)
+    scheduled_block_created.send(sender=ScheduledBlock, block=block, actor=actor)
+    return block
 
 
 def update_block(*, actor, block, start=None, end=None):
@@ -576,6 +581,7 @@ def update_block(*, actor, block, start=None, end=None):
         block.start = new_start
         block.end = new_end
         block.save()
+    scheduled_block_updated.send(sender=ScheduledBlock, block=block, actor=actor)
     return block
 
 
@@ -583,6 +589,7 @@ def cancel_block(*, actor, block):
     _ensure_can_edit_block(actor, block)
     block.status = "annule"
     block.save(update_fields=["status", "updated_at"])
+    scheduled_block_cancelled.send(sender=ScheduledBlock, block=block, actor=actor)
     return block
 
 

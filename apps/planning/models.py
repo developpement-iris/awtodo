@@ -158,6 +158,33 @@ class ScheduledBlock(UUIDModel, TimeStampedModel, StatusLifecycleModel):
         return f"Créneau {self.task or self.incident} — {self.owner}"
 
 
+class BlockOutlookSync(UUIDModel, TimeStampedModel):
+    """Synchronisation Outlook d'un `ScheduledBlock` (session du 2026-09-23),
+    **par destinataire** — contrairement à `CalendarEvent.outlook_event_id`
+    (un événement personnel n'a qu'un seul destinataire, le propriétaire),
+    un créneau de tâche/incident se synchronise sur le calendrier Outlook du
+    `owner` **et** de chaque personne à qui il a partagé son calendrier
+    (`CalendarShare`, si elle a elle-même activé son opt-in — le partage
+    seul ne suffit pas, chacun contrôle ce qui atterrit dans son propre
+    Outlook, tranché avec l'utilisateur). D'où un id Graph par (`block`,
+    `user`) plutôt qu'un champ scalaire sur `ScheduledBlock`.
+
+    Jamais supprimée physiquement (cohérent avec la règle générale) —
+    `outlook_event_id` est simplement vidé quand le créneau est annulé."""
+
+    block = models.ForeignKey(ScheduledBlock, on_delete=models.CASCADE, related_name="outlook_syncs")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    outlook_event_id = models.CharField(max_length=200, blank=True, default="")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["block", "user"], name="blockoutlooksync_unique_block_user"),
+        ]
+
+    def __str__(self):
+        return f"Synchro Outlook — {self.block} → {self.user}"
+
+
 class ProjectPlanningEntry(UUIDModel, TimeStampedModel, StatusLifecycleModel, RecurringEventModel):
     """Entrée du planning partagé d'un projet. Visible par tous les membres,
     éditable par les chefs de projet uniquement."""

@@ -147,12 +147,16 @@ def _event_payload(event):
     return payload
 
 
-def create_graph_event(connection, upn, event):
-    """Crée l'événement côté Outlook, renvoie son id Graph."""
+# --- Appels HTTP génériques, partagés entre événements libres et créneaux
+# de tâche/incident (session du 2026-09-23) — seule la construction du
+# payload diffère entre les deux. ------------------------------------------
+
+
+def _post_event(connection, upn, payload):
     response = requests.post(
         f"{GRAPH_BASE_URL}/users/{upn}/events",
         headers=_headers(connection),
-        json=_event_payload(event),
+        json=payload,
         timeout=_REQUEST_TIMEOUT,
     )
     if response.status_code >= 400:
@@ -160,11 +164,11 @@ def create_graph_event(connection, upn, event):
     return response.json()["id"]
 
 
-def update_graph_event(connection, upn, outlook_event_id, event):
+def _patch_event(connection, upn, outlook_event_id, payload):
     response = requests.patch(
         f"{GRAPH_BASE_URL}/users/{upn}/events/{outlook_event_id}",
         headers=_headers(connection),
-        json=_event_payload(event),
+        json=payload,
         timeout=_REQUEST_TIMEOUT,
     )
     if response.status_code >= 400:
@@ -181,3 +185,39 @@ def delete_graph_event(connection, upn, outlook_event_id):
     # erreur pour nous, l'état cible (pas d'événement côté Outlook) est atteint.
     if response.status_code >= 400 and response.status_code != 404:
         raise GraphSyncError(f"Suppression Outlook échouée ({response.status_code}) : {response.text[:300]}")
+
+
+def create_graph_event(connection, upn, event):
+    """Crée l'événement côté Outlook, renvoie son id Graph."""
+    return _post_event(connection, upn, _event_payload(event))
+
+
+def update_graph_event(connection, upn, outlook_event_id, event):
+    _patch_event(connection, upn, outlook_event_id, _event_payload(event))
+
+
+# --- Créneaux de tâche/incident (`ScheduledBlock`) -------------------------
+#
+# Pas de récurrence ni de description/lieu sur un créneau (le modèle n'en a
+# pas) — payload volontairement plus simple que `_event_payload`. Le titre
+# Outlook reprend celui de la tâche ou de l'incident planifié.
+
+
+def _block_payload(block):
+    title = block.task.title if block.task_id else block.incident.title
+    return {
+        "subject": title,
+        "start": {"dateTime": block.start.isoformat(), "timeZone": "Europe/Paris"},
+        "end": {"dateTime": block.end.isoformat(), "timeZone": "Europe/Paris"},
+    }
+
+
+def create_graph_block_event(connection, upn, block):
+    """Crée le créneau côté Outlook (pour un destinataire donné — voir
+    `apps.planning.tasks.sync_scheduled_block_to_outlook`), renvoie son id
+    Graph."""
+    return _post_event(connection, upn, _block_payload(block))
+
+
+def update_graph_block_event(connection, upn, outlook_event_id, block):
+    _patch_event(connection, upn, outlook_event_id, _block_payload(block))
