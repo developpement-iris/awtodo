@@ -430,7 +430,9 @@ def _event_detail_dict(event, *, actor):
     }
 
 
-def create_event(*, actor, title, start, end, all_day=False, description="", location="", recurrence_rule=""):
+def create_event(
+    *, actor, title, start, end, all_day=False, description="", location="", recurrence_rule="", participant_ids=None
+):
     _require_actor(actor)
     if not title or not title.strip():
         raise PlanningValidationError("Le titre est obligatoire.")
@@ -447,6 +449,16 @@ def create_event(*, actor, title, start, end, all_day=False, description="", loc
         recurrence_rule=rule,
     )
     calendar_event_created.send(sender=CalendarEvent, event=event, actor=actor)
+    # Participants ajoutés dès la création (session du 2026-09-23) —
+    # réutilise `add_participant` tel quel, un par un : mêmes règles
+    # (l'organisateur ne peut pas s'ajouter lui-même — ignoré plutôt que
+    # rejeté, pour ne pas faire échouer toute la création d'événement sur ce
+    # détail), même signal `event_participant_invited` par participant donc
+    # même synchro Outlook individuelle que pour un ajout après coup.
+    for user in participant_ids or []:
+        if user.id == actor.id:
+            continue
+        add_participant(actor=actor, event=event, user=user)
     return event
 
 

@@ -766,6 +766,10 @@ export interface EventPayload {
   end?: string;
   all_day?: boolean;
   recurrence_rule?: string;
+  /** Participants ajoutés dès la création (session du 2026-09-23) — sans
+   * effet côté API sur une mise à jour, `EventUpdateSerializer` ne
+   * connaît pas ce champ. */
+  participant_ids?: string[];
   [key: string]: unknown;
 }
 

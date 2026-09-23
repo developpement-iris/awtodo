@@ -212,6 +212,36 @@ class EventParticipantOutlookSyncSignalTests(TestCase):
             update_event(actor=self.organizer, event=self.event, title="Renommé")
         mock_delay.assert_called_once_with(str(self.event.id), "updated")
 
+    @patch("apps.planning.tasks.sync_event_participant_to_outlook.delay")
+    def test_adding_participants_at_creation_schedules_their_sync(self, mock_delay):
+        # Session du 2026-09-23 : ajouter des participants dès la création
+        # de l'événement, pas seulement après coup — doit déclencher
+        # exactement le même signal par participant qu'un ajout classique.
+        other = User.objects.create_user(username="participant-2")
+        with self.captureOnCommitCallbacks(execute=True):
+            event = create_event(
+                actor=self.organizer,
+                title="Revue de sprint",
+                start="2026-10-02T09:00:00+02:00",
+                end="2026-10-02T10:00:00+02:00",
+                participant_ids=[self.participant, other],
+            )
+        self.assertEqual(mock_delay.call_count, 2)
+        mock_delay.assert_any_call(str(event.id), str(self.participant.id), "created")
+        mock_delay.assert_any_call(str(event.id), str(other.id), "created")
+
+    @patch("apps.planning.tasks.sync_event_participant_to_outlook.delay")
+    def test_organizer_in_participant_ids_at_creation_is_skipped(self, mock_delay):
+        with self.captureOnCommitCallbacks(execute=True):
+            create_event(
+                actor=self.organizer,
+                title="Revue de sprint",
+                start="2026-10-02T09:00:00+02:00",
+                end="2026-10-02T10:00:00+02:00",
+                participant_ids=[self.organizer],
+            )
+        mock_delay.assert_not_called()
+
     @patch("apps.planning.tasks.sync_event_to_all_participants_outlook.delay")
     def test_cancelling_event_fans_out_to_participants(self, mock_delay):
         with self.captureOnCommitCallbacks(execute=True):

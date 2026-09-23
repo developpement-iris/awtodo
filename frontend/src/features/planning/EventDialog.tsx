@@ -12,6 +12,7 @@ import {
   respondToEvent,
   updateEvent,
 } from "../../api/client";
+import { useCurrentUser } from "../../context/CurrentUserContext";
 import type { CalendarEventDetail, User } from "../../types/watodo";
 import { isoToLocalInput, localInputToIso } from "./calendarMath";
 import { RecurrenceEditor } from "./RecurrenceEditor";
@@ -41,6 +42,7 @@ export function EventDialog({
   onClose,
   onSaved,
 }: EventDialogProps) {
+  const { currentUser } = useCurrentUser();
   const [detail, setDetail] = useState<CalendarEventDetail | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -50,6 +52,12 @@ export function EventDialog({
   const [allDay, setAllDay] = useState(false);
   const [recurrence, setRecurrence] = useState<RecurrenceForm>(EMPTY_RECURRENCE);
   const [participantToAdd, setParticipantToAdd] = useState("");
+  // Participants choisis avant la création (mode "create" uniquement) —
+  // l'événement n'existe pas encore, donc pas d'appel API immédiat comme en
+  // édition : la liste part avec la création elle-même (`participant_ids`),
+  // chacun synchronisé sur Outlook comme un ajout après coup (même signal
+  // côté service, voir apps/planning/services.py::create_event).
+  const [pendingParticipantIds, setPendingParticipantIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -92,6 +100,9 @@ export function EventDialog({
       end: localInputToIso(end),
       all_day: allDay,
       recurrence_rule: buildRrule(recurrence),
+      ...(mode === "create" && pendingParticipantIds.length > 0
+        ? { participant_ids: pendingParticipantIds }
+        : {}),
     };
     setBusy(true);
     try {
@@ -156,6 +167,21 @@ export function EventDialog({
   const existingParticipantIds = new Set((detail?.participants ?? []).map((p) => p.user.id));
   const pickable = assignableUsers.filter(
     (u) => u.account_type === "interne" && !existingParticipantIds.has(u.id) && u.id !== detail?.owner.id,
+  );
+
+  function handleAddPendingParticipant() {
+    if (!participantToAdd || pendingParticipantIds.includes(participantToAdd)) return;
+    setPendingParticipantIds((current) => [...current, participantToAdd]);
+    setParticipantToAdd("");
+  }
+
+  function handleRemovePendingParticipant(userId: string) {
+    setPendingParticipantIds((current) => current.filter((id) => id !== userId));
+  }
+
+  const pendingPickable = assignableUsers.filter(
+    (u) =>
+      u.account_type === "interne" && !pendingParticipantIds.includes(u.id) && u.id !== currentUser?.id,
   );
 
   return (
@@ -265,6 +291,51 @@ export function EventDialog({
                     type="button"
                     className="planning-btn"
                     onClick={handleAddParticipant}
+                    disabled={!participantToAdd}
+                  >
+                    Ajouter
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {mode === "create" && (
+              <div className="planning-dialog__participants">
+                <span className="planning-field-label">Participants</span>
+                <ul>
+                  {pendingParticipantIds.map((id) => {
+                    const user = assignableUsers.find((u) => u.id === id);
+                    if (!user) return null;
+                    return (
+                      <li key={id}>
+                        <span>{displayName(user)}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePendingParticipant(id)}
+                          aria-label="Retirer"
+                        >
+                          <X size={13} strokeWidth={1.75} aria-hidden="true" />
+                        </button>
+                      </li>
+                    );
+                  })}
+                  {pendingParticipantIds.length === 0 && (
+                    <li className="planning-dialog__muted">Aucun participant</li>
+                  )}
+                </ul>
+                <div className="planning-field-row planning-field-row--combobox">
+                  <Combobox
+                    options={pendingPickable.map((u) => ({ value: u.id, label: displayName(u) }))}
+                    value={participantToAdd}
+                    onChange={setParticipantToAdd}
+                    placeholder="Ajouter un participant…"
+                    searchPlaceholder="Rechercher un nom…"
+                    emptyLabel="Aucune personne à ajouter."
+                  />
+                  <button
+                    type="button"
+                    className="planning-btn"
+                    onClick={handleAddPendingParticipant}
                     disabled={!participantToAdd}
                   >
                     Ajouter

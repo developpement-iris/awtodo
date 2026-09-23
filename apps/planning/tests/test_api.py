@@ -51,6 +51,38 @@ class PlanningApiTests(APITestCase):
         self.assertEqual(len(cal["events"]), 1)
         self.assertEqual(cal["events"][0]["title"], "Point équipe")
 
+    def test_create_event_with_participant_ids_adds_them_immediately(self):
+        self._as(self.mgr)
+        r = self.client.post(
+            "/api/v1/planning/events/",
+            {
+                "title": "Point équipe",
+                "start": "2026-06-10T09:00:00+02:00",
+                "end": "2026-06-10T10:00:00+02:00",
+                "participant_ids": [str(self.member.id)],
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        participant_ids = {p["user"]["id"] for p in r.data["participants"]}
+        self.assertIn(str(self.member.id), participant_ids)
+
+    def test_create_event_participant_ids_silently_skips_the_organizer(self):
+        self._as(self.mgr)
+        r = self.client.post(
+            "/api/v1/planning/events/",
+            {
+                "title": "Point équipe",
+                "start": "2026-06-10T09:00:00+02:00",
+                "end": "2026-06-10T10:00:00+02:00",
+                "participant_ids": [str(self.mgr.id), str(self.member.id)],
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        participant_ids = {p["user"]["id"] for p in r.data["participants"]}
+        self.assertEqual(participant_ids, {str(self.member.id)})
+
     def test_recurring_event_is_expanded(self):
         self._as(self.member)
         self.client.post(

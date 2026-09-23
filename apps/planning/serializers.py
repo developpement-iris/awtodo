@@ -22,6 +22,18 @@ class EventCreateSerializer(serializers.Serializer):
     end = serializers.DateTimeField()
     all_day = serializers.BooleanField(required=False, default=False)
     recurrence_rule = serializers.CharField(required=False, allow_blank=True, default="")
+    # Participants ajoutés dès la création (session du 2026-09-23) — évite
+    # l'aller-retour "créer, ré-ouvrir, ajouter un participant". Optionnel,
+    # réutilise `add_participant` un par un côté service : mêmes règles
+    # (l'organisateur ne peut pas s'ajouter lui-même), même synchro Outlook
+    # par participant (un participant invité dès la création déclenche
+    # exactement le même signal `event_participant_invited` qu'un ajouté
+    # après coup).
+    participant_ids = serializers.ListField(
+        child=serializers.PrimaryKeyRelatedField(queryset=User.objects.all()),
+        required=False,
+        default=list,
+    )
 
 
 class EventUpdateSerializer(_AtLeastOneFieldSerializer):
