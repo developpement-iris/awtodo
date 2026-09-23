@@ -30,6 +30,7 @@ from .signals import (
     calendar_event_created,
     calendar_event_updated,
     event_participant_invited,
+    event_participant_removed,
     scheduled_block_cancelled,
     scheduled_block_created,
     scheduled_block_updated,
@@ -516,6 +517,9 @@ def remove_participant(*, actor, participant):
     _ensure_can_edit_event(actor, participant.event)
     participant.status = "removed"
     participant.save(update_fields=["status", "updated_at"])
+    event_participant_removed.send(
+        sender=CalendarEvent, event=participant.event, participant=participant, actor=actor
+    )
     return participant
 
 

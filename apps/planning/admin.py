@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BlockOutlookSync, CalendarEvent
+from .models import CalendarEvent, EventParticipantOutlookSync, ScheduledBlock
 
 
 @admin.register(CalendarEvent)
@@ -15,10 +15,17 @@ class CalendarEventAdmin(admin.ModelAdmin):
     search_fields = ("title", "owner__username", "owner__email")
 
 
-@admin.register(BlockOutlookSync)
-class BlockOutlookSyncAdmin(admin.ModelAdmin):
-    # Même vue de dépannage, mais par (créneau, destinataire) — session du
-    # 2026-09-23 : un créneau partagé a une ligne par personne qui doit le
-    # recevoir sur son Outlook.
-    list_display = ("block", "user", "outlook_event_id", "updated_at")
+@admin.register(EventParticipantOutlookSync)
+class EventParticipantOutlookSyncAdmin(admin.ModelAdmin):
+    # Vue de dépannage pour la synchro Outlook d'un événement partagé
+    # (session du 2026-09-23) — une ligne par participant invité qui a
+    # activé son propre opt-in.
+    list_display = ("event", "user", "outlook_event_id", "updated_at")
     search_fields = ("user__username", "user__email")
+
+
+@admin.register(ScheduledBlock)
+class ScheduledBlockAdmin(admin.ModelAdmin):
+    list_display = ("task", "incident", "owner", "start", "status", "outlook_event_id")
+    list_filter = ("status",)
+    search_fields = ("owner__username", "owner__email")

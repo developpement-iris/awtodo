@@ -12,7 +12,15 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.accounts.services import update_planning_preferences
-from apps.planning.services import cancel_block, cancel_event, create_block, create_event, update_event
+from apps.planning.services import (
+    add_participant,
+    cancel_block,
+    cancel_event,
+    create_block,
+    create_event,
+    remove_participant,
+    update_event,
+)
 from apps.planning.signals import (
     calendar_event_cancelled,
     calendar_event_created,
@@ -165,4 +173,47 @@ class ScheduledBlockOutlookSyncSignalTests(TestCase):
             block = create_block(actor=self.user, task=self.task, start=start, end=end)
         with self.captureOnCommitCallbacks(execute=True):
             cancel_block(actor=self.user, block=block)
-        self.assertEqual(block.outlook_syncs.count(), 0)
+        block.refresh_from_db()
+        self.assertEqual(block.outlook_event_id, "")
+
+
+class EventParticipantOutlookSyncSignalTests(TestCase):
+    """Événement partagé avec un participant (session du 2026-09-23) — à
+    distinguer du partage de calendrier `CalendarShare`, qui ne déclenche
+    jamais aucune synchro Outlook."""
+
+    def setUp(self):
+        self.organizer = User.objects.create_user(username="organizer")
+        self.participant = User.objects.create_user(username="participant")
+        self.event = create_event(
+            actor=self.organizer,
+            title="Point équipe",
+            start="2026-10-01T09:00:00+02:00",
+            end="2026-10-01T10:00:00+02:00",
+        )
+
+    @patch("apps.planning.tasks.sync_event_participant_to_outlook.delay")
+    def test_inviting_participant_schedules_their_sync(self, mock_delay):
+        with self.captureOnCommitCallbacks(execute=True):
+            add_participant(actor=self.organizer, event=self.event, user=self.participant)
+        mock_delay.assert_called_once_with(str(self.event.id), str(self.participant.id), "created")
+
+    @patch("apps.planning.tasks.sync_event_participant_to_outlook.delay")
+    def test_removing_participant_schedules_cancellation(self, mock_delay):
+        participant = add_participant(actor=self.organizer, event=self.event, user=self.participant)
+        mock_delay.reset_mock()
+        with self.captureOnCommitCallbacks(execute=True):
+            remove_participant(actor=self.organizer, participant=participant)
+        mock_delay.assert_called_once_with(str(self.event.id), str(self.participant.id), "cancelled")
+
+    @patch("apps.planning.tasks.sync_event_to_all_participants_outlook.delay")
+    def test_updating_event_fans_out_to_participants(self, mock_delay):
+        with self.captureOnCommitCallbacks(execute=True):
+            update_event(actor=self.organizer, event=self.event, title="Renommé")
+        mock_delay.assert_called_once_with(str(self.event.id), "updated")
+
+    @patch("apps.planning.tasks.sync_event_to_all_participants_outlook.delay")
+    def test_cancelling_event_fans_out_to_participants(self, mock_delay):
+        with self.captureOnCommitCallbacks(execute=True):
+            cancel_event(actor=self.organizer, event=self.event)
+        mock_delay.assert_called_once_with(str(self.event.id), "cancelled")
