@@ -25,6 +25,7 @@ interface TaskDrawerProps {
   onClose: () => void;
   onValidate: (task: Task) => void;
   onReject: (task: Task) => void;
+  onCancel: (task: Task) => void;
   onClaim: (task: Task) => void;
   onAssign: (task: Task, userId: string) => void;
   onStart: (task: Task) => void;
@@ -45,6 +46,7 @@ export function TaskDrawer({
   onClose,
   onValidate,
   onReject,
+  onCancel,
   onClaim,
   onAssign,
   onStart,
@@ -120,6 +122,17 @@ export function TaskDrawer({
               whileTap={{ scale: 0.96 }}
             >
               Rejeter
+            </motion.button>
+          )}
+          {task.permissions.can_cancel && (
+            <motion.button
+              type="button"
+              className="task-drawer__action task-drawer__action--danger"
+              onClick={() => onCancel(task)}
+              disabled={pending}
+              whileTap={{ scale: 0.96 }}
+            >
+              Annuler
             </motion.button>
           )}
           {task.permissions.can_claim && (

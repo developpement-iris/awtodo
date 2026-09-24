@@ -494,6 +494,10 @@ export function archiveIncident(incidentId: string): Promise<Incident> {
   return postJson<Incident>(`/incidents/${incidentId}/archive/`, {});
 }
 
+export function cancelIncident(incidentId: string, cancellationReason: string): Promise<Incident> {
+  return postJson<Incident>(`/incidents/${incidentId}/cancel/`, { cancellation_reason: cancellationReason });
+}
+
 export function getIncident(incidentId: string): Promise<IncidentDetail> {
   return getJson<IncidentDetail>(`/incidents/${incidentId}/`);
 }
@@ -533,6 +537,10 @@ export function validateTask(taskId: string, assignee?: string): Promise<Task> {
 
 export function rejectTask(taskId: string, rejectionReason: string): Promise<Task> {
   return postJson<Task>(`/tasks/${taskId}/reject/`, { rejection_reason: rejectionReason });
+}
+
+export function cancelTask(taskId: string, cancellationReason: string): Promise<Task> {
+  return postJson<Task>(`/tasks/${taskId}/cancel/`, { cancellation_reason: cancellationReason });
 }
 
 export function claimTask(taskId: string): Promise<Task> {

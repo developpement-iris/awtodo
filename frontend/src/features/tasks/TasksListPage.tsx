@@ -11,6 +11,7 @@ import {
   updateTaskDescription,
   updateTaskEstimatedHours,
 } from "../../api/client";
+import { CancelDialog } from "../../components/CancelDialog";
 import { ColumnPicker, type ColumnDef } from "../../components/ColumnPicker";
 import { Combobox } from "../../components/Combobox";
 import { InlineEditableText } from "../../components/InlineEditableText";
@@ -284,6 +285,8 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
   const {
     rejectingTask,
     setRejectingTask,
+    cancellingTask,
+    setCancellingTask,
     completingTask,
     setCompletingTask,
     actionError,
@@ -294,6 +297,7 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
     handleAssign,
     handleStart,
     handleReject,
+    handleCancel,
     handleComplete,
   } = useTaskTransitions(updateTaskLocally, removeTaskLocally, showToast);
 
@@ -512,6 +516,7 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
                               onClose={() => setExpandedTaskId(null)}
                               onValidate={handleValidate}
                               onReject={setRejectingTask}
+                              onCancel={setCancellingTask}
                               onClaim={handleClaim}
                               onAssign={handleAssign}
                               onStart={handleStart}
@@ -540,6 +545,9 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
 
       {rejectingTask && (
         <RejectDialog task={rejectingTask} onCancel={() => setRejectingTask(null)} onConfirm={handleReject} />
+      )}
+      {cancellingTask && (
+        <CancelDialog title={cancellingTask.title} onCancel={() => setCancellingTask(null)} onConfirm={handleCancel} />
       )}
       {completingTask && (
         <CompleteDialog task={completingTask} onCancel={() => setCompletingTask(null)} onConfirm={handleComplete} />

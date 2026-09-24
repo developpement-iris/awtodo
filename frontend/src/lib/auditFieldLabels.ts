@@ -13,6 +13,7 @@ const AUDIT_FIELD_LABELS: Record<string, string> = {
   assigned_to_id: "Assigné à",
   time_spent: "Temps passé",
   rejection_reason: "Motif de rejet",
+  cancellation_reason: "Motif d'annulation",
   project_id: "Projet",
   team_id: "Groupe",
   external_reference_id: "Référence externe",

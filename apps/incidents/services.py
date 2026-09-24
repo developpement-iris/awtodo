@@ -97,6 +97,18 @@ def _ensure_can_archive(actor, incident):
         raise IncidentValidationError("Seul un incident résolu peut être archivé.")
 
 
+def _ensure_can_cancel(actor, incident):
+    # Même niveau d'autorité que le reste du cycle de vie (`_require_member`,
+    # pas réservé à un administrateur) — abandonner un incident non résolu
+    # (doublon, invalide, sans suite) est une décision ouverte à tout membre
+    # du groupe concerné, comme démarrer/résoudre. `resolu` est exclu : un
+    # incident déjà résolu se clôture via `archive_incident`, pas via une
+    # annulation.
+    _require_member(actor, incident)
+    if incident.status not in {"signale", "en_cours"}:
+        raise IncidentValidationError("Seul un incident signalé ou en cours peut être annulé.")
+
+
 def _ensure_can_comment(actor, incident):
     _require_member(actor, incident)
 
@@ -156,6 +168,10 @@ def can_archive_incident(user, incident):
     return _check(_ensure_can_archive, user, incident)
 
 
+def can_cancel_incident(user, incident):
+    return _check(_ensure_can_cancel, user, incident)
+
+
 def can_comment_incident(user, incident):
     return _check(_ensure_can_comment, user, incident)
 
@@ -181,6 +197,7 @@ def get_incident_permissions(user, incident):
         "can_start": can_start_incident(user, incident),
         "can_resolve": can_resolve_incident(user, incident),
         "can_archive": can_archive_incident(user, incident),
+        "can_cancel": can_cancel_incident(user, incident),
         "can_comment": can_comment_incident(user, incident),
         "can_assign_project": can_assign_project_incident(user, incident),
         "can_edit_description": can_edit_description_incident(user, incident),
@@ -296,6 +313,18 @@ def resolve_incident(*, actor, incident, resolution_comment, time_spent):
         incident.time_spent = time_spent
         incident.save()
     incident_resolved.send(sender=Incident, incident=incident, actor=actor)
+    return incident
+
+
+def cancel_incident(*, actor, incident, cancellation_reason):
+    _ensure_can_cancel(actor, incident)
+    if not cancellation_reason or not cancellation_reason.strip():
+        raise IncidentValidationError("Un motif d'annulation est obligatoire.")
+
+    with record_changes(incident, actor=actor):
+        incident.status = "annule"
+        incident.cancellation_reason = cancellation_reason.strip()
+        incident.save()
     return incident
 
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { assignTask, claimTask, completeTask, rejectTask, startTask, validateTask } from "../../api/client";
+import { assignTask, cancelTask, claimTask, completeTask, rejectTask, startTask, validateTask } from "../../api/client";
 import type { Task } from "../../types/watodo";
 
 export function useTaskTransitions(
@@ -8,6 +8,7 @@ export function useTaskTransitions(
   onSuccess?: (message: string) => void,
 ) {
   const [rejectingTask, setRejectingTask] = useState<Task | null>(null);
+  const [cancellingTask, setCancellingTask] = useState<Task | null>(null);
   const [completingTask, setCompletingTask] = useState<Task | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
@@ -78,6 +79,24 @@ export function useTaskTransitions(
     }
   }
 
+  async function handleCancel(reason: string) {
+    if (!cancellingTask) return;
+    const task = cancellingTask;
+    setCancellingTask(null);
+    setActionError(null);
+    setPendingTaskId(task.id);
+
+    try {
+      await cancelTask(task.id, reason);
+      onRemoved(task.id);
+      onSuccess?.("Tâche annulée.");
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "L'annulation a échoué.");
+    } finally {
+      setPendingTaskId(null);
+    }
+  }
+
   async function handleComplete(timeSpent: string) {
     if (!completingTask) return;
     const task = completingTask;
@@ -99,6 +118,8 @@ export function useTaskTransitions(
   return {
     rejectingTask,
     setRejectingTask,
+    cancellingTask,
+    setCancellingTask,
     completingTask,
     setCompletingTask,
     actionError,
@@ -109,6 +130,7 @@ export function useTaskTransitions(
     handleAssign,
     handleStart,
     handleReject,
+    handleCancel,
     handleComplete,
   };
 }

@@ -11,6 +11,7 @@ class Incident(UUIDModel, TimeStampedModel, StatusLifecycleModel):
         ("en_cours", "En cours"),
         ("resolu", "Résolu"),
         ("archive", "Archivé"),
+        ("annule", "Annulé"),
     ]
     ACTIVE_STATUSES = frozenset({"signale", "en_cours", "resolu"})
 
@@ -51,6 +52,11 @@ class Incident(UUIDModel, TimeStampedModel, StatusLifecycleModel):
     # affiché à part sur l'incident une fois résolu.
     resolution_comment = models.TextField(blank=True, default="")
     time_spent = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    # Annulation (session du 2026-09-24) : abandonne un incident signalé/en
+    # cours qui s'avère invalide, doublon ou sans suite à donner — distinct de
+    # `archive`, qui suppose une résolution préalable (`_ensure_can_archive`
+    # exige `status == "resolu"`).
+    cancellation_reason = models.TextField(blank=True, default="")
 
     class Meta:
         default_manager_name = "all_objects"

@@ -18,6 +18,7 @@ import {
   updateTaskEstimatedHours,
   type TaskCreatePayload,
 } from "../../api/client";
+import { CancelDialog } from "../../components/CancelDialog";
 import { CreationCard } from "../../components/CreationCard";
 import { LoadingTransition } from "../../components/LoadingTransition";
 import { SkeletonKanban } from "../../components/Skeleton";
@@ -41,11 +42,12 @@ import { TaskDrawer } from "./TaskDrawer";
 import { useTaskTransitions } from "./useTaskTransitions";
 import "./KanbanBoard.css";
 
-function KanbanColumn({ status, tasks, onOpen, onReject, onRename, pendingTaskId, onCreate, dropDisabled }: {
+function KanbanColumn({ status, tasks, onOpen, onReject, onCancel, onRename, pendingTaskId, onCreate, dropDisabled }: {
   status: KanbanStatus;
   tasks: Task[];
   onOpen: (task: Task) => void;
   onReject?: (task: Task) => void;
+  onCancel?: (task: Task) => void;
   onRename: (task: Task, title: string) => void;
   pendingTaskId: string | null;
   onCreate?: () => void;
@@ -69,6 +71,7 @@ function KanbanColumn({ status, tasks, onOpen, onReject, onRename, pendingTaskId
             task={task}
             onOpen={onOpen}
             onReject={task.permissions.can_reject ? onReject : undefined}
+            onCancel={task.permissions.can_cancel ? onCancel : undefined}
             onRename={onRename}
             pending={pendingTaskId === task.id}
           />
@@ -175,6 +178,8 @@ export function KanbanBoard({ project, versionId }: KanbanBoardProps) {
   const {
     rejectingTask,
     setRejectingTask,
+    cancellingTask,
+    setCancellingTask,
     completingTask,
     setCompletingTask,
     actionError,
@@ -185,6 +190,7 @@ export function KanbanBoard({ project, versionId }: KanbanBoardProps) {
     handleAssign,
     handleStart,
     handleReject,
+    handleCancel,
     handleComplete,
   } = useTaskTransitions(updateTaskLocally, removeTaskLocally, showToast);
 
@@ -300,6 +306,7 @@ export function KanbanBoard({ project, versionId }: KanbanBoardProps) {
                   tasks={(tasks ?? []).filter((task) => task.status === status)}
                   onOpen={setOpenTask}
                   onReject={setRejectingTask}
+                  onCancel={setCancellingTask}
                   onRename={handleRename}
                   pendingTaskId={pendingTaskId}
                   onCreate={
@@ -322,6 +329,7 @@ export function KanbanBoard({ project, versionId }: KanbanBoardProps) {
           onClose={() => setOpenTask(null)}
           onValidate={handleValidate}
           onReject={setRejectingTask}
+          onCancel={setCancellingTask}
           onClaim={handleClaim}
           onAssign={handleAssign}
           onStart={handleStart}
@@ -338,6 +346,9 @@ export function KanbanBoard({ project, versionId }: KanbanBoardProps) {
       )}
       {rejectingTask && (
         <RejectDialog task={rejectingTask} onCancel={() => setRejectingTask(null)} onConfirm={handleReject} />
+      )}
+      {cancellingTask && (
+        <CancelDialog title={cancellingTask.title} onCancel={() => setCancellingTask(null)} onConfirm={handleCancel} />
       )}
       {completingTask && (
         <CompleteDialog task={completingTask} onCancel={() => setCompletingTask(null)} onConfirm={handleComplete} />

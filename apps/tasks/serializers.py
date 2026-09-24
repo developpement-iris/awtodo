@@ -41,6 +41,7 @@ class TaskSerializer(serializers.ModelSerializer):
             "status",
             "status_display",
             "rejection_reason",
+            "cancellation_reason",
             "created_at",
             "updated_at",
             "permissions",

@@ -2,6 +2,7 @@ import {
   Archive,
   type LucideIcon,
   AlertTriangle,
+  Ban,
   CheckCircle2,
   CircleDot,
   Clock,
@@ -47,6 +48,7 @@ const TASK_STATUS_TONES: Record<string, Tone> = {
   en_cours: "taskInProgress",
   archivee: "neutral",
   rejetee: "neutral",
+  annulee: "neutral",
 };
 
 const INCIDENT_STATUS_TONES: Record<string, Tone> = {
@@ -54,6 +56,7 @@ const INCIDENT_STATUS_TONES: Record<string, Tone> = {
   en_cours: "incidentInProgress",
   resolu: "positive",
   archive: "neutral",
+  annule: "neutral",
 };
 
 const PROJECT_STATUS_TONES: Record<string, Tone> = {
@@ -94,6 +97,7 @@ const TASK_STATUS_ICONS: Record<string, LucideIcon> = {
   en_cours: RefreshCw,
   archivee: Archive,
   rejetee: XCircle,
+  annulee: Ban,
 };
 
 const INCIDENT_STATUS_ICONS: Record<string, LucideIcon> = {
@@ -101,6 +105,7 @@ const INCIDENT_STATUS_ICONS: Record<string, LucideIcon> = {
   en_cours: RefreshCw,
   resolu: CheckCircle2,
   archive: Archive,
+  annule: Ban,
 };
 
 const PROJECT_STATUS_ICONS: Record<string, LucideIcon> = {

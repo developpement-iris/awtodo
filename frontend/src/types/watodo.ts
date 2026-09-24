@@ -336,6 +336,7 @@ export interface TaskPermissions {
   can_comment: boolean;
   can_validate: boolean;
   can_reject: boolean;
+  can_cancel: boolean;
   can_claim: boolean;
   can_assign: boolean;
   can_start: boolean;
@@ -359,9 +360,10 @@ export interface Task {
   estimated_hours: string | null;
   origin: "manuelle" | "api";
   external_reference_id: string | null;
-  status: "en_attente_validation" | "disponible" | "assignee" | "en_cours" | "rejetee" | "archivee";
+  status: "en_attente_validation" | "disponible" | "assignee" | "en_cours" | "rejetee" | "archivee" | "annulee";
   status_display: string;
   rejection_reason: string | null;
+  cancellation_reason: string | null;
   created_at: string;
   updated_at: string;
   permissions: TaskPermissions;
@@ -392,6 +394,7 @@ export interface IncidentPermissions {
   can_start: boolean;
   can_resolve: boolean;
   can_archive: boolean;
+  can_cancel: boolean;
   can_comment: boolean;
   can_assign_project: boolean;
   can_edit_description: boolean;
@@ -406,7 +409,7 @@ export interface Incident {
   description: string;
   priority: "basse" | "moyenne" | "haute" | "critique";
   priority_display: string;
-  status: "signale" | "en_cours" | "resolu" | "archive";
+  status: "signale" | "en_cours" | "resolu" | "archive" | "annule";
   status_display: string;
   external_reference_id: string | null;
   assigned_to: string | null;
@@ -417,6 +420,7 @@ export interface Incident {
   /** Renseignés à la résolution (pop-up), vides tant que l'incident n'est
    * pas passé par "resolu" — même patron que `Task.time_spent`. */
   resolution_comment: string;
+  cancellation_reason: string;
   time_spent: string | null;
   created_at: string;
   permissions: IncidentPermissions;

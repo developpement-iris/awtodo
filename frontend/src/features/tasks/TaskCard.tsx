@@ -1,5 +1,5 @@
 import { useDraggable } from "@dnd-kit/core";
-import { XCircle } from "lucide-react";
+import { Ban, XCircle } from "lucide-react";
 import { InlineEditableText } from "../../components/InlineEditableText";
 import { StatusBadge } from "../../components/StatusBadge";
 import { TypeBadge } from "../../components/TypeBadge";
@@ -11,11 +11,12 @@ interface TaskCardProps {
   task: Task;
   onOpen: (task: Task) => void;
   onReject?: (task: Task) => void;
+  onCancel?: (task: Task) => void;
   onRename: (task: Task, title: string) => void;
   pending?: boolean;
 }
 
-export function TaskCard({ task, onOpen, onReject, onRename, pending = false }: TaskCardProps) {
+export function TaskCard({ task, onOpen, onReject, onCancel, onRename, pending = false }: TaskCardProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: task.id,
     data: { task },
@@ -74,6 +75,18 @@ export function TaskCard({ task, onOpen, onReject, onRename, pending = false }: 
           disabled={pending}
         >
           <XCircle size={14} strokeWidth={1.75} aria-hidden="true" />
+        </button>
+      )}
+      {onCancel && (
+        <button
+          type="button"
+          className="task-card__reject"
+          onClick={() => onCancel(task)}
+          aria-label="Annuler la tâche"
+          title="Annuler"
+          disabled={pending}
+        >
+          <Ban size={14} strokeWidth={1.75} aria-hidden="true" />
         </button>
       )}
     </div>

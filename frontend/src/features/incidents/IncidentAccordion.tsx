@@ -24,6 +24,7 @@ interface IncidentAccordionProps {
   onStart: (incident: Incident) => void;
   onResolve: (incident: Incident) => void;
   onArchive: (incident: Incident) => void;
+  onCancel: (incident: Incident) => void;
   onAssignProject?: (incident: Incident, projectId: string) => void;
   onSaveDescription: (incident: Incident, description: string) => void;
   pending?: boolean;
@@ -46,6 +47,7 @@ export function IncidentAccordion({
   onStart,
   onResolve,
   onArchive,
+  onCancel,
   onAssignProject,
   onSaveDescription,
   pending = false,
@@ -145,6 +147,17 @@ export function IncidentAccordion({
               whileTap={{ scale: 0.96 }}
             >
               Archiver
+            </motion.button>
+          )}
+          {incident.permissions.can_cancel && (
+            <motion.button
+              type="button"
+              className="incident-accordion__action incident-accordion__action--danger"
+              onClick={() => onCancel(incident)}
+              disabled={pending}
+              whileTap={{ scale: 0.96 }}
+            >
+              Annuler
             </motion.button>
           )}
         </div>

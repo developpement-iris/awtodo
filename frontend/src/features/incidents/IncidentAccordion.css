@@ -105,6 +105,11 @@
   cursor: not-allowed;
 }
 
+.incident-accordion__action--danger {
+  background: var(--priority-critique-bg);
+  color: var(--priority-critique-text);
+}
+
 .incident-accordion__assign {
   display: flex;
   gap: var(--space-2);

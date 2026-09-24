@@ -23,6 +23,7 @@ class Task(UUIDModel, TimeStampedModel, StatusLifecycleModel):
         ("en_cours", "En cours"),
         ("rejetee", "Rejetée"),
         ("archivee", "Archivée"),
+        ("annulee", "Annulée"),
     ]
     ACTIVE_STATUSES = frozenset({"en_attente_validation", "disponible", "assignee", "en_cours"})
 
@@ -50,6 +51,11 @@ class Task(UUIDModel, TimeStampedModel, StatusLifecycleModel):
     external_reference_id = models.CharField(max_length=100, null=True, blank=True, db_index=True)
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default="en_attente_validation")
     rejection_reason = models.TextField(null=True, blank=True)
+    # Distinct de `rejection_reason` (refus avant même de démarrer, réservé à
+    # `en_attente_validation`) : une annulation abandonne une tâche déjà
+    # validée (disponible/assignée/en cours), jamais confondue avec une
+    # clôture réussie (`archivee`, voir `complete_task`).
+    cancellation_reason = models.TextField(null=True, blank=True)
 
     class Meta:
         # Explicite plutôt qu'hérité de StatusLifecycleModel.Meta : avec

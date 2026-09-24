@@ -11,6 +11,7 @@ from apps.incidents.services import (
     add_comment,
     archive_incident,
     assign_incident_to_project,
+    cancel_incident,
     claim_incident,
     create_incident,
     resolve_incident,
@@ -218,6 +219,34 @@ class ArchiveIncidentTests(IncidentServicesTestCase):
 
         with self.assertRaises(IncidentValidationError):
             archive_incident(actor=self.member, incident=incident)
+
+
+class CancelIncidentTests(IncidentServicesTestCase):
+    def test_group_member_cancels_with_reason(self):
+        incident = self.make_incident(status="en_cours")
+
+        cancel_incident(actor=self.other_member, incident=incident, cancellation_reason="Doublon")
+
+        self.assertEqual(incident.status, "annule")
+        self.assertEqual(incident.cancellation_reason, "Doublon")
+
+    def test_cancel_requires_reason(self):
+        incident = self.make_incident(status="signale")
+
+        with self.assertRaises(IncidentValidationError):
+            cancel_incident(actor=self.member, incident=incident, cancellation_reason="")
+
+    def test_outsider_cannot_cancel(self):
+        incident = self.make_incident(status="signale")
+
+        with self.assertRaises(IncidentPermissionError):
+            cancel_incident(actor=self.outsider, incident=incident, cancellation_reason="Non merci")
+
+    def test_cannot_cancel_resolved_incident(self):
+        incident = self.make_incident(status="resolu")
+
+        with self.assertRaises(IncidentValidationError):
+            cancel_incident(actor=self.member, incident=incident, cancellation_reason="Trop tard")
 
 
 class AddCommentTests(IncidentServicesTestCase):

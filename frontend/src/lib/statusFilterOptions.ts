@@ -15,6 +15,7 @@ export const TASK_STATUS_FILTER_OPTIONS: StatusFilterOption[] = [
   { value: "en_cours", label: "En cours", defaultChecked: true },
   { value: "archivee", label: "Archivée", defaultChecked: false },
   { value: "rejetee", label: "Rejetée", defaultChecked: false },
+  { value: "annulee", label: "Annulée", defaultChecked: false },
 ];
 
 export const INCIDENT_STATUS_FILTER_OPTIONS: StatusFilterOption[] = [
@@ -22,6 +23,7 @@ export const INCIDENT_STATUS_FILTER_OPTIONS: StatusFilterOption[] = [
   { value: "en_cours", label: "En cours", defaultChecked: true },
   { value: "resolu", label: "Résolu", defaultChecked: true },
   { value: "archive", label: "Archivé", defaultChecked: false },
+  { value: "annule", label: "Annulé", defaultChecked: false },
 ];
 
 export const PROJECT_STATUS_FILTER_OPTIONS: StatusFilterOption[] = [

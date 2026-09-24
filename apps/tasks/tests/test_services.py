@@ -7,6 +7,7 @@ from apps.tasks.services import (
     InvalidTransitionError,
     TaskPermissionError,
     assign_task,
+    cancel_task,
     claim_task,
     complete_task,
     create_task,
@@ -149,6 +150,40 @@ class RejectTaskTests(TaskServicesTestCase):
 
         with self.assertRaises(InvalidTransitionError):
             reject_task(actor=self.manager, task=task, rejection_reason="Trop tard")
+
+
+class CancelTaskTests(TaskServicesTestCase):
+    def test_manager_cancels_with_reason(self):
+        task = self.make_task("en_cours", assignee=self.member)
+
+        cancel_task(actor=self.manager, task=task, cancellation_reason="Besoin abandonné")
+
+        self.assertEqual(task.status, "annulee")
+        self.assertEqual(task.cancellation_reason, "Besoin abandonné")
+
+    def test_cancel_requires_reason(self):
+        task = self.make_task("disponible")
+
+        with self.assertRaises(InvalidTransitionError):
+            cancel_task(actor=self.manager, task=task, cancellation_reason="")
+
+    def test_member_cannot_cancel(self):
+        task = self.make_task("assignee", assignee=self.member)
+
+        with self.assertRaises(TaskPermissionError):
+            cancel_task(actor=self.member, task=task, cancellation_reason="Non merci")
+
+    def test_cannot_cancel_pending_validation_task(self):
+        task = self.make_task("en_attente_validation")
+
+        with self.assertRaises(InvalidTransitionError):
+            cancel_task(actor=self.manager, task=task, cancellation_reason="Trop tôt")
+
+    def test_cannot_cancel_already_archived_task(self):
+        task = self.make_task("archivee")
+
+        with self.assertRaises(InvalidTransitionError):
+            cancel_task(actor=self.manager, task=task, cancellation_reason="Trop tard")
 
 
 class ClaimTaskTests(TaskServicesTestCase):

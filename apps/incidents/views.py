@@ -26,6 +26,7 @@ from .services import (
     add_comment,
     archive_incident,
     assign_incident_to_project,
+    cancel_incident,
     claim_incident,
     create_incident,
     resolve_incident,
@@ -185,6 +186,23 @@ class IncidentViewSet(ListOnlyFilterMixin, mixins.ListModelMixin, mixins.Retriev
 
         try:
             archive_incident(actor=request.user, incident=incident)
+        except IncidentPermissionError as exc:
+            return Response({"detail": str(exc)}, status=403)
+        except IncidentValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
+
+        return Response(self.get_serializer(incident).data)
+
+    @action(detail=True, methods=["post"])
+    def cancel(self, request, pk=None):
+        incident = self.get_object()
+
+        try:
+            cancel_incident(
+                actor=request.user,
+                incident=incident,
+                cancellation_reason=request.data.get("cancellation_reason"),
+            )
         except IncidentPermissionError as exc:
             return Response({"detail": str(exc)}, status=403)
         except IncidentValidationError as exc:

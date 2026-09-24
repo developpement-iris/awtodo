@@ -10,6 +10,7 @@ export const KANBAN_COLUMNS = [
   "en_cours",
   "archivee",
   "rejetee",
+  "annulee",
 ] as const;
 
 export type KanbanStatus = (typeof KANBAN_COLUMNS)[number];
@@ -21,6 +22,7 @@ export const KANBAN_COLUMN_LABELS: Record<KanbanStatus, string> = {
   en_cours: "En cours",
   archivee: "Archivée",
   rejetee: "Rejetée",
+  annulee: "Annulée",
 };
 
 // Périmètre du drag-and-drop volontairement restreint (voir CLAUDE.md —

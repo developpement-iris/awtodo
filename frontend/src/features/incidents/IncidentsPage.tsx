@@ -5,6 +5,7 @@ import {
   addIncidentComment,
   archiveIncident,
   assignIncidentProject,
+  cancelIncident,
   createIncident,
   getIncident,
   getIncidents,
@@ -15,6 +16,7 @@ import {
   updateIncidentDescription,
   type IncidentCreatePayload,
 } from "../../api/client";
+import { CancelDialog } from "../../components/CancelDialog";
 import { ColumnPicker, type ColumnDef } from "../../components/ColumnPicker";
 import { Combobox } from "../../components/Combobox";
 import { LoadingTransition } from "../../components/LoadingTransition";
@@ -116,6 +118,7 @@ interface IncidentRowProps {
   onStart: () => void;
   onResolve: () => void;
   onArchive: () => void;
+  onCancel: () => void;
   pending: boolean;
   colSpan: number;
   children?: ReactNode;
@@ -130,6 +133,7 @@ function IncidentRow({
   onStart,
   onResolve,
   onArchive,
+  onCancel,
   pending,
   colSpan,
   children,
@@ -213,6 +217,19 @@ function IncidentRow({
               Archiver
             </button>
           )}
+          {incident.permissions.can_cancel && (
+            <button
+              type="button"
+              className="incidents-page__action"
+              onClick={(event) => {
+                event.stopPropagation();
+                onCancel();
+              }}
+              disabled={pending}
+            >
+              Annuler
+            </button>
+          )}
         </td>
       </tr>
       {expanded && (
@@ -250,6 +267,7 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
   const [creating, setCreating] = useState(false);
   const [resolvingIncident, setResolvingIncident] = useState<Incident | null>(null);
   const [resolveSubmitting, setResolveSubmitting] = useState(false);
+  const [cancellingIncident, setCancellingIncident] = useState<Incident | null>(null);
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const { sortKey, direction, toggle: toggleSort } = useSort<IncidentSortKey>();
@@ -419,6 +437,22 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
     }
   }
 
+  async function handleConfirmCancel(reason: string) {
+    if (!cancellingIncident) return;
+    const incident = cancellingIncident;
+    setCancellingIncident(null);
+    setActionError(null);
+    setPendingIncidentId(incident.id);
+    try {
+      updateIncidentLocally(await cancelIncident(incident.id, reason));
+      showToast("Incident annulé.");
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "L'annulation a échoué.");
+    } finally {
+      setPendingIncidentId(null);
+    }
+  }
+
   async function handleAssignProject(incident: Incident, projectId: string) {
     setActionError(null);
     setPendingIncidentId(incident.id);
@@ -494,6 +528,7 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
         onStart={handleStart}
         onResolve={handleResolve}
         onArchive={handleArchive}
+        onCancel={setCancellingIncident}
         onAssignProject={handleAssignProject}
         onSaveDescription={handleSaveDescription}
         pending={pendingIncidentId === incident.id}
@@ -585,6 +620,7 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
                   onStart={() => handleStart(incident)}
                   onResolve={() => handleResolve(incident)}
                   onArchive={() => handleArchive(incident)}
+                  onCancel={() => setCancellingIncident(incident)}
                   pending={pendingIncidentId === incident.id}
                   colSpan={2 + visibleColumns.size}
                 >
@@ -646,6 +682,7 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
                     onStart={() => handleStart(incident)}
                     onResolve={() => handleResolve(incident)}
                     onArchive={() => handleArchive(incident)}
+                    onCancel={() => setCancellingIncident(incident)}
                     pending={pendingIncidentId === incident.id}
                     colSpan={mainColSpan}
                   >
@@ -681,6 +718,14 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
           submitting={resolveSubmitting}
           onCancel={() => setResolvingIncident(null)}
           onConfirm={handleConfirmResolve}
+        />
+      )}
+
+      {cancellingIncident && (
+        <CancelDialog
+          title={cancellingIncident.title}
+          onCancel={() => setCancellingIncident(null)}
+          onConfirm={handleConfirmCancel}
         />
       )}
     </div>

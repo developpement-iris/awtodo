@@ -37,6 +37,7 @@ class IncidentSerializer(serializers.ModelSerializer):
             "author_name",
             "author_email",
             "resolution_comment",
+            "cancellation_reason",
             "time_spent",
             "created_at",
             "permissions",

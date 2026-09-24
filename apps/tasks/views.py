@@ -25,6 +25,7 @@ from .services import (
     TaskPermissionError,
     add_comment,
     assign_task,
+    cancel_task,
     claim_task,
     complete_task,
     create_task,
@@ -237,6 +238,23 @@ class TaskViewSet(ListOnlyFilterMixin, mixins.ListModelMixin, mixins.RetrieveMod
                 actor=request.user,
                 task=task,
                 rejection_reason=request.data.get("rejection_reason"),
+            )
+        except TaskPermissionError as exc:
+            return Response({"detail": str(exc)}, status=403)
+        except InvalidTransitionError as exc:
+            return Response({"detail": str(exc)}, status=400)
+
+        return Response(self.get_serializer(task).data)
+
+    @action(detail=True, methods=["post"])
+    def cancel(self, request, pk=None):
+        task = self.get_object()
+
+        try:
+            cancel_task(
+                actor=request.user,
+                task=task,
+                cancellation_reason=request.data.get("cancellation_reason"),
             )
         except TaskPermissionError as exc:
             return Response({"detail": str(exc)}, status=403)

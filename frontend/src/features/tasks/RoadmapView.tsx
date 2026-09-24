@@ -1,6 +1,7 @@
 import { AlertTriangle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { addTaskComment, getTask, getTasks, updateTaskDeadline, updateTaskEstimatedHours } from "../../api/client";
+import { CancelDialog } from "../../components/CancelDialog";
 import { LoadingTransition } from "../../components/LoadingTransition";
 import { SkeletonRows } from "../../components/Skeleton";
 import { useToast } from "../../context/ToastContext";
@@ -11,7 +12,7 @@ import { TaskDrawer } from "./TaskDrawer";
 import { useTaskTransitions } from "./useTaskTransitions";
 import "./RoadmapView.css";
 
-const INACTIVE_STATUSES = new Set(["archivee", "rejetee"]);
+const INACTIVE_STATUSES = new Set(["archivee", "rejetee", "annulee"]);
 const LATE_ALERT_PRIORITIES = new Set(["haute", "critique"]);
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -158,6 +159,8 @@ export function RoadmapView({ project, versionId }: RoadmapViewProps) {
   const {
     rejectingTask,
     setRejectingTask,
+    cancellingTask,
+    setCancellingTask,
     completingTask,
     setCompletingTask,
     actionError,
@@ -168,6 +171,7 @@ export function RoadmapView({ project, versionId }: RoadmapViewProps) {
     handleAssign,
     handleStart,
     handleReject,
+    handleCancel,
     handleComplete,
   } = useTaskTransitions(updateTaskLocally, removeTaskLocally, showToast);
 
@@ -324,6 +328,7 @@ export function RoadmapView({ project, versionId }: RoadmapViewProps) {
           onClose={() => setOpenTask(null)}
           onValidate={handleValidate}
           onReject={setRejectingTask}
+          onCancel={setCancellingTask}
           onClaim={handleClaim}
           onAssign={handleAssign}
           onStart={handleStart}
@@ -340,6 +345,9 @@ export function RoadmapView({ project, versionId }: RoadmapViewProps) {
       )}
       {rejectingTask && (
         <RejectDialog task={rejectingTask} onCancel={() => setRejectingTask(null)} onConfirm={handleReject} />
+      )}
+      {cancellingTask && (
+        <CancelDialog title={cancellingTask.title} onCancel={() => setCancellingTask(null)} onConfirm={handleCancel} />
       )}
       {completingTask && (
         <CompleteDialog task={completingTask} onCancel={() => setCompletingTask(null)} onConfirm={handleComplete} />

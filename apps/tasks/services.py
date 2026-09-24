@@ -102,6 +102,18 @@ def _ensure_can_reject(actor, task):
         raise InvalidTransitionError("Seule une tâche en attente de validation peut être rejetée.")
 
 
+def _ensure_can_cancel(actor, task):
+    # Même autorité que le rejet (`_ensure_can_reject`, chef de projet) —
+    # l'annulation est la même décision de gestion, prise plus tard dans le
+    # cycle de vie. `en_attente_validation` est délibérément exclue : c'est
+    # le rejet qui couvre ce cas-là, pas d'annulation avant même validation.
+    _require_manager(actor, task.project)
+    if task.status not in {"disponible", "assignee", "en_cours"}:
+        raise InvalidTransitionError(
+            "Seule une tâche disponible, assignée ou en cours peut être annulée."
+        )
+
+
 def _ensure_can_claim(actor, task):
     _require_member(actor, task.project)
     if task.status != "disponible":
@@ -147,6 +159,10 @@ def can_validate_task(user, task):
 
 def can_reject_task(user, task):
     return _check(_ensure_can_reject, user, task)
+
+
+def can_cancel_task(user, task):
+    return _check(_ensure_can_cancel, user, task)
 
 
 def can_claim_task(user, task):
@@ -337,6 +353,7 @@ def get_task_permissions(user, task):
         "can_comment": can_comment_task(user, task),
         "can_validate": can_validate_task(user, task),
         "can_reject": can_reject_task(user, task),
+        "can_cancel": can_cancel_task(user, task),
         "can_claim": can_claim_task(user, task),
         "can_assign": can_assign_task(user, task),
         "can_start": can_start_task(user, task),
@@ -509,6 +526,18 @@ def reject_task(*, actor, task, rejection_reason):
     with record_changes(task, actor=actor):
         task.status = "rejetee"
         task.rejection_reason = rejection_reason
+        task.save()
+    return task
+
+
+def cancel_task(*, actor, task, cancellation_reason):
+    _ensure_can_cancel(actor, task)
+    if not cancellation_reason:
+        raise InvalidTransitionError("Un motif d'annulation est obligatoire.")
+
+    with record_changes(task, actor=actor):
+        task.status = "annulee"
+        task.cancellation_reason = cancellation_reason
         task.save()
     return task
 

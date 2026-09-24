@@ -9,6 +9,7 @@ import {
   updateTaskDescription,
   updateTaskEstimatedHours,
 } from "../../api/client";
+import { CancelDialog } from "../../components/CancelDialog";
 import type { Task, TaskDetail, User } from "../../types/watodo";
 import { CompleteDialog } from "./CompleteDialog";
 import { RejectDialog } from "./RejectDialog";
@@ -96,6 +97,8 @@ export function TaskCardDialog({ taskId, onClose, onChanged }: TaskCardDialogPro
   const {
     rejectingTask,
     setRejectingTask,
+    cancellingTask,
+    setCancellingTask,
     completingTask,
     setCompletingTask,
     actionError,
@@ -105,6 +108,7 @@ export function TaskCardDialog({ taskId, onClose, onChanged }: TaskCardDialogPro
     handleAssign,
     handleStart,
     handleReject,
+    handleCancel,
     handleComplete,
   } = useTaskTransitions(updateTaskLocally, removeTaskLocally);
 
@@ -187,6 +191,7 @@ export function TaskCardDialog({ taskId, onClose, onChanged }: TaskCardDialogPro
                 onClose={onClose}
                 onValidate={handleValidate}
                 onReject={setRejectingTask}
+                onCancel={setCancellingTask}
                 onClaim={handleClaim}
                 onAssign={handleAssign}
                 onStart={handleStart}
@@ -227,6 +232,9 @@ export function TaskCardDialog({ taskId, onClose, onChanged }: TaskCardDialogPro
 
       {rejectingTask && (
         <RejectDialog task={rejectingTask} onCancel={() => setRejectingTask(null)} onConfirm={handleReject} />
+      )}
+      {cancellingTask && (
+        <CancelDialog title={cancellingTask.title} onCancel={() => setCancellingTask(null)} onConfirm={handleCancel} />
       )}
       {completingTask && (
         <CompleteDialog task={completingTask} onCancel={() => setCompletingTask(null)} onConfirm={handleComplete} />
