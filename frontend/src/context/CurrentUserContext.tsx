@@ -1,12 +1,13 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { getMe, getUsers, login as loginRequest, setAccessToken } from "../api/client";
-import type { User } from "../types/watodo";
+import type { Me, User } from "../types/watodo";
+import { applyAccentColor } from "../theme/accentColor";
 
 const ACCESS_TOKEN_STORAGE_KEY = "watodo-access-token";
 
 interface CurrentUserContextValue {
   users: User[];
-  currentUser: User | null;
+  currentUser: Me | null;
   /** Toujours vrai dès que `currentUser` est non nul — le sélecteur de test
    * "mode démo" a été retiré (session du 2026-09-18, remontée directe :
    * exposait la liste de tous les comptes de l'organisation sur l'écran de
@@ -19,15 +20,26 @@ interface CurrentUserContextValue {
   isRestoring: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
+  /** Recharge `currentUser` depuis `/accounts/me/` — utilisé après un
+   * changement de préférence personnelle (ex. couleur d'accent, écran
+   * Réglages) pour que le reste de l'app reflète le changement sans
+   * recharger la page. */
+  refreshCurrentUser: () => Promise<void>;
 }
 
 const CurrentUserContext = createContext<CurrentUserContextValue | null>(null);
 
 export function CurrentUserProvider({ children }: { children: ReactNode }) {
   const [users, setUsers] = useState<User[]>([]);
-  const [authUser, setAuthUser] = useState<User | null>(null);
+  const [authUser, setAuthUser] = useState<Me | null>(null);
   const [usersLoaded, setUsersLoaded] = useState(false);
   const [authRestored, setAuthRestored] = useState(false);
+
+  // Couleur d'accent par utilisateur (session du 2026-09-23) — appliquée
+  // dès que l'identité courante change, retirée à la déconnexion.
+  useEffect(() => {
+    applyAccentColor(authUser?.accent_color ?? "");
+  }, [authUser?.accent_color]);
 
   // Restauration d'une connexion réelle déjà en cours (token stocké) — un
   // token invalide/expiré est purgé silencieusement, l'utilisateur retombe
@@ -74,6 +86,11 @@ export function CurrentUserProvider({ children }: { children: ReactNode }) {
     setAuthUser(response.user);
   }
 
+  async function refreshCurrentUser() {
+    if (!authUser) return;
+    setAuthUser(await getMe());
+  }
+
   return (
     <CurrentUserContext.Provider
       value={{
@@ -83,6 +100,7 @@ export function CurrentUserProvider({ children }: { children: ReactNode }) {
         isRestoring: !usersLoaded || !authRestored,
         login,
         logout,
+        refreshCurrentUser,
       }}
     >
       {children}

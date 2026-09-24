@@ -2,6 +2,7 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    AppearancePreferencesView,
     ChangePasswordView,
     InvitationViewSet,
     LoginView,
@@ -27,6 +28,7 @@ urlpatterns = router.urls + [
     path("me/", MeView.as_view(), name="me"),
     path("me/change-password/", ChangePasswordView.as_view(), name="change-password"),
     path("me/notification-preferences/", NotificationPreferencesView.as_view(), name="notification-preferences"),
+    path("me/appearance-preferences/", AppearancePreferencesView.as_view(), name="appearance-preferences"),
     path("me/planning-preferences/", PlanningPreferencesView.as_view(), name="planning-preferences"),
     # `<uuid:token>` plutôt qu'un ViewSet routé : évite toute ambiguïté avec
     # `password-reset/request/` (un routeur DRF classique sur `token` capture

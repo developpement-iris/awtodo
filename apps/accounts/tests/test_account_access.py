@@ -13,6 +13,7 @@ from apps.accounts.services import (
     change_own_password,
     deactivate_account,
     reactivate_account,
+    update_appearance_preferences,
     update_notification_preferences,
     update_planning_preferences,
 )
@@ -199,6 +200,26 @@ class NotificationPreferenceServiceTests(TestCase):
         self.assertFalse(updated.email_notifications_enabled)
         user.refresh_from_db()
         self.assertFalse(user.email_notifications_enabled)
+
+
+class AppearancePreferenceServiceTests(TestCase):
+    def setUp(self):
+        org = Organisation.objects.create(name="Org A")
+        self.user = User.objects.create_user(username="appearance-user", organisation=org)
+
+    def test_set_accent_color(self):
+        updated = update_appearance_preferences(actor=self.user, accent_color="#7A4F9E")
+
+        self.assertEqual(updated.accent_color, "#7A4F9E")
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.accent_color, "#7A4F9E")
+
+    def test_empty_string_resets_to_default(self):
+        update_appearance_preferences(actor=self.user, accent_color="#7A4F9E")
+
+        updated = update_appearance_preferences(actor=self.user, accent_color="")
+
+        self.assertEqual(updated.accent_color, "")
 
 
 class PlanningPreferenceServiceTests(TestCase):

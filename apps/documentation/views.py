@@ -8,6 +8,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.projects.models import ProjectVersion
 from apps.projects.services import contributor_projects
 
 from . import services
@@ -17,6 +18,8 @@ from .serializers import (
     DocEntryUpdateSerializer,
     DocPageCreateSerializer,
     DocPageUpdateSerializer,
+    DocSpaceAppearanceSerializer,
+    DocSpaceSlugSerializer,
 )
 
 
@@ -124,9 +127,14 @@ class DocSpaceViewSet(viewsets.GenericViewSet):
             return Response(services._entry_dict(entry))
         serializer = DocEntryUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        entry = services.update_entry(
-            actor=request.user, project=project, entry_id=entry_id, **serializer.validated_data
-        )
+        data = dict(serializer.validated_data)
+        if "version_id" in data:
+            version_id = data.pop("version_id")
+            if version_id is None:
+                data["version"] = None
+            else:
+                data["version"] = get_object_or_404(ProjectVersion, id=version_id, project=project)
+        entry = services.update_entry(actor=request.user, project=project, entry_id=entry_id, **data)
         return Response(services._entry_dict(entry))
 
     @action(detail=True, methods=["post"], url_path=r"entries/(?P<entry_id>[^/.]+)/publish")
@@ -162,6 +170,13 @@ class DocSpaceViewSet(viewsets.GenericViewSet):
         services.ignore_pending(actor=request.user, project=project, pending_id=pending_id)
         return Response(status=204)
 
+    # --- Fiche « Contributeurs » ---------------------------------------
+    @action(detail=True, methods=["post"], url_path="contributors/generate")
+    def generate_contributors(self, request, project_id=None):
+        project = self._project(request, project_id)
+        entry = services.generate_contributors_entry(actor=request.user, project=project)
+        return Response(services._entry_dict(entry), status=201)
+
     # --- Lien public --------------------------------------------------
     @action(detail=True, methods=["post", "delete"], url_path="public-link")
     def public_link(self, request, project_id=None):
@@ -176,6 +191,23 @@ class DocSpaceViewSet(viewsets.GenericViewSet):
     def public_link_rotate(self, request, project_id=None):
         project = self._project(request, project_id)
         space = services.rotate_public_link(actor=request.user, project=project)
+        return Response({"space": services._space_dict(space, request)})
+
+    @action(detail=True, methods=["patch"], url_path="public-link/slug")
+    def public_link_slug(self, request, project_id=None):
+        project = self._project(request, project_id)
+        serializer = DocSpaceSlugSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        space = services.set_public_slug(actor=request.user, project=project, slug=serializer.validated_data["slug"])
+        return Response({"space": services._space_dict(space, request)})
+
+    # --- Personnalisation (couleur, en-tête, pied de page) -------------
+    @action(detail=True, methods=["patch"], url_path="appearance")
+    def appearance(self, request, project_id=None):
+        project = self._project(request, project_id)
+        serializer = DocSpaceAppearanceSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        space = services.update_space_appearance(actor=request.user, project=project, **serializer.validated_data)
         return Response({"space": services._space_dict(space, request)})
 
 

@@ -162,3 +162,39 @@
   color: var(--color-text-muted);
   margin-top: 2px;
 }
+
+.settings-drawer__color-label {
+  cursor: pointer;
+}
+
+.settings-drawer__color-input {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  background: none;
+}
+
+.settings-drawer__ghost-btn {
+  margin-left: auto;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.settings-drawer__ghost-btn:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+.settings-drawer__ghost-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

@@ -376,6 +376,13 @@ export function updateNotificationPreferences(emailNotificationsEnabled: boolean
   });
 }
 
+// Couleur d'accent de l'interface, par utilisateur (session du 2026-09-23,
+// écran Réglages) — `accentColor: ""` revient à l'habillage Awtodo par
+// défaut (bouton "Par défaut" du sélecteur).
+export function updateAppearancePreferences(accentColor: string): Promise<Me> {
+  return patchJson<Me>("/accounts/me/appearance-preferences/", { accent_color: accentColor });
+}
+
 // Couleur du calendrier personnel — session du 2026-09-18. Mise à jour
 // partielle : `planningColor: ""` est une valeur valide, distincte
 // d'`undefined`, pour revenir à l'accent thémé par défaut. Les horaires de
@@ -673,7 +680,7 @@ export function createDocEntry(
 export function updateDocEntry(
   projectId: string,
   entryId: string,
-  payload: { title?: string; description?: string; order?: number },
+  payload: { title?: string; description?: string; order?: number; version_id?: string | null },
 ): Promise<DocEntry> {
   return patchJson<DocEntry>(`/docs/${projectId}/entries/${entryId}/`, payload);
 }
@@ -716,6 +723,21 @@ export function revokePublicDocLink(projectId: string): Promise<{ space: DocSpac
 
 export function getPublicDocs(token: string): Promise<PublicDocs> {
   return getPublicJson<PublicDocs>(`/docs/public/${token}/`);
+}
+
+export function generateContributorsEntry(projectId: string): Promise<DocEntry> {
+  return postJson<DocEntry>(`/docs/${projectId}/contributors/generate/`);
+}
+
+export function setDocPublicSlug(projectId: string, slug: string): Promise<{ space: DocSpace }> {
+  return patchJson<{ space: DocSpace }>(`/docs/${projectId}/public-link/slug/`, { slug });
+}
+
+export function updateDocSpaceAppearance(
+  projectId: string,
+  payload: { accent_color?: string; header_content?: string; footer_content?: string },
+): Promise<{ space: DocSpace }> {
+  return patchJson<{ space: DocSpace }>(`/docs/${projectId}/appearance/`, payload);
 }
 
 export function getNotifications(): Promise<Notification[]> {

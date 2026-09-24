@@ -4,7 +4,11 @@ import { MarkdownView } from "../../components/MarkdownView";
 import type { PublicDocs, PublicDocsNode } from "../../types/watodo";
 import "./PublicDocsPage.css";
 
-type Selection = { kind: "page"; id: string } | { kind: "features" } | { kind: "resolutions" };
+type Selection =
+  | { kind: "page"; id: string }
+  | { kind: "features" }
+  | { kind: "resolutions" }
+  | { kind: "contributors" };
 
 function flatten(nodes: PublicDocsNode[], depth = 0): { node: PublicDocsNode; depth: number }[] {
   return nodes.flatMap((node) => [{ node, depth }, ...flatten(node.children, depth + 1)]);
@@ -57,10 +61,15 @@ export function PublicDocsPage({ token }: { token: string }) {
   const currentPage =
     selection?.kind === "page" ? flatPages.find((row) => row.node.id === selection.id)?.node : null;
 
+  // Personnalisation par projet (session du 2026-09-23) — override du jeton
+  // d'accent en cascade CSS pure, vide = habillage Awtodo par défaut.
+  const themeStyle = docs.accent_color ? ({ "--color-accent": docs.accent_color } as React.CSSProperties) : undefined;
+
   return (
-    <div className="public-docs">
+    <div className="public-docs" style={themeStyle}>
       <aside className="public-docs__nav">
         <div className="public-docs__brand">{docs.project_name}</div>
+        {docs.header_content && <p className="public-docs__header-note">{docs.header_content}</p>}
         {flatPages.map(({ node, depth }) => (
           <button
             key={node.id}
@@ -98,6 +107,18 @@ export function PublicDocsPage({ token }: { token: string }) {
             Résolution d'incidents
           </button>
         )}
+        {docs.contributors.length > 0 && (
+          <button
+            type="button"
+            className={`public-docs__nav-item${
+              selection?.kind === "contributors" ? " public-docs__nav-item--active" : ""
+            }`}
+            onClick={() => setSelection({ kind: "contributors" })}
+          >
+            Contributeurs
+          </button>
+        )}
+        {docs.footer_content && <p className="public-docs__footer-note">{docs.footer_content}</p>}
         <p className="public-docs__footer">Documentation propulsée par Awtodo</p>
       </aside>
 
@@ -115,6 +136,9 @@ export function PublicDocsPage({ token }: { token: string }) {
           {selection?.kind === "resolutions" && (
             <EntrySection title="Résolution d'incidents" entries={docs.resolutions} />
           )}
+          {selection?.kind === "contributors" && (
+            <EntrySection title="Contributeurs" entries={docs.contributors} />
+          )}
         </div>
 
         {/* Version imprimable : toutes les sections à la suite (masquée à l'écran). */}
@@ -129,6 +153,7 @@ export function PublicDocsPage({ token }: { token: string }) {
           {docs.resolutions.length > 0 && (
             <EntrySection title="Résolution d'incidents" entries={docs.resolutions} />
           )}
+          {docs.contributors.length > 0 && <EntrySection title="Contributeurs" entries={docs.contributors} />}
         </div>
       </main>
     </div>
@@ -147,7 +172,13 @@ function EntrySection({
       <h1>{title}</h1>
       {entries.map((entry) => (
         <section key={entry.id} className="public-docs__entry">
-          <h2>{entry.title}</h2>
+          <div className="public-docs__entry-head">
+            <h2>{entry.title}</h2>
+            {entry.version_label && (
+              <span className="public-docs__version-badge">{entry.version_label}</span>
+            )}
+          </div>
+          <p className="public-docs__entry-date">{new Date(entry.created_at).toLocaleDateString("fr-FR")}</p>
           <MarkdownView content={entry.description} />
         </section>
       ))}

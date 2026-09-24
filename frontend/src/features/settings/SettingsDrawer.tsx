@@ -1,7 +1,8 @@
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { changePassword, getMe, updateNotificationPreferences } from "../../api/client";
+import { changePassword, getMe, updateAppearancePreferences, updateNotificationPreferences } from "../../api/client";
 import { Checkbox } from "../../components/Checkbox";
+import { useCurrentUser } from "../../context/CurrentUserContext";
 import { useToast } from "../../context/ToastContext";
 import type { Me } from "../../types/watodo";
 import "./SettingsDrawer.css";
@@ -26,6 +27,8 @@ export function SettingsDrawer({ onClose }: SettingsDrawerProps) {
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
 
   const [prefSubmitting, setPrefSubmitting] = useState(false);
+  const [appearanceSubmitting, setAppearanceSubmitting] = useState(false);
+  const { refreshCurrentUser } = useCurrentUser();
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -71,6 +74,19 @@ export function SettingsDrawer({ onClose }: SettingsDrawerProps) {
       showToast(err instanceof Error ? err.message : "La mise à jour a échoué.");
     } finally {
       setPrefSubmitting(false);
+    }
+  }
+
+  async function handleChangeAccentColor(color: string) {
+    if (!me) return;
+    setAppearanceSubmitting(true);
+    try {
+      setMe(await updateAppearancePreferences(color));
+      await refreshCurrentUser();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "La mise à jour a échoué.");
+    } finally {
+      setAppearanceSubmitting(false);
     }
   }
 
@@ -158,6 +174,38 @@ export function SettingsDrawer({ onClose }: SettingsDrawerProps) {
                   {passwordSubmitting ? "Mise à jour…" : "Mettre à jour le mot de passe"}
                 </button>
               </form>
+            </section>
+
+            <section className="settings-drawer__section">
+              <h3 className="settings-drawer__section-title">Apparence</h3>
+              <div className="settings-drawer__toggle-row">
+                <label className="settings-drawer__color-label">
+                  <input
+                    type="color"
+                    value={me.accent_color || "#753030"}
+                    onChange={(event) => void handleChangeAccentColor(event.target.value)}
+                    disabled={appearanceSubmitting}
+                    aria-label="Couleur d'accent de l'interface"
+                    className="settings-drawer__color-input"
+                  />
+                </label>
+                <span>
+                  Couleur de l'interface
+                  <span className="settings-drawer__hint">
+                    Remplace l'accent Awtodo partout dans l'application, pour vous seul.
+                  </span>
+                </span>
+                {me.accent_color && (
+                  <button
+                    type="button"
+                    className="settings-drawer__ghost-btn"
+                    onClick={() => void handleChangeAccentColor("")}
+                    disabled={appearanceSubmitting}
+                  >
+                    Par défaut
+                  </button>
+                )}
+              </div>
             </section>
 
             <section className="settings-drawer__section">

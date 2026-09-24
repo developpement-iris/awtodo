@@ -20,6 +20,7 @@ class Notification(UUIDModel, TimeStampedModel):
         ("task_commented", "Commentaire sur une tâche"),
         ("incident_commented", "Commentaire sur un incident"),
         ("event_invited", "Invitation à un événement"),
+        ("doc_entry_pending", "Élément en attente de documentation"),
     ]
 
     recipient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications")

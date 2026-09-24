@@ -31,8 +31,15 @@ def _require_manager(actor, project):
         raise DocsPermissionError("Seul un chef de projet peut modifier la documentation.")
 
 
-def _generate_token():
-    return secrets.token_urlsafe(32)
+def _generate_token(slug=""):
+    """Le suffixe aléatoire (24 octets d'entropie, comme avant) est ce qui
+    rend le lien non devinable — `slug`, lisible, n'est qu'un préfixe
+    cosmétique optionnel (session du 2026-09-23, retour direct : "on doit
+    pouvoir personnaliser l'URL dans la mesure du possible", en gardant le
+    token secret). Toujours un seul champ/une seule recherche exacte côté
+    lookup public — pas de logique de découpage fragile."""
+    suffix = secrets.token_urlsafe(24)
+    return f"{slug}-{suffix}" if slug else suffix
 
 
 def get_or_create_space(*, actor, project):
@@ -53,7 +60,7 @@ def _space_for_manager(actor, project):
 def enable_public_link(*, actor, project):
     space = _space_for_manager(actor, project)
     if not space.public_token:
-        space.public_token = _generate_token()
+        space.public_token = _generate_token(space.custom_slug)
     space.is_public = True
     space.save(update_fields=["public_token", "is_public", "updated_at"])
     return space
@@ -61,7 +68,7 @@ def enable_public_link(*, actor, project):
 
 def rotate_public_link(*, actor, project):
     space = _space_for_manager(actor, project)
-    space.public_token = _generate_token()
+    space.public_token = _generate_token(space.custom_slug)
     space.is_public = True
     space.save(update_fields=["public_token", "is_public", "updated_at"])
     return space
@@ -72,6 +79,49 @@ def revoke_public_link(*, actor, project):
     space.public_token = None
     space.is_public = False
     space.save(update_fields=["public_token", "is_public", "updated_at"])
+    return space
+
+
+_SLUG_RE = re.compile(r"^[a-z0-9-]{0,80}$")
+
+
+def set_public_slug(*, actor, project, slug):
+    """Change le segment lisible du lien public (session du 2026-09-23) —
+    régénère `public_token` pour l'embarquer (même principe qu'une
+    rotation : l'ancien lien cesse de fonctionner). Slug vide = retire le
+    préfixe lisible, le lien redevient un token opaque pur."""
+    space = _space_for_manager(actor, project)
+    cleaned = slugify((slug or "").strip())[:80]
+    if slug and not cleaned:
+        raise DocsValidationError("Ce segment d'URL n'est pas utilisable, choisissez-en un autre.")
+    space.custom_slug = cleaned
+    update_fields = ["custom_slug", "updated_at"]
+    if space.public_token:  # lien déjà actif : le régénérer avec le nouveau préfixe
+        space.public_token = _generate_token(cleaned)
+        update_fields.append("public_token")
+    space.save(update_fields=update_fields)
+    return space
+
+
+def update_space_appearance(*, actor, project, accent_color=None, header_content=None, footer_content=None):
+    """Personnalisation de la page publique (session du 2026-09-23) —
+    couleur d'accent, en-tête, pied de page. Mise à jour partielle, comme
+    `apps.accounts.services.update_planning_preferences` : chaîne vide
+    valide (retire la personnalisation de ce champ), `None` = champ non
+    fourni."""
+    space = _space_for_manager(actor, project)
+    update_fields = []
+    if accent_color is not None:
+        space.accent_color = accent_color
+        update_fields.append("accent_color")
+    if header_content is not None:
+        space.header_content = header_content
+        update_fields.append("header_content")
+    if footer_content is not None:
+        space.footer_content = footer_content
+        update_fields.append("footer_content")
+    if update_fields:
+        space.save(update_fields=[*update_fields, "updated_at"])
     return space
 
 
@@ -183,7 +233,7 @@ def _get_entry(space, entry_id):
 
 
 def create_entry(*, actor, project, kind, title, description="", source="manuelle",
-                 source_task=None, source_incident=None):
+                 source_task=None, source_incident=None, version=None):
     _require_manager(actor, project)
     space = get_or_create_space(actor=actor, project=project)
     if kind not in dict(DocEntry.KIND_CHOICES):
@@ -196,12 +246,12 @@ def create_entry(*, actor, project, kind, title, description="", source="manuell
     )
     return DocEntry.objects.create(
         space=space, kind=kind, title=title.strip()[:200], description=description or "",
-        source=source, source_task=source_task, source_incident=source_incident,
+        source=source, source_task=source_task, source_incident=source_incident, version=version,
         order=(max_order or 0) + 1,
     )
 
 
-def update_entry(*, actor, project, entry_id, title=None, description=None, order=None):
+def update_entry(*, actor, project, entry_id, title=None, description=None, order=None, version=_UNSET):
     _require_manager(actor, project)
     space = get_or_create_space(actor=actor, project=project)
     e = _get_entry(space, entry_id)
@@ -211,6 +261,10 @@ def update_entry(*, actor, project, entry_id, title=None, description=None, orde
         e.title = title.strip()[:200]
     if description is not None:
         e.description = description
+    if version is not _UNSET:
+        # `version=None` explicite = détache la fiche de toute version
+        # (retour "sans version"), distinct de "champ non fourni".
+        e.version = version
     if order is not None:
         e.order = order
     e.save()
@@ -286,6 +340,48 @@ def seed_features_from_spec(*, actor, project):
     return created
 
 
+_CONTRIBUTORS_TITLE = "Contributeurs au projet"
+_ROLE_LABELS = {"chef_de_projet": "Chef de projet", "membre": "Membre", "lecteur": "Lecteur"}
+
+
+def generate_contributors_entry(*, actor, project):
+    """(Re)génère la fiche "Contributeurs au projet" (session du 2026-09-23)
+    — une seule fiche par espace, `get_or_create` sur `(space, kind)`, son
+    contenu est entièrement réécrit à chaque appel (liste des membres
+    actifs, pas un ajout incrémental) : c'est un instantané, pas un journal.
+    Contrairement aux autres fiches, jamais alimentée via la file "à
+    documenter"."""
+    from apps.projects.models import ProjectMembership
+
+    _require_manager(actor, project)
+    space = get_or_create_space(actor=actor, project=project)
+    memberships = (
+        ProjectMembership.objects.filter(project=project).select_related("user").order_by("role", "user__first_name")
+    )
+    if not memberships:
+        raise DocsValidationError("Ce projet n'a aucun membre actif à lister.")
+    lines = []
+    for role in ("chef_de_projet", "membre", "lecteur"):
+        role_members = [m for m in memberships if m.role == role]
+        if not role_members:
+            continue
+        lines.append(f"**{_ROLE_LABELS[role]}**")
+        for m in role_members:
+            name = f"{m.user.first_name} {m.user.last_name}".strip() or m.user.username
+            lines.append(f"- {name}")
+        lines.append("")
+    description = "\n".join(lines).strip()
+
+    entry, created = DocEntry.all_objects.get_or_create(
+        space=space, kind="contributeurs",
+        defaults={"title": _CONTRIBUTORS_TITLE, "description": description, "source": "manuelle"},
+    )
+    if not created:
+        entry.description = description
+        entry.save(update_fields=["description", "updated_at"])
+    return entry
+
+
 # --- File « À documenter » (PendingDocEntry) ------------------------------
 
 
@@ -315,6 +411,10 @@ def create_entry_from_pending(*, actor, project, pending_id):
         title=src.title, description=getattr(src, "description", "") or "",
         source="tache" if pending.task_id else "incident",
         source_task=pending.task, source_incident=pending.incident,
+        # Une tâche porte sa version ; un incident n'en a pas (pas de notion
+        # de version sur ce modèle) — retenue automatiquement pour alimenter
+        # le regroupement par version des fiches (session du 2026-09-23).
+        version=pending.task.version if pending.task_id else None,
     )
     pending.status = "traitee"
     pending.entry = entry
@@ -346,8 +446,16 @@ def _public_pages(space):
 
 def _public_entries(space, kind):
     return [
-        {"id": str(e.id), "title": e.title, "description": e.description}
-        for e in DocEntry.all_objects.filter(space=space, kind=kind, status="publie").order_by("order", "created_at")
+        {
+            "id": str(e.id),
+            "title": e.title,
+            "description": e.description,
+            "created_at": e.created_at.isoformat(),
+            "version_label": e.version.label if e.version_id else None,
+        }
+        for e in DocEntry.all_objects.filter(space=space, kind=kind, status="publie")
+        .select_related("version")
+        .order_by("order", "created_at")
     ]
 
 
@@ -362,6 +470,12 @@ def get_public_docs(token):
         "pages": _public_pages(space),
         "features": _public_entries(space, "fonctionnalite"),
         "resolutions": _public_entries(space, "resolution"),
+        "contributors": _public_entries(space, "contributeurs"),
+        # Personnalisation (session du 2026-09-23) — vide = habillage Awtodo
+        # par défaut, voir `docs/charte-graphique.md`.
+        "accent_color": space.accent_color,
+        "header_content": space.header_content,
+        "footer_content": space.footer_content,
     }
 
 
@@ -380,6 +494,8 @@ def _page_dict(page, children=None):
         "order": page.order,
         "status": page.status,
         "status_display": page.get_status_display(),
+        "created_at": page.created_at.isoformat(),
+        "updated_at": page.updated_at.isoformat(),
         "children": children or [],
     }
 
@@ -408,8 +524,12 @@ def _entry_dict(entry):
         "source": entry.source,
         "source_task_id": str(entry.source_task_id) if entry.source_task_id else None,
         "source_incident_id": str(entry.source_incident_id) if entry.source_incident_id else None,
+        "version_id": str(entry.version_id) if entry.version_id else None,
+        "version_label": entry.version.label if entry.version_id else None,
         "status": entry.status,
         "status_display": entry.get_status_display(),
+        "created_at": entry.created_at.isoformat(),
+        "updated_at": entry.updated_at.isoformat(),
     }
 
 
@@ -433,13 +553,20 @@ def _space_dict(space, request=None):
         "is_public": space.is_public,
         "public_token": space.public_token,
         "public_url": public_url,
+        "custom_slug": space.custom_slug,
+        "accent_color": space.accent_color,
+        "header_content": space.header_content,
+        "footer_content": space.footer_content,
     }
 
 
 def get_documentation_bundle(*, actor, project, request=None):
     space = get_or_create_space(actor=actor, project=project)
     entries = list(
-        DocEntry.all_objects.filter(space=space).exclude(status="archive").order_by("order", "created_at")
+        DocEntry.all_objects.filter(space=space)
+        .exclude(status="archive")
+        .select_related("version")
+        .order_by("order", "created_at")
     )
     pendings = list(
         PendingDocEntry.objects.filter(space=space, status="en_attente").select_related("task", "incident")
@@ -449,6 +576,7 @@ def get_documentation_bundle(*, actor, project, request=None):
         "pages": _pages_tree(space),
         "features": [_entry_dict(e) for e in entries if e.kind == "fonctionnalite"],
         "resolutions": [_entry_dict(e) for e in entries if e.kind == "resolution"],
+        "contributors": [_entry_dict(e) for e in entries if e.kind == "contributeurs"],
         "pending_features": [_pending_dict(p) for p in pendings if p.kind == "fonctionnalite"],
         "pending_resolutions": [_pending_dict(p) for p in pendings if p.kind == "resolution"],
     }

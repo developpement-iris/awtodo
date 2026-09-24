@@ -173,6 +173,15 @@ class User(UUIDModel, AbstractUser):
     # l'inverse.
     planning_color = models.CharField(max_length=7, blank=True, default="")
 
+    # Personnalisation de l'accent de l'interface, par utilisateur (session
+    # du 2026-09-23, écran Réglages) — distinct de `planning_color` (limité
+    # à une palette de 6 teintes pour un usage précis, le calendrier) : ici
+    # une couleur libre choisie via un vrai sélecteur, qui remplace
+    # `--color-accent` (et son pendant `--color-accent-contrast`, recalculé
+    # côté frontend pour rester lisible) sur toute l'interface. Vide =
+    # habillage Awtodo par défaut ("bouton par défaut" du sélecteur).
+    accent_color = models.CharField(max_length=7, blank=True, default="")
+
     # Synchronisation Outlook, sens unique Awtodo → Outlook (scaffolding,
     # session du 2026-09-22 — voir `apps.planning.signals` pour le détail du
     # câblage prévu au déploiement). Simple opt-in scalaire comme

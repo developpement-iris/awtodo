@@ -10,6 +10,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import Invitation, Organisation, PasswordResetRequest, Team, User
 from .serializers import (
+    AppearancePreferencesSerializer,
     ChangePasswordSerializer,
     InvitationAcceptSerializer,
     InvitationCreateSerializer,
@@ -50,6 +51,7 @@ from .services import (
     request_password_reset,
     resend_invitation,
     set_organisation_role,
+    update_appearance_preferences,
     update_notification_preferences,
     update_planning_preferences,
 )
@@ -124,6 +126,20 @@ class NotificationPreferencesView(APIView):
         serializer.is_valid(raise_exception=True)
 
         updated = update_notification_preferences(actor=request.user, **serializer.validated_data)
+        return Response(MeSerializer(updated).data)
+
+
+class AppearancePreferencesView(APIView):
+    """Écran Réglages (session du 2026-09-23) — couleur d'accent de
+    l'interface, par utilisateur. Voir `update_appearance_preferences`."""
+
+    def patch(self, request):
+        if not request.user or not request.user.is_authenticated:
+            return Response({"detail": "Utilisateur non identifié."}, status=401)
+        serializer = AppearancePreferencesSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        updated = update_appearance_preferences(actor=request.user, **serializer.validated_data)
         return Response(MeSerializer(updated).data)
 
 

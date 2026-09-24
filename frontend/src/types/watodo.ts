@@ -25,17 +25,25 @@ export interface User {
 // pour un autre utilisateur).
 export interface Me extends User {
   email_notifications_enabled: boolean;
-  /** Synchronisation Outlook, sens unique Awtodo → Outlook (scaffolding,
-   * session du 2026-09-22) — n'a encore aucun effet réel côté backend. */
+  /** Synchronisation Outlook, sens unique Awtodo → Outlook (session du
+   * 2026-09-22/23) — câblée réellement (événements, participants,
+   * créneaux, occurrences uniques). */
   outlook_calendar_sync_enabled: boolean;
+  /** Couleur d'accent de l'interface, par utilisateur (session du
+   * 2026-09-23, écran Réglages) — vide = habillage Awtodo par défaut. */
+  accent_color: string;
 }
 
 // Connexion par mot de passe — voir docs/organisation-et-comptes.md >
 // "Comptes et invitations" > authentification, session du 2026-08-06.
+// `user` est en réalité un `Me` (LoginView renvoie `MeSerializer(user).data`,
+// même chose que `GET /accounts/me/`) — typé comme tel depuis la session du
+// 2026-09-23 pour que `CurrentUserContext.currentUser` porte `accent_color`
+// sans caster.
 export interface LoginResponse {
   access: string;
   refresh: string;
-  user: User;
+  user: Me;
 }
 
 export interface Invitation {
@@ -179,20 +187,30 @@ export interface DocPage {
   order: number;
   status: DocStatus;
   status_display: string;
+  created_at: string;
+  updated_at: string;
   children: DocPage[];
 }
 
+// "contributeurs" : fiche unique auto-générée (session du 2026-09-23), pas
+// une file "à documenter" comme les deux autres — voir DocumentationTab.
+export type DocEntryFullKind = DocEntryKind | "contributeurs";
+
 export interface DocEntry {
   id: string;
-  kind: DocEntryKind;
+  kind: DocEntryFullKind;
   title: string;
   description: string;
   order: number;
   source: string;
   source_task_id: string | null;
   source_incident_id: string | null;
+  version_id: string | null;
+  version_label: string | null;
   status: DocStatus;
   status_display: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface PendingDocEntry {
@@ -208,6 +226,10 @@ export interface DocSpace {
   is_public: boolean;
   public_token: string | null;
   public_url: string | null;
+  custom_slug: string;
+  accent_color: string;
+  header_content: string;
+  footer_content: string;
 }
 
 export interface DocumentationBundle {
@@ -215,6 +237,7 @@ export interface DocumentationBundle {
   pages: DocPage[];
   features: DocEntry[];
   resolutions: DocEntry[];
+  contributors: DocEntry[];
   pending_features: PendingDocEntry[];
   pending_resolutions: PendingDocEntry[];
 }
@@ -231,6 +254,8 @@ export interface PublicDocsEntry {
   id: string;
   title: string;
   description: string;
+  created_at: string;
+  version_label: string | null;
 }
 
 export interface PublicDocs {
@@ -238,6 +263,10 @@ export interface PublicDocs {
   pages: PublicDocsNode[];
   features: PublicDocsEntry[];
   resolutions: PublicDocsEntry[];
+  contributors: PublicDocsEntry[];
+  accent_color: string;
+  header_content: string;
+  footer_content: string;
 }
 
 export type ProjectStatus = "actif" | "cloture";

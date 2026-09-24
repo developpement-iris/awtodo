@@ -69,6 +69,7 @@ class MeSerializer(UserSerializer):
         fields = UserSerializer.Meta.fields + [
             "email_notifications_enabled",
             "outlook_calendar_sync_enabled",
+            "accent_color",
         ]
 
 
@@ -79,6 +80,13 @@ class ChangePasswordSerializer(serializers.Serializer):
 
 class NotificationPreferencesSerializer(serializers.Serializer):
     email_notifications_enabled = serializers.BooleanField()
+
+
+class AppearancePreferencesSerializer(serializers.Serializer):
+    # `allow_blank=True` : chaîne vide = réinitialisation à l'habillage
+    # Awtodo par défaut, valeur valide (bouton "Par défaut" de l'écran
+    # Réglages), pas une absence de champ.
+    accent_color = serializers.CharField(max_length=7, allow_blank=True)
 
 
 class PlanningPreferencesSerializer(serializers.Serializer):

@@ -1,5 +1,5 @@
-import { Check, Copy, FileDown, Plus, RefreshCw, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Check, Copy, FileDown, ImagePlus, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   archiveDocEntry,
   archiveDocPage,
@@ -7,18 +7,23 @@ import {
   createDocPage,
   createEntryFromPending,
   enablePublicDocLink,
+  generateContributorsEntry,
   getDocumentation,
+  getProjectVersions,
   ignorePendingDocEntry,
   publishDocEntry,
   publishDocPage,
   revokePublicDocLink,
   rotatePublicDocLink,
   seedFeaturesFromSpec,
+  setDocPublicSlug,
   unpublishDocEntry,
   unpublishDocPage,
   updateDocEntry,
   updateDocPage,
+  updateDocSpaceAppearance,
 } from "../../api/client";
+import { Combobox } from "../../components/Combobox";
 import { MarkdownView } from "../../components/MarkdownView";
 import { SkeletonRows } from "../../components/Skeleton";
 import { useToast } from "../../context/ToastContext";
@@ -28,11 +33,42 @@ import type {
   DocPage,
   DocumentationBundle,
   Project,
+  ProjectVersion,
 } from "../../types/watodo";
 import { exportDocsToDocx } from "../docs/exportDocx";
 import "./DocumentationTab.css";
 
-type View = "pages" | "fonctionnalite" | "resolution" | "queue" | "link";
+type View = "pages" | "fonctionnalite" | "resolution" | "contributors" | "queue" | "link" | "appearance";
+
+// Filtre texte insensible à la casse/accents — même principe simple que les
+// autres recherches côté front de l'app (pas d'endpoint dédié, le volume de
+// contenu par projet reste modeste). Retour direct : "pas de recherche dans
+// les pages/fiches" (session du 2026-09-23).
+function normalize(value: string): string {
+  return value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
+
+function matches(query: string, ...fields: string[]): boolean {
+  if (!query.trim()) return true;
+  const needle = normalize(query);
+  return fields.some((f) => normalize(f).includes(needle));
+}
+
+// Insère une image encodée en base64 directement dans le Markdown (session
+// du 2026-09-23) — aucun stockage fichier (S3/boto3) n'est disponible tant
+// que l'infra AWS n'est pas tranchée (voir CLAUDE.md > Stack technique),
+// solution retenue explicitement avec l'utilisateur en attendant. Limite de
+// taille pour ne pas faire exploser la page.
+const MAX_IMAGE_BYTES = 1_500_000;
+
+function readImageAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
 
 interface DocumentationTabProps {
   project: Project;
@@ -49,6 +85,7 @@ function flattenPages(pages: DocPage[], depth = 0): { page: DocPage; depth: numb
 export function DocumentationTab({ project }: DocumentationTabProps) {
   const { showToast } = useToast();
   const [bundle, setBundle] = useState<DocumentationBundle | null>(null);
+  const [versions, setVersions] = useState<ProjectVersion[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>("pages");
   const [busy, setBusy] = useState(false);
@@ -65,6 +102,12 @@ export function DocumentationTab({ project }: DocumentationTabProps) {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  useEffect(() => {
+    getProjectVersions(project.id)
+      .then(setVersions)
+      .catch(() => undefined);
+  }, [project.id]);
 
   async function run(action: () => Promise<unknown>, successMessage?: string) {
     setBusy(true);
@@ -86,8 +129,10 @@ export function DocumentationTab({ project }: DocumentationTabProps) {
     { id: "pages", label: "Pages" },
     { id: "fonctionnalite", label: "Fonctionnalités" },
     { id: "resolution", label: "Résolution d'incidents" },
+    { id: "contributors", label: "Contributeurs" },
     { id: "queue", label: "À documenter", badge: pendingCount || undefined },
     { id: "link", label: "Lien public" },
+    { id: "appearance", label: "Personnalisation" },
   ];
 
   async function handleExport() {
@@ -141,9 +186,13 @@ export function DocumentationTab({ project }: DocumentationTabProps) {
               projectId={project.id}
               kind={view}
               entries={view === "fonctionnalite" ? bundle.features : bundle.resolutions}
+              versions={versions}
               busy={busy}
               run={run}
             />
+          )}
+          {view === "contributors" && (
+            <ContributorsView projectId={project.id} entry={bundle.contributors[0] ?? null} busy={busy} run={run} />
           )}
           {view === "queue" && (
             <QueueView
@@ -156,6 +205,9 @@ export function DocumentationTab({ project }: DocumentationTabProps) {
           )}
           {view === "link" && (
             <LinkView projectId={project.id} bundle={bundle} busy={busy} run={run} />
+          )}
+          {view === "appearance" && (
+            <AppearanceView projectId={project.id} bundle={bundle} busy={busy} run={run} />
           )}
         </div>
       </div>
@@ -179,13 +231,46 @@ function PagesView({ projectId, bundle, busy, run }: PanelProps) {
   const selected = selectedRow?.page ?? null;
   const selectedIsRoot = selectedRow?.depth === 0;
 
+  const [query, setQuery] = useState("");
+  const visible = useMemo(
+    () => flat.filter(({ page }) => matches(query, page.title, page.content)),
+    [flat, query],
+  );
+
   const [draft, setDraft] = useState("");
   const [editing, setEditing] = useState(false);
+  const [imageBusy, setImageBusy] = useState(false);
+  const { showToast: showImageToast } = useToast();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     setEditing(false);
     setDraft(selected?.content ?? "");
   }, [selected?.id, selected?.content]);
+
+  async function insertImage(file: File | undefined) {
+    if (!file) return;
+    if (file.size > MAX_IMAGE_BYTES) {
+      showImageToast("Image trop lourde (max ~1,5 Mo) — la doc n'a pas encore de stockage de fichiers dédié.");
+      return;
+    }
+    setImageBusy(true);
+    try {
+      const dataUrl = await readImageAsDataUrl(file);
+      const markdown = `\n![${file.name}](${dataUrl})\n`;
+      const el = textareaRef.current;
+      if (el) {
+        const pos = el.selectionStart ?? draft.length;
+        setDraft(draft.slice(0, pos) + markdown + draft.slice(pos));
+      } else {
+        setDraft(draft + markdown);
+      }
+    } catch {
+      showImageToast("Impossible de lire cette image.");
+    } finally {
+      setImageBusy(false);
+    }
+  }
 
   async function newPage(parentId: string | null) {
     const title = window.prompt(parentId ? "Titre de la sous-page" : "Titre de la page");
@@ -208,8 +293,18 @@ function PagesView({ projectId, bundle, busy, run }: PanelProps) {
             <Plus size={14} strokeWidth={2} aria-hidden="true" />
           </button>
         </div>
+        <div className="doc-tab__search">
+          <Search size={13} strokeWidth={1.75} aria-hidden="true" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Rechercher une page…"
+            aria-label="Rechercher une page"
+          />
+        </div>
         {flat.length === 0 && <p className="doc-tab__empty">Aucune page. Créez-en une.</p>}
-        {flat.map(({ page, depth }) => (
+        {flat.length > 0 && visible.length === 0 && <p className="doc-tab__empty">Aucun résultat.</p>}
+        {visible.map(({ page, depth }) => (
           <button
             key={page.id}
             type="button"
@@ -229,7 +324,12 @@ function PagesView({ projectId, bundle, busy, run }: PanelProps) {
         ) : (
           <>
             <div className="doc-tab__editor-head">
-              <h3>{selected.title}</h3>
+              <div>
+                <h3>{selected.title}</h3>
+                <p className="doc-tab__timestamp">
+                  Modifiée le {new Date(selected.updated_at).toLocaleString("fr-FR")}
+                </p>
+              </div>
               <div className="doc-tab__editor-actions">
                 {selectedIsRoot && (
                   <button
@@ -279,7 +379,22 @@ function PagesView({ projectId, bundle, busy, run }: PanelProps) {
 
             {editing ? (
               <div className="doc-tab__form">
+                <label className="doc-tab__ghost-btn doc-tab__image-btn">
+                  <ImagePlus size={13} strokeWidth={1.75} aria-hidden="true" />
+                  {imageBusy ? "Chargement…" : "Insérer une image"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    disabled={busy || imageBusy}
+                    onChange={(e) => {
+                      void insertImage(e.target.files?.[0]);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
                 <textarea
+                  ref={textareaRef}
                   className="doc-tab__textarea"
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
@@ -335,14 +450,21 @@ interface EntriesViewProps {
   projectId: string;
   kind: DocEntryKind;
   entries: DocEntry[];
+  versions: ProjectVersion[];
   busy: boolean;
   run: (action: () => Promise<unknown>, successMessage?: string) => Promise<void>;
 }
 
-function EntriesView({ projectId, kind, entries, busy, run }: EntriesViewProps) {
+function EntriesView({ projectId, kind, entries, versions, busy, run }: EntriesViewProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [query, setQuery] = useState("");
+
+  const visible = useMemo(
+    () => entries.filter((e) => matches(query, e.title, e.description)),
+    [entries, query],
+  );
 
   function startEdit(entry: DocEntry) {
     setEditingId(entry.id);
@@ -357,6 +479,11 @@ function EntriesView({ projectId, kind, entries, busy, run }: EntriesViewProps) 
     if (!value) return;
     await run(() => createDocEntry(projectId, { kind, title: value }), "Fiche créée.");
   }
+
+  const versionOptions = [
+    { value: "", label: "Aucune version" },
+    ...versions.map((v) => ({ value: v.id, label: v.label })),
+  ];
 
   return (
     <div className="doc-tab__entries">
@@ -385,9 +512,20 @@ function EntriesView({ projectId, kind, entries, busy, run }: EntriesViewProps) 
         </div>
       </div>
 
-      {entries.length === 0 && <p className="doc-tab__empty">Aucune fiche pour l'instant.</p>}
+      <div className="doc-tab__search">
+        <Search size={13} strokeWidth={1.75} aria-hidden="true" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Rechercher une fiche…"
+          aria-label="Rechercher une fiche"
+        />
+      </div>
 
-      {entries.map((entry) => (
+      {entries.length === 0 && <p className="doc-tab__empty">Aucune fiche pour l'instant.</p>}
+      {entries.length > 0 && visible.length === 0 && <p className="doc-tab__empty">Aucun résultat.</p>}
+
+      {visible.map((entry) => (
         <article key={entry.id} className="doc-tab__card">
           {editingId === entry.id ? (
             <div className="doc-tab__form">
@@ -404,6 +542,20 @@ function EntriesView({ projectId, kind, entries, busy, run }: EntriesViewProps) 
                 rows={6}
                 disabled={busy}
               />
+              <label className="doc-tab__field">
+                <span>Version</span>
+                <Combobox
+                  options={versionOptions}
+                  value={entry.version_id ?? ""}
+                  onChange={(value) =>
+                    void run(
+                      () => updateDocEntry(projectId, entry.id, { version_id: value || null }),
+                      "Version mise à jour.",
+                    )
+                  }
+                  clearable={false}
+                />
+              </label>
               <div className="doc-tab__form-actions">
                 <button type="button" className="doc-tab__ghost-btn" onClick={() => setEditingId(null)} disabled={busy}>
                   Annuler
@@ -429,6 +581,10 @@ function EntriesView({ projectId, kind, entries, busy, run }: EntriesViewProps) 
                 <h4>{entry.title}</h4>
                 <StatusDot status={entry.status} />
               </div>
+              <p className="doc-tab__timestamp">
+                {entry.version_label && <span className="doc-tab__version-badge">{entry.version_label}</span>}
+                Créée le {new Date(entry.created_at).toLocaleDateString("fr-FR")}
+              </p>
               <MarkdownView content={entry.description} />
               <div className="doc-tab__editor-actions">
                 <button type="button" className="doc-tab__ghost-btn" onClick={() => startEdit(entry)} disabled={busy}>
@@ -537,7 +693,12 @@ function QueueView({ projectId, bundle, busy, run, onGoToEntries }: QueueViewPro
 function LinkView({ projectId, bundle, busy, run }: PanelProps) {
   const { showToast } = useToast();
   const [copied, setCopied] = useState(false);
+  const [slug, setSlug] = useState(bundle.space.custom_slug);
   const { public_url: url } = bundle.space;
+
+  useEffect(() => {
+    setSlug(bundle.space.custom_slug);
+  }, [bundle.space.custom_slug]);
 
   async function copy() {
     if (!url) return;
@@ -565,6 +726,29 @@ function LinkView({ projectId, bundle, busy, run }: PanelProps) {
               {copied ? <Check size={14} strokeWidth={2} /> : <Copy size={14} strokeWidth={1.75} />}
             </button>
           </div>
+          <label className="doc-tab__field">
+            <span>
+              Segment lisible de l'URL — le lien reste protégé par un suffixe aléatoire, changer ce
+              segment régénère le lien (l'ancien cesse de fonctionner)
+            </span>
+            <div className="doc-tab__link-row">
+              <input
+                className="doc-tab__input"
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+                placeholder="mon-projet"
+                disabled={busy}
+              />
+              <button
+                type="button"
+                className="doc-tab__ghost-btn"
+                onClick={() => void run(() => setDocPublicSlug(projectId, slug), "Segment mis à jour.")}
+                disabled={busy || slug === bundle.space.custom_slug}
+              >
+                Enregistrer
+              </button>
+            </div>
+          </label>
           <div className="doc-tab__editor-actions">
             <button
               type="button"
@@ -607,6 +791,159 @@ function LinkView({ projectId, bundle, busy, run }: PanelProps) {
           </button>
         </>
       )}
+    </div>
+  );
+}
+
+// --- Contributeurs --------------------------------------------------------
+
+interface ContributorsViewProps {
+  projectId: string;
+  entry: DocEntry | null;
+  busy: boolean;
+  run: (action: () => Promise<unknown>, successMessage?: string) => Promise<void>;
+}
+
+function ContributorsView({ projectId, entry, busy, run }: ContributorsViewProps) {
+  return (
+    <div className="doc-tab__entries">
+      <div className="doc-tab__list-head">
+        <span>Contributeurs au projet</span>
+        <button
+          type="button"
+          className="doc-tab__primary-btn"
+          onClick={() =>
+            run(
+              () => generateContributorsEntry(projectId),
+              entry ? "Fiche actualisée." : "Fiche générée.",
+            )
+          }
+          disabled={busy}
+        >
+          <RefreshCw size={13} strokeWidth={1.75} aria-hidden="true" />
+          {entry ? "Actualiser" : "Générer"}
+        </button>
+      </div>
+      {!entry && (
+        <p className="doc-tab__empty">
+          Pas encore générée — liste les membres actifs du projet par rôle, à régénérer après tout
+          changement d'équipe.
+        </p>
+      )}
+      {entry && (
+        <article className="doc-tab__card">
+          <div className="doc-tab__card-head">
+            <h4>{entry.title}</h4>
+            <StatusDot status={entry.status} />
+          </div>
+          <p className="doc-tab__timestamp">
+            Générée le {new Date(entry.updated_at).toLocaleString("fr-FR")}
+          </p>
+          <MarkdownView content={entry.description} />
+          <div className="doc-tab__editor-actions">
+            <button
+              type="button"
+              className="doc-tab__ghost-btn"
+              onClick={() =>
+                run(
+                  () =>
+                    entry.status === "publie"
+                      ? unpublishDocEntry(projectId, entry.id)
+                      : publishDocEntry(projectId, entry.id),
+                  entry.status === "publie" ? "Fiche dépubliée." : "Fiche publiée.",
+                )
+              }
+              disabled={busy}
+            >
+              {entry.status === "publie" ? "Dépublier" : "Publier"}
+            </button>
+          </div>
+        </article>
+      )}
+    </div>
+  );
+}
+
+// --- Personnalisation -----------------------------------------------------
+
+function AppearanceView({ projectId, bundle, busy, run }: PanelProps) {
+  const { space } = bundle;
+  const [accentColor, setAccentColor] = useState(space.accent_color);
+  const [header, setHeader] = useState(space.header_content);
+  const [footer, setFooter] = useState(space.footer_content);
+
+  useEffect(() => {
+    setAccentColor(space.accent_color);
+    setHeader(space.header_content);
+    setFooter(space.footer_content);
+  }, [space.accent_color, space.header_content, space.footer_content]);
+
+  const dirty = accentColor !== space.accent_color || header !== space.header_content || footer !== space.footer_content;
+
+  return (
+    <div className="doc-tab__form">
+      <p className="doc-tab__link-hint">
+        S'applique uniquement à la page publique — l'écran d'édition garde l'habillage Awtodo.
+      </p>
+
+      <label className="doc-tab__field">
+        <span>Couleur d'accent</span>
+        <div className="doc-tab__link-row">
+          <input
+            type="color"
+            value={accentColor || "#753030"}
+            onChange={(e) => setAccentColor(e.target.value)}
+            disabled={busy}
+            aria-label="Couleur d'accent de la documentation"
+          />
+          <button type="button" className="doc-tab__ghost-btn" onClick={() => setAccentColor("")} disabled={busy}>
+            Par défaut
+          </button>
+        </div>
+      </label>
+
+      <label className="doc-tab__field">
+        <span>En-tête (affiché en haut de la page publique)</span>
+        <textarea
+          className="doc-tab__textarea"
+          value={header}
+          onChange={(e) => setHeader(e.target.value)}
+          rows={3}
+          disabled={busy}
+        />
+      </label>
+
+      <label className="doc-tab__field">
+        <span>Pied de page</span>
+        <textarea
+          className="doc-tab__textarea"
+          value={footer}
+          onChange={(e) => setFooter(e.target.value)}
+          rows={3}
+          disabled={busy}
+        />
+      </label>
+
+      <div className="doc-tab__form-actions">
+        <button
+          type="button"
+          className="doc-tab__primary-btn"
+          onClick={() =>
+            run(
+              () =>
+                updateDocSpaceAppearance(projectId, {
+                  accent_color: accentColor,
+                  header_content: header,
+                  footer_content: footer,
+                }),
+              "Personnalisation enregistrée.",
+            )
+          }
+          disabled={busy || !dirty}
+        >
+          Enregistrer
+        </button>
+      </div>
     </div>
   );
 }

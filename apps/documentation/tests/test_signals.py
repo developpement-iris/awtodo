@@ -6,6 +6,7 @@ from apps.accounts.models import User
 from apps.documentation.models import DocSpace, PendingDocEntry
 from apps.incidents import services as incident_services
 from apps.incidents.models import Incident
+from apps.notifications.models import Notification
 from apps.projects.models import Project, ProjectMembership, ProjectVersion
 from apps.tasks import services as task_services
 from apps.tasks.models import Task
@@ -74,6 +75,37 @@ class DocQueueSignalTests(TestCase):
             1,
         )
 
+    def test_ajout_notifies_project_manager(self):
+        # Retour direct (session du 2026-09-23) : "envoie des notifs au chef
+        # de projet".
+        DocSpace.objects.create(project=self.project)
+        task = self._complete_task("ajout")
+        notif = Notification.objects.get(recipient=self.mgr, verb="doc_entry_pending")
+        self.assertEqual(notif.task_id, task.id)
+
+    def test_resolved_incident_notifies_project_manager(self):
+        DocSpace.objects.create(project=self.project)
+        incident = self._resolve_incident()
+        notif = Notification.objects.get(recipient=self.mgr, verb="doc_entry_pending")
+        self.assertEqual(notif.incident_id, incident.id)
+
+    def test_notifies_every_active_manager(self):
+        other_mgr = User.objects.create(username="mgr2")
+        ProjectMembership.objects.create(project=self.project, user=other_mgr, role="chef_de_projet")
+        DocSpace.objects.create(project=self.project)
+        self._complete_task("ajout")
+        self.assertEqual(Notification.objects.filter(verb="doc_entry_pending", recipient=self.mgr).count(), 1)
+        self.assertEqual(Notification.objects.filter(verb="doc_entry_pending", recipient=other_mgr).count(), 1)
+
+    def test_no_notification_without_space(self):
+        self._complete_task("ajout")
+        self.assertEqual(Notification.objects.filter(verb="doc_entry_pending").count(), 0)
+
+    def test_correction_does_not_notify(self):
+        DocSpace.objects.create(project=self.project)
+        self._complete_task("correction")
+        self.assertEqual(Notification.objects.filter(verb="doc_entry_pending").count(), 0)
+
     def test_signal_is_idempotent(self):
         DocSpace.objects.create(project=self.project)
         incident = Incident.objects.create(
@@ -87,3 +119,6 @@ class DocQueueSignalTests(TestCase):
 
         incident_resolved.send(sender=Incident, incident=incident, actor=self.mgr)
         self.assertEqual(PendingDocEntry.objects.filter(incident=incident).count(), 1)
+        # Pas de notification en double non plus — seule la création réelle
+        # de la ligne (get_or_create) déclenche `_notify_project_managers`.
+        self.assertEqual(Notification.objects.filter(verb="doc_entry_pending").count(), 1)

@@ -168,3 +168,73 @@ class DocsApiPublicTests(APITestCase):
         # Aucune en-tête d'authentification : doit quand même répondre 200.
         r = self.client.get(f"/api/v1/docs/public/{self.space.public_token}/")
         self.assertEqual(r.status_code, 200)
+
+
+@override_settings(
+    DEBUG=True,
+    REST_FRAMEWORK={
+        "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
+        "DEFAULT_AUTHENTICATION_CLASSES": ["apps.accounts.authentication.DebugUserIdAuthentication"],
+    },
+)
+class DocsPersonalizationApiTests(APITestCase):
+    """Session du 2026-09-23 : slug, couleur/en-tête/pied de page, fiche
+    Contributeurs."""
+
+    def setUp(self):
+        self.mgr = User.objects.create(username="mgr")
+        self.member = User.objects.create(username="mbr", first_name="Alan", last_name="Turing")
+        self.project = Project.objects.create(name="P", project_type="collaboratif")
+        ProjectMembership.objects.create(project=self.project, user=self.mgr, role="chef_de_projet")
+        ProjectMembership.objects.create(project=self.project, user=self.member, role="membre")
+
+    def _as(self, user):
+        self.client.credentials(HTTP_X_DEBUG_USER_ID=str(user.id))
+
+    def test_set_slug(self):
+        self._as(self.mgr)
+        r = self.client.patch(
+            f"/api/v1/docs/{self.project.id}/public-link/slug/", {"slug": "Mon Projet"}, format="json"
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["space"]["custom_slug"], "mon-projet")
+
+    def test_member_cannot_set_slug(self):
+        self._as(self.member)
+        r = self.client.patch(f"/api/v1/docs/{self.project.id}/public-link/slug/", {"slug": "x"}, format="json")
+        self.assertEqual(r.status_code, 403)
+
+    def test_update_appearance(self):
+        self._as(self.mgr)
+        r = self.client.patch(
+            f"/api/v1/docs/{self.project.id}/appearance/",
+            {"accent_color": "#7A4F9E", "header_content": "Bienvenue"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["space"]["accent_color"], "#7A4F9E")
+        self.assertEqual(r.data["space"]["header_content"], "Bienvenue")
+
+    def test_appearance_requires_at_least_one_field(self):
+        self._as(self.mgr)
+        r = self.client.patch(f"/api/v1/docs/{self.project.id}/appearance/", {}, format="json")
+        self.assertEqual(r.status_code, 400)
+
+    def test_generate_contributors(self):
+        self._as(self.mgr)
+        r = self.client.post(f"/api/v1/docs/{self.project.id}/contributors/generate/")
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(r.data["kind"], "contributeurs")
+        self.assertIn("Alan Turing", r.data["description"])
+
+        bundle = self.client.get(f"/api/v1/docs/{self.project.id}/").data
+        self.assertEqual(len(bundle["contributors"]), 1)
+
+    def test_bundle_exposes_timestamps_and_version(self):
+        self._as(self.mgr)
+        entry = services.create_entry(actor=self.mgr, project=self.project, kind="fonctionnalite", title="X")
+        bundle = self.client.get(f"/api/v1/docs/{self.project.id}/").data
+        feature = bundle["features"][0]
+        self.assertEqual(feature["id"], str(entry.id))
+        self.assertIsNotNone(feature["created_at"])
+        self.assertIsNone(feature["version_label"])

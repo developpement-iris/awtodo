@@ -76,6 +76,25 @@ def notify_incident_commented(*, incident, comment, actor):
     return notification
 
 
+def notify_doc_entry_pending(*, recipient, task=None, incident=None):
+    """Un élément vient d'entrer dans la file "À documenter" d'un projet
+    (session du 2026-09-23, retour direct — voir
+    `apps.documentation.signals`). Pas d'`actor` : c'est un signal système
+    (fin de `complete_task`/`resolve_incident`), pas une action d'un
+    utilisateur ciblant un autre — envoyée à chaque chef de projet actif,
+    pas un seul destinataire comme les autres `notify_*` de ce module."""
+    src = task or incident
+    notification = create_notification(
+        recipient=recipient,
+        verb="doc_entry_pending",
+        message=f"« {src.title} » attend d'être documenté.",
+        task=task,
+        incident=incident,
+    )
+    send_notification_email(notification)
+    return notification
+
+
 def notify_event_invited(*, event, participant, actor):
     if participant.user_id == actor.id:
         return None

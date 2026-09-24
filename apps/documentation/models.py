@@ -15,6 +15,18 @@ class DocSpace(UUIDModel, TimeStampedModel):
     # Token non devinable ; None tant que le lien public n'a jamais été activé.
     # Révoquer = None + is_public=False. Régénérer = nouveau token.
     public_token = models.CharField(max_length=64, null=True, blank=True, unique=True)
+    # Segment lisible choisi par le chef de projet (session du 2026-09-23) —
+    # purement cosmétique, mémorisé pour être réaffiché/modifié dans l'écran
+    # de config. Le caractère non-devinable du lien tient tout entier au
+    # suffixe aléatoire que `services._generate_token` embarque dans
+    # `public_token` ; changer `custom_slug` régénère donc `public_token`
+    # (même principe qu'une rotation) — voir `services.set_public_slug`.
+    custom_slug = models.CharField(max_length=80, blank=True, default="")
+    # Personnalisation de la page publique (session du 2026-09-23) —
+    # vide = habillage Awtodo par défaut. `accent_color` : hex ou vide.
+    accent_color = models.CharField(max_length=7, blank=True, default="")
+    header_content = models.TextField(blank=True, default="")
+    footer_content = models.TextField(blank=True, default="")
 
     def __str__(self):
         return f"Documentation — {self.project.name}"
@@ -68,6 +80,10 @@ class DocEntry(UUIDModel, TimeStampedModel, StatusLifecycleModel):
     KIND_CHOICES = [
         ("fonctionnalite", "Fonctionnalité"),
         ("resolution", "Résolution d'incident"),
+        # Fiche unique auto-générée (session du 2026-09-23), voir
+        # `services.generate_contributors_entry` — pas de file "à documenter"
+        # ni de source tâche/incident pour ce kind, régénérée à la demande.
+        ("contributeurs", "Contributeurs au projet"),
     ]
     SOURCE_CHOICES = [
         ("manuelle", "Manuelle"),
@@ -87,6 +103,15 @@ class DocEntry(UUIDModel, TimeStampedModel, StatusLifecycleModel):
     )
     source_incident = models.ForeignKey(
         "incidents.Incident", null=True, blank=True, on_delete=models.SET_NULL, related_name="doc_entries"
+    )
+    # Rattachement à une version du projet (session du 2026-09-23, retour
+    # direct : "la possibilité de faire remonter des fiches pour le
+    # versionning : ajout de la V1, ajout de la V2"). Optionnel — une fiche
+    # créée manuellement ou avant l'existence de versions n'en a pas.
+    # Renseigné automatiquement à la version de la tâche source quand la
+    # fiche vient de `create_entry_from_pending` (`task.version`).
+    version = models.ForeignKey(
+        "projects.ProjectVersion", null=True, blank=True, on_delete=models.SET_NULL, related_name="doc_entries"
     )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="brouillon")
 

@@ -295,6 +295,16 @@ def update_notification_preferences(*, actor, email_notifications_enabled):
     return actor
 
 
+def update_appearance_preferences(*, actor, accent_color):
+    """`accent_color=""` réinitialise à l'habillage Awtodo par défaut —
+    valeur valide, pas un champ "non fourni" (écran Réglages, bouton
+    "Par défaut", session du 2026-09-23)."""
+    _require_actor(actor)
+    actor.accent_color = accent_color
+    actor.save(update_fields=["accent_color"])
+    return actor
+
+
 def update_planning_preferences(*, actor, planning_color=None, outlook_calendar_sync_enabled=None):
     """Mise à jour partielle — `planning_color=""` est une valeur valide
     (retour à l'accent thémé par défaut), distincte de `None` (champ non
