@@ -192,7 +192,9 @@ export function SettingsDrawer({ onClose }: SettingsDrawerProps) {
                 <span>
                   Couleur de l'interface
                   <span className="settings-drawer__hint">
-                    Remplace l'accent Awtodo partout dans l'application, pour vous seul.
+                    Remplace la couleur de marque dans toute l'application (boutons, barre de
+                    navigation, statut « en cours »…), pour vous seul. Les couleurs qui ont un sens
+                    propre (priorité, statut d'incident…) restent inchangées.
                   </span>
                 </span>
                 {me.accent_color && (
