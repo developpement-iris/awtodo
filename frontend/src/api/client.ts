@@ -1,4 +1,6 @@
 import type {
+  ApiKey,
+  ApiKeyCreated,
   BudgetCategory,
   BudgetLine,
   BudgetSummaryRow,
@@ -995,6 +997,21 @@ export function updateO365Connection(
   }>,
 ): Promise<O365Connection> {
   return putJson<O365Connection>("/communication/o365/", payload);
+}
+
+// --- Clés API (intégrations, ticketing) -----------------------------------
+// Voir docs/organisation-et-comptes.md > "Écran Administration" > "Clés API".
+
+export function getApiKeys(): Promise<ApiKey[]> {
+  return getJson<ApiKey[]>("/integrations/api-keys/");
+}
+
+export function generateApiKey(name: string): Promise<ApiKeyCreated> {
+  return postJson<ApiKeyCreated>("/integrations/api-keys/", { name });
+}
+
+export function revokeApiKey(apiKeyId: string): Promise<ApiKey> {
+  return postJson<ApiKey>(`/integrations/api-keys/${apiKeyId}/revoke/`, {});
 }
 
 export function getProjectCommunicationChannels(projectId: string): Promise<CommunicationChannel[]> {

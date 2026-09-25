@@ -144,6 +144,23 @@ export interface O365Connection {
   is_configured: boolean;
 }
 
+// Clé API machine-à-machine (session du 2026-09-25, voir apps.integrations)
+// — la valeur en clair (`key`) n'existe que sur la réponse de génération,
+// jamais dans un listing.
+export interface ApiKey {
+  id: string;
+  name: string;
+  key_prefix: string;
+  is_active: boolean;
+  created_at: string;
+  revoked_at: string | null;
+  last_used_at: string | null;
+}
+
+export interface ApiKeyCreated extends ApiKey {
+  key: string;
+}
+
 export type CommunicationChannelType = "email" | "teams";
 
 export interface CommunicationChannel {

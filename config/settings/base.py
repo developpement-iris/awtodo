@@ -152,6 +152,12 @@ REST_FRAMEWORK = {
     # mécanisme utilisable une fois DEBUG=False.
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "apps.accounts.authentication.DebugUserIdAuthentication",
+        # Clés API machine-à-machine (intégration ticketing, session du
+        # 2026-09-25, voir apps.integrations) — contrairement au header
+        # debug ci-dessus, reste active quel que soit DEBUG : c'est le seul
+        # mécanisme d'auth de ce fichier pensé pour un appelant externe en
+        # production.
+        "apps.integrations.authentication.ApiKeyAuthentication",
         "rest_framework_simplejwt.authentication.JWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
