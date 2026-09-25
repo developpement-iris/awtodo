@@ -237,10 +237,20 @@ def create_incident(
     author_email="",
     actor=None,
 ):
-    if bool(project) == bool(team):
-        raise IncidentValidationError(
-            "Un incident doit être rattaché à un projet ou à un groupe, jamais les deux, jamais aucun des deux."
-        )
+    if not project and not team:
+        raise IncidentValidationError("Un incident doit être rattaché à un projet ou à un groupe.")
+    if project and team:
+        # Les deux peuvent être légitimement connus à la création (ex.
+        # l'outil de ticketing connaît le projet ET son groupe) — `team` est
+        # alors redondant avec `Project.team` (un projet collaboratif
+        # appartient à un seul groupe) et silencieusement ignoré plutôt que
+        # de forcer l'appelant à ne jamais l'envoyer quand il connaît les
+        # deux (retour direct, session du 2026-09-25 : la règle stricte
+        # "jamais les deux" gênait sans raison un appel qui avait
+        # légitimement les deux informations). Un incident non-affecté
+        # (`team` seul, boîte de réception) reste la seule façon d'obtenir
+        # `Incident.team` non nul.
+        team = None
 
     if actor is not None:
         _require_member(actor, Incident(project=project, team=team))

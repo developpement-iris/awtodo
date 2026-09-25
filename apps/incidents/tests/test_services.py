@@ -86,9 +86,31 @@ class CreateIncidentTeamOnlyTests(IncidentServicesTestCase):
         with self.assertRaises(IncidentPermissionError):
             create_incident(actor=self.outsider, team=self.team, title="Panne réseau")
 
-    def test_both_project_and_team_is_rejected(self):
-        with self.assertRaises(IncidentValidationError):
-            create_incident(actor=self.member, project=self.collab_project, team=self.team, title="Panne réseau")
+    def test_both_project_and_team_provided_ignores_team(self):
+        # Les deux peuvent être légitimement connus à la création (ex.
+        # l'outil de ticketing connaît le projet et son groupe) — `team` est
+        # alors redondant avec `Project.team` et silencieusement ignoré,
+        # pas une erreur (session du 2026-09-25).
+        incident = create_incident(
+            actor=self.member, project=self.collab_project, team=self.team, title="Panne réseau"
+        )
+
+        self.assertEqual(incident.project, self.collab_project)
+        self.assertIsNone(incident.team)
+
+    def test_team_ignored_even_if_it_differs_from_the_project_team(self):
+        # Comportement volontairement choisi côté "ignorer", pas "valider la
+        # cohérence" — même un groupe qui ne correspond pas à celui du
+        # projet est simplement écarté, pas une erreur.
+        other_team = Team.objects.create(name="Groupe non lié")
+        TeamMembership.objects.create(team=other_team, user=self.member)
+
+        incident = create_incident(
+            actor=self.member, project=self.collab_project, team=other_team, title="Panne réseau"
+        )
+
+        self.assertEqual(incident.project, self.collab_project)
+        self.assertIsNone(incident.team)
 
     def test_neither_project_nor_team_is_rejected(self):
         with self.assertRaises(IncidentValidationError):

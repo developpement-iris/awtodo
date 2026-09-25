@@ -401,6 +401,12 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
     );
   }
 
+  function removeIncidentLocally(incidentId: string) {
+    setIncidents((current) => (current ? current.filter((incident) => incident.id !== incidentId) : current));
+    setInboxIncidents((current) => (current ? current.filter((incident) => incident.id !== incidentId) : current));
+    setExpandedIncidentId((current) => (current === incidentId ? null : current));
+  }
+
   function toggleExpanded(incidentId: string) {
     setExpandedIncidentId((current) => (current === incidentId ? null : incidentId));
   }
@@ -442,7 +448,10 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
     setActionError(null);
     setPendingIncidentId(incident.id);
     try {
-      updateIncidentLocally(await archiveIncident(incident.id));
+      await archiveIncident(incident.id);
+      // Même correctif que l'annulation ci-dessous : "Archivé" est aussi
+      // décoché par défaut dans le filtre de statut.
+      removeIncidentLocally(incident.id);
       showToast("Incident archivé.");
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "L'archivage a échoué.");
@@ -458,7 +467,15 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
     setActionError(null);
     setPendingIncidentId(incident.id);
     try {
-      updateIncidentLocally(await cancelIncident(incident.id, reason));
+      await cancelIncident(incident.id, reason);
+      // Comme assign-project/reassign-team : un incident annulé sort du
+      // statut par défaut affiché (filtre "Annulé" décoché par défaut,
+      // comme "Archivé") — le retirer localement plutôt que le mettre à
+      // jour en place, sinon il reste visible dans la boîte de réception
+      // jusqu'au prochain rechargement (retour direct, session du
+      // 2026-09-25 : "j'ai annulé un incident mais il reste dans la boîte
+      // de réception").
+      removeIncidentLocally(incident.id);
       showToast("Incident annulé.");
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "L'annulation a échoué.");
