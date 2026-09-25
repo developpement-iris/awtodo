@@ -1,10 +1,11 @@
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import services
 from .models import ApiKey
-from .serializers import ApiKeyCreateSerializer, ApiKeySerializer
+from .serializers import ApiKeyCreatedSerializer, ApiKeyCreateSerializer, ApiKeySerializer
 
 
 class _IntegrationExceptionMixin:
@@ -23,10 +24,12 @@ class ApiKeyListView(_IntegrationExceptionMixin, APIView):
     """Clés API de l'organisation de l'utilisateur courant. Lecture et
     création réservées à un admin d'organisation (garde dans le service)."""
 
+    @extend_schema(responses=ApiKeySerializer(many=True))
     def get(self, request):
         keys = services.list_api_keys(actor=request.user, organisation=request.user.organisation)
         return Response(ApiKeySerializer(keys, many=True).data)
 
+    @extend_schema(request=ApiKeyCreateSerializer, responses=ApiKeyCreatedSerializer)
     def post(self, request):
         serializer = ApiKeyCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -39,6 +42,7 @@ class ApiKeyListView(_IntegrationExceptionMixin, APIView):
 
 
 class ApiKeyRevokeView(_IntegrationExceptionMixin, APIView):
+    @extend_schema(request=None, responses=ApiKeySerializer)
     def post(self, request, api_key_id):
         api_key = get_object_or_404(ApiKey, id=api_key_id, organisation=request.user.organisation)
         api_key = services.revoke_api_key(actor=request.user, api_key=api_key)

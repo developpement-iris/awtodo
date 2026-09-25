@@ -1,3 +1,5 @@
+from drf_spectacular.extensions import OpenApiAuthenticationExtension
+from drf_spectacular.plumbing import build_bearer_security_scheme_object
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 
@@ -38,3 +40,19 @@ class ApiKeyAuthentication(BaseAuthentication):
         # que 401 (« credentials fournies mais invalides ») pour une clé
         # inconnue/révoquée — même convention que `TokenAuthentication`.
         return _SCHEME
+
+
+class ApiKeyScheme(OpenApiAuthenticationExtension):
+    """Fait apparaître le schéma `Authorization: Api-Key <clé>` dans le
+    Swagger généré (`/api/schema/swagger-ui/`) — sans ça, drf-spectacular
+    ignore silencieusement `ApiKeyAuthentication` (aucun
+    `OpenApiAuthenticationExtension` enregistré par défaut pour une classe
+    maison) et les tiers qui lisent la doc pour s'intégrer (ticketing, Power
+    Automate — voir CLAUDE.md > Stack technique) ne verraient jamais que ce
+    moyen d'authentification existe."""
+
+    target_class = "apps.integrations.authentication.ApiKeyAuthentication"
+    name = "apiKeyAuth"
+
+    def get_security_definition(self, auto_schema):
+        return build_bearer_security_scheme_object(header_name="Authorization", token_prefix=_SCHEME)
