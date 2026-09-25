@@ -89,8 +89,17 @@ class IncidentViewSet(ListOnlyFilterMixin, mixins.ListModelMixin, mixins.Retriev
 
     @action(detail=False, methods=["get"])
     def inbox(self, request):
+        # Statuts terminaux (annulé/archivé) toujours exclus, sans dépendre
+        # du filtre de statut envoyé par le front (retour direct, session du
+        # 2026-09-25 : un incident annulé restait visible dans la boîte de
+        # réception). Un incident non-affecté n'a de sens à y figurer que
+        # tant qu'il reste à trier — contrairement à la liste principale
+        # (`list()` ci-dessus), où consulter l'historique via un statut
+        # explicite reste un besoin légitime.
         queryset = Incident.all_objects.filter(
-            project__isnull=True, team__in=accessible_inbox_teams(request.user)
+            project__isnull=True,
+            team__in=accessible_inbox_teams(request.user),
+            status__in=Incident.ACTIVE_STATUSES,
         ).select_related("team")
         objects = list(self.filter_queryset(queryset))
         with prefetched_team_memberships(request.user, {i.team_id for i in objects}):

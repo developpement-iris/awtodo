@@ -383,6 +383,33 @@ class IncidentTeamOnlyApiTests(APITestCase):
         self.assertNotIn(str(incident.id), [item["id"] for item in inbox_response.json()])
         self.assertIn(str(incident.id), [item["id"] for item in list_response.json()])
 
+    def test_cancelled_incident_never_appears_in_inbox(self):
+        incident = self.make_team_only_incident(status="annule")
+
+        response = self.client.get("/api/v1/incidents/inbox/", **self.as_user(self.member))
+
+        self.assertNotIn(str(incident.id), [item["id"] for item in response.json()])
+
+    def test_cancelled_incident_hidden_even_with_explicit_status_filter(self):
+        # La boîte de réception exclut toujours les statuts terminaux,
+        # indépendamment du filtre envoyé par le front — contrairement à la
+        # liste principale, où demander explicitement un statut historique
+        # reste légitime.
+        incident = self.make_team_only_incident(status="annule")
+
+        response = self.client.get(
+            "/api/v1/incidents/inbox/", {"status": "annule"}, **self.as_user(self.member)
+        )
+
+        self.assertNotIn(str(incident.id), [item["id"] for item in response.json()])
+
+    def test_archived_incident_never_appears_in_inbox(self):
+        incident = self.make_team_only_incident(status="archive")
+
+        response = self.client.get("/api/v1/incidents/inbox/", **self.as_user(self.member))
+
+        self.assertNotIn(str(incident.id), [item["id"] for item in response.json()])
+
     def test_assign_project_success_clears_team(self):
         incident = self.make_team_only_incident()
 
