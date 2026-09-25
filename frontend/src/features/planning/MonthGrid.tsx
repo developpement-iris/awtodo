@@ -65,6 +65,7 @@ export function MonthGrid({ monthDate, items, onDayClick, onItemClick }: MonthGr
                           item.color ? ({ "--item-color": item.color } as CSSProperties) : undefined
                         }
                         onClick={() => onItemClick(item)}
+                        title={item.title}
                       >
                         {!item.allDay && (
                           <span className="month-grid__chip-time">

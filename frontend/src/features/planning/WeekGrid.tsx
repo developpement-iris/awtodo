@@ -97,6 +97,7 @@ function ItemBlock({
         type="button"
         className="week-grid__item-hit"
         onClick={() => onItemClick(item)}
+        title={`${item.title}${item.subtitle ? ` — ${item.subtitle}` : ""} (${formatTimeRange(item.start, item.end)})`}
         {...(item.editable ? move.listeners : {})}
         {...(item.editable ? move.attributes : {})}
       >

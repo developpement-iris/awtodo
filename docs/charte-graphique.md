@@ -142,6 +142,18 @@ Demande directe : "il faut pouvoir trier selon une colonne. si je clique sur 'pr
 - **Comparateurs par écran** (`TasksListPage`/`IncidentsPage`, fonction `compareTasks`/`compareIncidents`) : priorité triée par rang (`priorityRank`, même helper que les badges — pas alphabétique sur le libellé, l'ordre métier prime), échéance/date par valeur chronologique réelle (pas la chaîne relative affichée pour "Délai"), temps estimé/passé numériquement, tout le reste (titre, réf., type, statut, assigné, projet, version, auteur) par ordre alphabétique (`localeCompare("fr")`) sur le libellé affiché. Valeurs manquantes toujours en fin de liste, quel que soit le sens (`lib/sortCompare.ts`, `compareNullableNumbers`/`compareNullableStrings`, partagé entre les deux écrans).
 - **Portée** : les deux tableaux de tâches/incidents "principaux" sont triables sur toutes leurs colonnes visibles (y compris Titre). La boîte de réception des incidents (`inboxIncidents`, tableau secondaire de `IncidentsPage`) reste non triable dans cette passe — volume généralement faible, pas demandé explicitement.
 
+### Recherche par titre + filtre de dates sur les listes (implémenté — session du 2026-09-25)
+
+Deux demandes directes liées : "un moteur de recherche sur les tâches/incidents, pour le titre + possibilité de filtrer sur les dates des tâches aussi".
+
+- **Nouveau composant partagé `SearchInput`** (`components/SearchInput.tsx`) : champ texte avec icône et bouton d'effacement, purement front — filtre le tableau déjà chargé (`task.title`/`incident.title`, comparaison insensible à la casse), pas de nouveau paramètre d'API, même principe que le tri par colonne ci-dessus. Branché sur `TasksListPage` et `IncidentsPage` (liste principale **et** boîte de réception des incidents, sans faire disparaître la section elle-même si le compte réel est non nul).
+- **Filtre de dates, tâches uniquement** (portée explicitement demandée) : deux `DatePickerField` ("Échéance du…"/"au…") dans la barre d'outils de `TasksListPage`, filtrent sur `task.deadline` (comparaison de chaînes ISO `YYYY-MM-DD`, une tâche sans échéance est exclue dès qu'une borne est active) ; bouton "Effacer" affiché seulement si une borne est renseignée. Pas ajouté côté Incidents (pas demandé — l'écran a déjà une colonne "Délai" triable).
+- Message "Aucune tâche/incident ne correspond à la recherche." distinct du message "vide" existant (aucune tâche/incident du tout), pour ne pas laisser croire à une liste réellement vide en cas de filtre trop restrictif.
+
+### Info-bulle sur les évènements du planning (implémenté — session du 2026-09-25)
+
+Remontée directe : les créneaux de 30 minutes du calendrier hebdomadaire sont trop petits pour afficher leur titre en entier. Attribut `title` natif (info-bulle navigateur, pas de nouveau composant) sur le bouton de chaque bloc de `WeekGrid.tsx` (titre + sous-titre éventuel + plage horaire) et sur chaque puce de `MonthGrid.tsx` (titre seul, le texte y est déjà visible mais peut être tronqué par recouvrement).
+
 ### Page de connexion — panneau oblique (implémenté — session du 10/08/2026)
 
 Reprise de `maquette-login-oblique.html` (fournie par l'utilisateur, copiée à la racine du repo). Consigne explicite et inhabituelle par rapport à toutes les passes précédentes : **adapter les polices à la charte, mais pas les couleurs**. Appliqué à la lettre :

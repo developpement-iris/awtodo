@@ -14,8 +14,10 @@ import {
 import { CancelDialog } from "../../components/CancelDialog";
 import { ColumnPicker, type ColumnDef } from "../../components/ColumnPicker";
 import { Combobox } from "../../components/Combobox";
+import { DatePickerField } from "../../components/DatePickerField";
 import { InlineEditableText } from "../../components/InlineEditableText";
 import { LoadingTransition } from "../../components/LoadingTransition";
+import { SearchInput } from "../../components/SearchInput";
 import { SkeletonTable } from "../../components/Skeleton";
 import { SortableColumnHeader } from "../../components/SortableColumnHeader";
 import { StatusBadge } from "../../components/StatusBadge";
@@ -168,6 +170,9 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
   const [commentSubmitting, setCommentSubmitting] = useState(false);
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [statusFilter, setStatusFilter] = useState(() => defaultStatusSelection(TASK_STATUS_FILTER_OPTIONS));
+  const [searchQuery, setSearchQuery] = useState("");
+  const [deadlineFrom, setDeadlineFrom] = useState("");
+  const [deadlineTo, setDeadlineTo] = useState("");
   const [visibleColumns, setVisibleColumns] = useColumnPreferences<TaskColumnKey>(
     "tasks",
     TASK_COLUMN_KEYS,
@@ -353,7 +358,19 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
 
   const projectNameById = new Map(projects.map((project) => [project.id, project.name]));
   const teamNameById = new Map(teams.map((team) => [team.id, team.name]));
-  const sortedTasks = sortKey && tasks ? [...tasks].sort((a, b) => compareTasks(a, b, sortKey, direction, projectNameById)) : tasks;
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredTasks = tasks
+    ? tasks.filter((task) => {
+        if (normalizedQuery && !task.title.toLowerCase().includes(normalizedQuery)) return false;
+        if (deadlineFrom && (!task.deadline || task.deadline < deadlineFrom)) return false;
+        if (deadlineTo && (!task.deadline || task.deadline > deadlineTo)) return false;
+        return true;
+      })
+    : tasks;
+  const sortedTasks =
+    sortKey && filteredTasks
+      ? [...filteredTasks].sort((a, b) => compareTasks(a, b, sortKey, direction, projectNameById))
+      : filteredTasks;
 
   return (
     <div className="tasks-list-page">
@@ -391,6 +408,25 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
           </span>
         )}
 
+        <SearchInput value={searchQuery} onChange={setSearchQuery} placeholder="Rechercher un titre…" />
+
+        <span className="tasks-list-page__date-range">
+          <DatePickerField value={deadlineFrom} onChange={setDeadlineFrom} placeholder="Échéance du…" />
+          <DatePickerField value={deadlineTo} onChange={setDeadlineTo} placeholder="au…" />
+          {(deadlineFrom || deadlineTo) && (
+            <button
+              type="button"
+              className="tasks-list-page__date-range-clear"
+              onClick={() => {
+                setDeadlineFrom("");
+                setDeadlineTo("");
+              }}
+            >
+              Effacer
+            </button>
+          )}
+        </span>
+
         <StatusFilterDropdown options={TASK_STATUS_FILTER_OPTIONS} selected={statusFilter} onChange={setStatusFilter} />
         <ColumnPicker columns={TASK_COLUMNS} visible={visibleColumns} onChange={setVisibleColumns} />
       </div>
@@ -410,6 +446,9 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
             <p className="tasks-list-page__message">
               {mode === "mine" ? "Aucune tâche assignée pour l'instant." : "Aucune tâche dans ce groupe pour l'instant."}
             </p>
+          )}
+          {tasks && tasks.length > 0 && filteredTasks && filteredTasks.length === 0 && (
+            <p className="tasks-list-page__message">Aucune tâche ne correspond à la recherche.</p>
           )}
 
           {sortedTasks && sortedTasks.length > 0 && (

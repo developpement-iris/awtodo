@@ -20,6 +20,7 @@ import { CancelDialog } from "../../components/CancelDialog";
 import { ColumnPicker, type ColumnDef } from "../../components/ColumnPicker";
 import { Combobox } from "../../components/Combobox";
 import { LoadingTransition } from "../../components/LoadingTransition";
+import { SearchInput } from "../../components/SearchInput";
 import { SkeletonTable } from "../../components/Skeleton";
 import { SortableColumnHeader } from "../../components/SortableColumnHeader";
 import { StatusBadge } from "../../components/StatusBadge";
@@ -263,6 +264,7 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
   const [actionError, setActionError] = useState<string | null>(null);
   const [projectFilter, setProjectFilter] = useState<string>(scopedProject?.id ?? "");
   const [statusFilter, setStatusFilter] = useState(() => defaultStatusSelection(INCIDENT_STATUS_FILTER_OPTIONS));
+  const [searchQuery, setSearchQuery] = useState("");
   const [pendingIncidentId, setPendingIncidentId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [resolvingIncident, setResolvingIncident] = useState<Incident | null>(null);
@@ -537,10 +539,16 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
   }
 
   const projectNameById = new Map(projects.map((project) => [project.id, project.name]));
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  function matchesSearch(incident: Incident): boolean {
+    return !normalizedQuery || incident.title.toLowerCase().includes(normalizedQuery);
+  }
+  const filteredIncidents = incidents ? incidents.filter(matchesSearch) : incidents;
+  const filteredInboxIncidents = inboxIncidents ? inboxIncidents.filter(matchesSearch) : inboxIncidents;
   const displayedIncidents =
-    incidents && sortKey
-      ? [...incidents].sort((a, b) => compareIncidents(a, b, sortKey, direction, projectNameById))
-      : incidents;
+    filteredIncidents && sortKey
+      ? [...filteredIncidents].sort((a, b) => compareIncidents(a, b, sortKey, direction, projectNameById))
+      : filteredIncidents;
   // Titre + actions (toujours affichés) + colonnes optionnelles visibles —
   // "owner" (Projet) n'existe pas du tout sur un projet déjà scopé, quel que
   // soit le réglage de colonnes.
@@ -570,6 +578,8 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
             </span>
           </>
         )}
+
+        <SearchInput value={searchQuery} onChange={setSearchQuery} placeholder="Rechercher un titre…" />
 
         <StatusFilterDropdown
           options={INCIDENT_STATUS_FILTER_OPTIONS}
@@ -609,7 +619,7 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
               </tr>
             </thead>
             <tbody>
-              {inboxIncidents.map((incident) => (
+              {(filteredInboxIncidents ?? []).map((incident) => (
                 <IncidentRow
                   key={incident.id}
                   incident={incident}
@@ -636,6 +646,9 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
       {!error && (
         <LoadingTransition loading={incidents === null} skeleton={<SkeletonTable columns={scopedProject ? 5 : 6} rows={4} />}>
           {incidents && incidents.length === 0 && <p className="incidents-page__message">Aucun incident.</p>}
+          {incidents && incidents.length > 0 && displayedIncidents && displayedIncidents.length === 0 && (
+            <p className="incidents-page__message">Aucun incident ne correspond à la recherche.</p>
+          )}
 
           {displayedIncidents && displayedIncidents.length > 0 && (
             <table className="incidents-page__table">
