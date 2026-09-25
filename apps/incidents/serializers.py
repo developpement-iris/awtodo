@@ -97,6 +97,10 @@ class IncidentAssignProjectSerializer(serializers.Serializer):
     project = serializers.PrimaryKeyRelatedField(queryset=Project.objects.all())
 
 
+class IncidentReassignTeamSerializer(serializers.Serializer):
+    team = serializers.PrimaryKeyRelatedField(queryset=Team.objects.all())
+
+
 class IncidentPriorityUpdateSerializer(serializers.Serializer):
     priority = serializers.ChoiceField(choices=PRIORITY_CHOICES)
 

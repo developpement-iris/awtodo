@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { Check, Copy, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   addTeamMember,
@@ -36,6 +36,17 @@ export function GroupsSection({ currentUser }: GroupsSectionProps) {
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [pendingTeamId, setPendingTeamId] = useState<string | null>(null);
   const [addSelection, setAddSelection] = useState<Record<string, string>>({});
+  const [copiedTeamId, setCopiedTeamId] = useState<string | null>(null);
+
+  async function handleCopyId(teamId: string) {
+    try {
+      await navigator.clipboard.writeText(teamId);
+      setCopiedTeamId(teamId);
+      window.setTimeout(() => setCopiedTeamId((current) => (current === teamId ? null : current)), 2000);
+    } catch {
+      showToast("Impossible de copier automatiquement — sélectionnez l'identifiant manuellement.");
+    }
+  }
 
   function loadTeams() {
     getTeams()
@@ -156,6 +167,19 @@ export function GroupsSection({ currentUser }: GroupsSectionProps) {
                     disabled={!isManager || pendingTeamId === team.id}
                   />
                 </h3>
+                <button
+                  type="button"
+                  className="groups-section__card-id"
+                  onClick={() => void handleCopyId(team.id)}
+                  title="Copier l'identifiant du groupe"
+                >
+                  <code>{team.id}</code>
+                  {copiedTeamId === team.id ? (
+                    <Check size={12} strokeWidth={2} aria-hidden="true" />
+                  ) : (
+                    <Copy size={12} strokeWidth={1.75} aria-hidden="true" />
+                  )}
+                </button>
                 <ul className="groups-section__members">
                   {team.memberships.map((membership) => {
                     const member = membership.user;

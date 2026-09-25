@@ -468,6 +468,10 @@ export function assignIncidentProject(incidentId: string, projectId: string): Pr
   return postJson<Incident>(`/incidents/${incidentId}/assign-project/`, { project: projectId });
 }
 
+export function reassignIncidentTeam(incidentId: string, teamId: string): Promise<Incident> {
+  return postJson<Incident>(`/incidents/${incidentId}/reassign-team/`, { team: teamId });
+}
+
 export interface IncidentCreatePayload {
   project: string;
   title: string;

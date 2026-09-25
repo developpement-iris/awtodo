@@ -123,6 +123,20 @@ def _ensure_can_assign_project(actor, incident):
         raise IncidentValidationError("Cet incident est déjà rattaché à un projet.")
 
 
+def _ensure_can_reassign_team(actor, incident):
+    """Corrige un incident arrivé dans la mauvaise boîte de réception (ex.
+    mauvais mappage côté intégration ticketing) — même niveau d'autorité que
+    le reste du cycle de vie d'un incident non-affecté (`_require_member`,
+    n'importe quel membre du groupe **source**, pas réservé à un
+    administrateur). `_require_member` vérifie l'appartenance au groupe
+    actuel de l'incident (`incident.team`), avant le changement."""
+    _require_member(actor, incident)
+    if incident.team_id is None:
+        raise IncidentValidationError(
+            "Cet incident n'est pas dans une boîte de réception (déjà rattaché à un projet)."
+        )
+
+
 def _ensure_can_claim(actor, incident):
     """S'assigner soi-même : ouvert à n'importe quel membre du groupe, comme
     le reste du cycle de vie d'un incident (voir "Différence volontaire avec
@@ -184,6 +198,10 @@ def can_assign_project_incident(user, incident):
     return _check(_ensure_can_assign_project, user, incident)
 
 
+def can_reassign_team_incident(user, incident):
+    return _check(_ensure_can_reassign_team, user, incident)
+
+
 def can_claim_incident(user, incident):
     return _check(_ensure_can_claim, user, incident)
 
@@ -200,6 +218,7 @@ def get_incident_permissions(user, incident):
         "can_cancel": can_cancel_incident(user, incident),
         "can_comment": can_comment_incident(user, incident),
         "can_assign_project": can_assign_project_incident(user, incident),
+        "can_reassign_team": can_reassign_team_incident(user, incident),
         "can_edit_description": can_edit_description_incident(user, incident),
         "can_claim": can_claim_incident(user, incident),
         "can_change_priority": can_change_priority_incident(user, incident),
@@ -259,6 +278,24 @@ def assign_incident_to_project(*, actor, incident, project):
         incident.project = project
         incident.team = None
         incident.save(update_fields=["project", "team"])
+    return incident
+
+
+def reassign_incident_team(*, actor, incident, team):
+    """Corrige un incident arrivé dans la mauvaise boîte de réception (ex.
+    mauvais mappage côté intégration ticketing, session du 2026-09-25) —
+    reste dans une boîte de réception (`project` inchangé, toujours `None`),
+    change seulement `team`. Même garde de destination que
+    `assign_incident_to_project` : l'acteur doit aussi être membre du groupe
+    d'arrivée, pas seulement du groupe de départ (`_ensure_can_reassign_team`
+    ne vérifie que ce dernier)."""
+    _ensure_can_reassign_team(actor, incident)
+    if not _is_member_via_team(actor, team):
+        raise IncidentPermissionError("Vous devez être membre du groupe de destination pour y déplacer cet incident.")
+
+    with record_changes(incident, actor=actor):
+        incident.team = team
+        incident.save(update_fields=["team"])
     return incident
 
 

@@ -31,6 +31,28 @@
   text-wrap: balance;
 }
 
+.groups-section__card-id {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+  margin-top: -6px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.groups-section__card-id code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.groups-section__card-id:hover {
+  color: var(--color-accent);
+}
+
 .groups-section__members {
   list-style: none;
   margin: 0;

@@ -7,7 +7,7 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { incidentStatusIcon, incidentStatusTone, priorityTone } from "../../lib/badges";
 import { auditFieldLabel } from "../../lib/auditFieldLabels";
 import { formatRelativeTime } from "../../lib/relativeTime";
-import type { AuditLogEntry, Incident, IncidentComment, Project } from "../../types/watodo";
+import type { AuditLogEntry, Incident, IncidentComment, Project, Team } from "../../types/watodo";
 import "./IncidentAccordion.css";
 
 interface IncidentAccordionProps {
@@ -15,6 +15,7 @@ interface IncidentAccordionProps {
   projectName?: string;
   teamName?: string;
   projects?: Project[];
+  teams?: Team[];
   comments: IncidentComment[] | null;
   commentsError: string | null;
   commentSubmitting: boolean;
@@ -26,6 +27,7 @@ interface IncidentAccordionProps {
   onArchive: (incident: Incident) => void;
   onCancel: (incident: Incident) => void;
   onAssignProject?: (incident: Incident, projectId: string) => void;
+  onReassignTeam?: (incident: Incident, teamId: string) => void;
   onSaveDescription: (incident: Incident, description: string) => void;
   pending?: boolean;
 }
@@ -38,6 +40,7 @@ export function IncidentAccordion({
   projectName,
   teamName,
   projects = [],
+  teams = [],
   comments,
   commentsError,
   commentSubmitting,
@@ -49,11 +52,13 @@ export function IncidentAccordion({
   onArchive,
   onCancel,
   onAssignProject,
+  onReassignTeam,
   onSaveDescription,
   pending = false,
 }: IncidentAccordionProps) {
   const [draft, setDraft] = useState("");
   const [assignProjectId, setAssignProjectId] = useState("");
+  const [reassignTeamId, setReassignTeamId] = useState("");
 
   function handleSubmitComment() {
     if (!draft.trim()) return;
@@ -182,6 +187,32 @@ export function IncidentAccordion({
               whileTap={{ scale: 0.96 }}
             >
               Rattacher au projet
+            </motion.button>
+          </div>
+        )}
+
+        {incident.permissions.can_reassign_team && onReassignTeam && (
+          <div className="incident-accordion__assign">
+            <span className="incident-accordion__assign-select">
+              <Combobox
+                options={teams
+                  .filter((team) => team.id !== incident.team)
+                  .map((team) => ({ value: team.id, label: team.name }))}
+                value={reassignTeamId}
+                onChange={setReassignTeamId}
+                disabled={pending}
+                placeholder="Choisir un autre groupe…"
+                searchPlaceholder="Rechercher un groupe…"
+              />
+            </span>
+            <motion.button
+              type="button"
+              className="incident-accordion__action"
+              onClick={() => onReassignTeam(incident, reassignTeamId)}
+              disabled={pending || !reassignTeamId}
+              whileTap={{ scale: 0.96 }}
+            >
+              Déplacer vers ce groupe
             </motion.button>
           </div>
         )}

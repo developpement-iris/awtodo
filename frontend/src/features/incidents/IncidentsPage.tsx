@@ -11,6 +11,8 @@ import {
   getIncidents,
   getIncidentsInbox,
   getProjects,
+  getTeams,
+  reassignIncidentTeam,
   resolveIncident,
   startIncident,
   updateIncidentDescription,
@@ -33,7 +35,7 @@ import { incidentStatusIcon, incidentStatusTone, priorityRank, priorityTone } fr
 import { formatRelativeTime } from "../../lib/relativeTime";
 import { compareNullableNumbers } from "../../lib/sortCompare";
 import { defaultStatusSelection, INCIDENT_STATUS_FILTER_OPTIONS } from "../../lib/statusFilterOptions";
-import type { AuditLogEntry, Incident, IncidentComment, Project } from "../../types/watodo";
+import type { AuditLogEntry, Incident, IncidentComment, Project, Team } from "../../types/watodo";
 import { IncidentAccordion } from "./IncidentAccordion";
 import { IncidentCreateDialog, type IncidentCreateFormValues } from "./IncidentCreateDialog";
 import { ResolveIncidentDialog } from "./ResolveIncidentDialog";
@@ -258,6 +260,7 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
   const { showToast } = useToast();
   const { currentUser } = useCurrentUser();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
   const [incidents, setIncidents] = useState<Incident[] | null>(null);
   const [inboxIncidents, setInboxIncidents] = useState<Incident[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -297,6 +300,15 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
     }
     getProjects()
       .then(setProjects)
+      .catch(() => undefined);
+  }, [scopedProject]);
+
+  useEffect(() => {
+    // Ne sert qu'au sélecteur "Déplacer vers ce groupe" d'un incident non-
+    // affecté (voir renderAccordion) — inutile sur un projet scopé.
+    if (scopedProject) return;
+    getTeams()
+      .then(setTeams)
       .catch(() => undefined);
   }, [scopedProject]);
 
@@ -473,6 +485,25 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
     }
   }
 
+  async function handleReassignTeam(incident: Incident, teamId: string) {
+    setActionError(null);
+    setPendingIncidentId(incident.id);
+    try {
+      await reassignIncidentTeam(incident.id, teamId);
+      // Même traitement que le rattachement à un projet : plutôt que de
+      // deviner si le nouveau groupe reste visible dans la boîte de
+      // réception courante de cet utilisateur, on le retire localement — un
+      // rechargement de la page reflétera l'état réel.
+      setInboxIncidents((current) => (current ? current.filter((item) => item.id !== incident.id) : current));
+      setExpandedIncidentId((current) => (current === incident.id ? null : current));
+      showToast("Incident déplacé vers l'autre groupe.");
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Le déplacement a échoué.");
+    } finally {
+      setPendingIncidentId(null);
+    }
+  }
+
   async function handleSaveDescription(incident: Incident, description: string) {
     setActionError(null);
     try {
@@ -521,6 +552,7 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
         projectName={ownerLabel?.projectName}
         teamName={ownerLabel?.teamName}
         projects={projects}
+        teams={teams}
         comments={comments}
         commentsError={commentsError}
         commentSubmitting={commentSubmitting}
@@ -532,6 +564,7 @@ export function IncidentsPage({ createTrigger = 0, scopedProject, focusIncidentI
         onArchive={handleArchive}
         onCancel={setCancellingIncident}
         onAssignProject={handleAssignProject}
+        onReassignTeam={handleReassignTeam}
         onSaveDescription={handleSaveDescription}
         pending={pendingIncidentId === incident.id}
       />

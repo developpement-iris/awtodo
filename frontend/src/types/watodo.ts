@@ -414,6 +414,7 @@ export interface IncidentPermissions {
   can_cancel: boolean;
   can_comment: boolean;
   can_assign_project: boolean;
+  can_reassign_team: boolean;
   can_edit_description: boolean;
 }
 

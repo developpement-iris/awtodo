@@ -16,6 +16,7 @@ from .serializers import (
     IncidentCreateSerializer,
     IncidentDetailSerializer,
     IncidentPriorityUpdateSerializer,
+    IncidentReassignTeamSerializer,
     IncidentResolveSerializer,
     IncidentSerializer,
 )
@@ -29,6 +30,7 @@ from .services import (
     cancel_incident,
     claim_incident,
     create_incident,
+    reassign_incident_team,
     resolve_incident,
     start_incident,
     update_incident_description,
@@ -121,6 +123,21 @@ class IncidentViewSet(ListOnlyFilterMixin, mixins.ListModelMixin, mixins.Retriev
 
         try:
             assign_incident_to_project(actor=request.user, incident=incident, **serializer.validated_data)
+        except IncidentPermissionError as exc:
+            return Response({"detail": str(exc)}, status=403)
+        except IncidentValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
+
+        return Response(self.get_serializer(incident).data)
+
+    @action(detail=True, methods=["post"], url_path="reassign-team")
+    def reassign_team(self, request, pk=None):
+        incident = self.get_object()
+        serializer = IncidentReassignTeamSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            reassign_incident_team(actor=request.user, incident=incident, **serializer.validated_data)
         except IncidentPermissionError as exc:
             return Response({"detail": str(exc)}, status=403)
         except IncidentValidationError as exc:

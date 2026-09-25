@@ -14,6 +14,7 @@ from apps.incidents.services import (
     cancel_incident,
     claim_incident,
     create_incident,
+    reassign_incident_team,
     resolve_incident,
     start_incident,
     update_incident_description,
@@ -29,6 +30,10 @@ class IncidentServicesTestCase(TestCase):
         self.outsider = User.objects.create_user(username="carol")
         TeamMembership.objects.create(team=self.team, user=self.member)
         TeamMembership.objects.create(team=self.team, user=self.other_member)
+
+        self.other_team = Team.objects.create(name="Autre équipe")
+        self.other_team_member = User.objects.create_user(username="erwan")
+        TeamMembership.objects.create(team=self.other_team, user=self.other_team_member)
 
         self.collab_project = Project.objects.create(
             name="Projet collab", project_type="collaboratif", team=self.team
@@ -126,6 +131,42 @@ class AssignIncidentToProjectTests(IncidentServicesTestCase):
 
         with self.assertRaises(IncidentValidationError):
             assign_incident_to_project(actor=self.member, incident=incident, project=self.individual_project)
+
+
+class ReassignIncidentTeamTests(IncidentServicesTestCase):
+    def make_team_only_incident(self, status="signale"):
+        return Incident.objects.create(team=self.team, title="Panne réseau", status=status)
+
+    def test_source_team_member_reassigns_to_another_team(self):
+        incident = self.make_team_only_incident()
+        # Doit aussi être membre de l'équipe de destination (même garde que
+        # `assign_incident_to_project`) — `self.member` n'appartient qu'à
+        # `self.team` par défaut.
+        TeamMembership.objects.create(team=self.other_team, user=self.member)
+
+        reassign_incident_team(actor=self.member, incident=incident, team=self.other_team)
+
+        incident.refresh_from_db()
+        self.assertEqual(incident.team, self.other_team)
+        self.assertIsNone(incident.project)
+
+    def test_non_member_of_source_team_cannot_reassign(self):
+        incident = self.make_team_only_incident()
+
+        with self.assertRaises(IncidentPermissionError):
+            reassign_incident_team(actor=self.outsider, incident=incident, team=self.other_team)
+
+    def test_cannot_reassign_to_a_team_actor_does_not_belong_to(self):
+        incident = self.make_team_only_incident()
+
+        with self.assertRaises(IncidentPermissionError):
+            reassign_incident_team(actor=self.member, incident=incident, team=Team.objects.create(name="Équipe fermée"))
+
+    def test_cannot_reassign_incident_already_attached_to_a_project(self):
+        incident = self.make_incident()
+
+        with self.assertRaises(IncidentValidationError):
+            reassign_incident_team(actor=self.member, incident=incident, team=self.other_team)
 
 
 class StartIncidentTests(IncidentServicesTestCase):
