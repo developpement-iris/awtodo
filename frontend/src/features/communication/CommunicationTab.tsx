@@ -1,50 +1,65 @@
-import { Archive, CheckCircle2, Clock, Mail, MessagesSquare, Plug, Send, XCircle } from "lucide-react";
+import { Archive, ChevronDown, MessagesSquare, Plus, Send, Trash2, CheckCircle2, Clock, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   archiveProjectCommunicationChannel,
   composeProjectCommunicationMessage,
   createProjectCommunicationChannel,
-  getO365Connection,
+  getIncidents,
   getProjectCommunicationChannels,
   getProjectCommunicationMessages,
-  updateO365Connection,
+  getTasks,
 } from "../../api/client";
 import { Checkbox } from "../../components/Checkbox";
 import { Combobox } from "../../components/Combobox";
 import { Skeleton } from "../../components/Skeleton";
 import { StatusBadge } from "../../components/StatusBadge";
-import { useCurrentUser } from "../../context/CurrentUserContext";
 import { useToast } from "../../context/ToastContext";
-import type { CommunicationChannel, CommunicationChannelType, CommunicationMessage, O365Connection, Project } from "../../types/watodo";
+import type {
+  CommunicationChannel,
+  CommunicationDelivery,
+  CommunicationMessage,
+  CommunicationPayloadTemplate,
+  Incident,
+  Project,
+  Task,
+} from "../../types/watodo";
+import { PAYLOAD_FIELD_CATALOG, placeholderFor } from "./payloadFields";
 import "./CommunicationTab.css";
 
 interface CommunicationTabProps {
   project: Project;
 }
 
-const CHANNEL_TYPE_OPTIONS: { value: CommunicationChannelType; label: string }[] = [
-  { value: "email", label: "Adresse mail" },
-  { value: "teams", label: "Canal Teams" },
-];
-
-const MESSAGE_STATUS_ICON: Record<CommunicationMessage["status"], typeof Clock> = {
+const STATUS_ICON: Record<CommunicationMessage["status"], typeof Clock> = {
   en_attente: Clock,
   envoye: CheckCircle2,
   echec: XCircle,
 };
 
+const STATUS_TONE: Record<CommunicationMessage["status"], "neutral" | "positive" | "priorityCritique"> = {
+  en_attente: "neutral",
+  envoye: "positive",
+  echec: "priorityCritique",
+};
+
+const FIELD_OPTIONS = Object.entries(PAYLOAD_FIELD_CATALOG).flatMap(([namespace, fields]) =>
+  fields.map((field) => ({ value: `${namespace}.${field}`, label: `${namespace} → ${field}` })),
+);
+
 function displayName(user: { first_name: string; last_name: string; username: string }): string {
   return `${user.first_name} ${user.last_name}`.trim() || user.username;
 }
 
+interface TemplateRow {
+  key: string;
+  value: string;
+}
+
 export function CommunicationTab({ project }: CommunicationTabProps) {
-  const { currentUser } = useCurrentUser();
   const { showToast } = useToast();
   const canManage = project.permissions.can_manage_project_communication;
   const canSend = project.permissions.can_send_project_communication;
-  const isOrgAdmin = Boolean(currentUser?.is_platform_admin || currentUser?.organisation_role === "admin");
 
-  const [connection, setConnection] = useState<O365Connection | null>(null);
   const [channels, setChannels] = useState<CommunicationChannel[] | null>(null);
   const [messages, setMessages] = useState<CommunicationMessage[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -52,45 +67,6 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
 
   function reload() {
     setReloadKey((k) => k + 1);
-  }
-
-  useEffect(() => {
-    getO365Connection()
-      .then(setConnection)
-      .catch(() => undefined);
-  }, [reloadKey]);
-
-  // --- Boîte expéditrice (admin d'organisation) --------------------------
-  // Rattachée au même O365Connection organisation-scoped que la connexion
-  // Graph elle-même (voir Administration > Intégrations pour tenant/client/
-  // secret) — champ affiché/édité ici plutôt que là-bas car c'est la seule
-  // donnée de la connexion qui varie d'un usage à l'autre (remonté
-  // directement). ⚠️ Limite assumée : le modèle ne porte qu'une seule
-  // valeur pour toute l'organisation, pas encore une par projet — une vraie
-  // boîte par projet nécessiterait sa propre autorisation d'envoi (permission
-  // "Send As"/"Send on Behalf" par boîte), en attente, chantier Communication
-  // plus large, non traité ici.
-  const [senderEditing, setSenderEditing] = useState(false);
-  const [senderMailbox, setSenderMailbox] = useState("");
-  const [senderBusy, setSenderBusy] = useState(false);
-
-  function startSenderEdit() {
-    setSenderMailbox(connection?.sender_mailbox ?? "");
-    setSenderEditing(true);
-  }
-
-  async function handleSaveSender() {
-    setSenderBusy(true);
-    setError(null);
-    try {
-      setConnection(await updateO365Connection({ sender_mailbox: senderMailbox.trim() }));
-      setSenderEditing(false);
-      showToast("Boîte expéditrice mise à jour.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec de la mise à jour.");
-    } finally {
-      setSenderBusy(false);
-    }
   }
 
   useEffect(() => {
@@ -104,28 +80,64 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
 
   const activeChannels = useMemo(() => (channels ?? []).filter((c) => c.status === "active"), [channels]);
 
-  // --- Canaux --------------------------------------------------------
-  const [channelType, setChannelType] = useState<CommunicationChannelType>("email");
+  // --- Canaux Teams ----------------------------------------------------
   const [channelLabel, setChannelLabel] = useState("");
-  const [channelTarget, setChannelTarget] = useState("");
+  const [channelId, setChannelId] = useState("");
+  const [channelName, setChannelName] = useState("");
+  const [channelWebhook, setChannelWebhook] = useState("");
   const [channelNotifyIncident, setChannelNotifyIncident] = useState(false);
   const [channelBusy, setChannelBusy] = useState(false);
 
+  // Gabarit de payload personnalisable (session du 2026-09-28) — vide par
+  // défaut, le backend applique alors le payload standard (sujet/corps/…).
+  const [templateOpen, setTemplateOpen] = useState(false);
+  const [templateRows, setTemplateRows] = useState<TemplateRow[]>([]);
+
+  function addTemplateRow() {
+    setTemplateRows((rows) => [...rows, { key: "", value: "" }]);
+  }
+
+  function updateTemplateRow(index: number, patch: Partial<TemplateRow>) {
+    setTemplateRows((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  }
+
+  function removeTemplateRow(index: number) {
+    setTemplateRows((rows) => rows.filter((_, i) => i !== index));
+  }
+
+  function insertFieldIntoRow(index: number, fieldPath: string) {
+    if (!fieldPath) return;
+    const [namespace, field] = fieldPath.split(".");
+    updateTemplateRow(index, { value: templateRows[index].value + placeholderFor(namespace, field) });
+  }
+
+  const canCreateChannel =
+    channelLabel.trim() && channelId.trim() && channelName.trim() && channelWebhook.trim();
+
   async function handleCreateChannel() {
-    if (!channelLabel.trim() || !channelTarget.trim()) return;
+    if (!canCreateChannel) return;
     setChannelBusy(true);
     setError(null);
     try {
+      const payload_template: CommunicationPayloadTemplate = {};
+      for (const row of templateRows) {
+        if (row.key.trim()) payload_template[row.key.trim()] = row.value;
+      }
       await createProjectCommunicationChannel(project.id, {
-        channel_type: channelType,
         label: channelLabel.trim(),
-        email: channelType === "email" ? channelTarget.trim() : undefined,
-        teams_webhook_url: channelType === "teams" ? channelTarget.trim() : undefined,
+        teams_channel_id: channelId.trim(),
+        teams_channel_name: channelName.trim(),
+        teams_webhook_url: channelWebhook.trim(),
+        payload_template,
         notify_incident_created: channelNotifyIncident,
       });
       setChannelLabel("");
-      setChannelTarget("");
+      setChannelId("");
+      setChannelName("");
+      setChannelWebhook("");
       setChannelNotifyIncident(false);
+      setTemplateRows([]);
+      setTemplateOpen(false);
       reload();
       showToast("Canal ajouté.");
     } catch (err) {
@@ -151,6 +163,19 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
   const [selectedChannelIds, setSelectedChannelIds] = useState<Set<string>>(new Set());
   const [composeBusy, setComposeBusy] = useState(false);
 
+  // Tâche/incident du projet à joindre (optionnel) — rend leurs champs
+  // disponibles au gabarit de payload d'un canal (`{{task.*}}`/`{{incident.*}}`).
+  const [projectTasks, setProjectTasks] = useState<Task[]>([]);
+  const [projectIncidents, setProjectIncidents] = useState<Incident[]>([]);
+  const [attachedTaskId, setAttachedTaskId] = useState("");
+  const [attachedIncidentId, setAttachedIncidentId] = useState("");
+
+  useEffect(() => {
+    if (!canSend) return;
+    getTasks({ project: project.id }).then(setProjectTasks).catch(() => setProjectTasks([]));
+    getIncidents({ project: project.id }).then(setProjectIncidents).catch(() => setProjectIncidents([]));
+  }, [canSend, project.id]);
+
   function toggleChannelSelection(id: string) {
     setSelectedChannelIds((current) => {
       const next = new Set(current);
@@ -165,18 +190,29 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
     setComposeBusy(true);
     setError(null);
     try {
-      await composeProjectCommunicationMessage(project.id, {
+      const message = await composeProjectCommunicationMessage(project.id, {
         subject: subject.trim(),
         body: body.trim(),
         channel_ids: [...selectedChannelIds],
+        task_id: attachedTaskId || undefined,
+        incident_id: attachedIncidentId || undefined,
       });
       setSubject("");
       setBody("");
       setSelectedChannelIds(new Set());
+      setAttachedTaskId("");
+      setAttachedIncidentId("");
       reload();
-      showToast("Message enregistré — l'envoi réel sera activé après le déploiement.");
+      if (message.status === "envoye") {
+        showToast("Message envoyé.");
+      } else if (message.status === "echec") {
+        const failed = message.deliveries.filter((d) => d.status === "echec").map((d) => d.channel_label);
+        showToast(`Échec de l'envoi vers : ${failed.join(", ") || "un ou plusieurs canaux"}.`);
+      } else {
+        showToast("Message enregistré.");
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "L'enregistrement a échoué.");
+      setError(err instanceof Error ? err.message : "L'envoi a échoué.");
     } finally {
       setComposeBusy(false);
     }
@@ -185,84 +221,18 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
   return (
     <div className="communication-tab">
       <p className="communication-tab__intro">
-        Communiquez autour de ce projet par mail ou vers un canal Teams. Cette connexion Office 365 est aussi
-        celle utilisée par la synchronisation Outlook du planning (voir « Mon planning »). L'envoi de mails et
-        de messages Teams reste en attente ici, câblage prévu au déploiement.
+        Communiquez autour de ce projet vers un ou plusieurs canaux Teams, via un flow Power Automate déclenché
+        sur l'URL du canal.
       </p>
 
       {error && <p className="communication-tab__error">{error}</p>}
-
-      {/* --- Connexion Office 365 (lecture seule — configuration dans
-          Administration > Intégrations, réservée à un admin d'organisation) */}
-      <section className="communication-tab__section communication-tab__section--compact">
-        <div className="communication-tab__section-header">
-          <h3>
-            <Plug size={16} strokeWidth={1.75} aria-hidden="true" />
-            Connexion Office 365
-          </h3>
-          {connection && (
-            <StatusBadge
-              label={connection.is_configured ? "Configurée" : "Non configurée"}
-              tone={connection.is_configured ? "positive" : "neutral"}
-            />
-          )}
-        </div>
-        {!connection && (
-          <div className="communication-tab__skeleton">
-            <Skeleton height="16px" />
-          </div>
-        )}
-        {connection && (
-          <>
-            <p className="communication-tab__hint">
-              Identifiants Microsoft Graph gérés depuis Administration &gt; Intégrations (réservé à un
-              administrateur d'organisation). La boîte expéditrice ci-dessous se configure ici, par projet.
-            </p>
-            <div className="communication-tab__sender-row">
-              <span className="communication-tab__sender-label">Boîte expéditrice</span>
-              {!senderEditing && (
-                <>
-                  <span className="communication-tab__sender-value">{connection.sender_mailbox || "—"}</span>
-                  {isOrgAdmin && (
-                    <button type="button" className="communication-tab__btn" onClick={startSenderEdit}>
-                      Modifier
-                    </button>
-                  )}
-                </>
-              )}
-              {senderEditing && (
-                <>
-                  <input
-                    type="email"
-                    className="communication-tab__sender-input"
-                    value={senderMailbox}
-                    onChange={(e) => setSenderMailbox(e.target.value)}
-                    placeholder="equipe@reparstores.com"
-                  />
-                  <button type="button" className="communication-tab__btn" onClick={() => setSenderEditing(false)} disabled={senderBusy}>
-                    Annuler
-                  </button>
-                  <button
-                    type="button"
-                    className="communication-tab__btn communication-tab__btn--primary"
-                    onClick={handleSaveSender}
-                    disabled={senderBusy}
-                  >
-                    Enregistrer
-                  </button>
-                </>
-              )}
-            </div>
-          </>
-        )}
-      </section>
 
       {/* --- Canaux ---------------------------------------------------- */}
       <section className="communication-tab__section">
         <div className="communication-tab__section-header">
           <h3>
             <MessagesSquare size={16} strokeWidth={1.75} aria-hidden="true" />
-            Canaux du projet
+            Canaux Teams du projet
           </h3>
         </div>
 
@@ -277,17 +247,17 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
           <ul className="communication-tab__channel-list">
             {activeChannels.map((channel) => (
               <li key={channel.id} className="communication-tab__channel">
-                {channel.channel_type === "email" ? (
-                  <Mail size={15} strokeWidth={1.75} aria-hidden="true" />
-                ) : (
-                  <MessagesSquare size={15} strokeWidth={1.75} aria-hidden="true" />
-                )}
+                <MessagesSquare size={15} strokeWidth={1.75} aria-hidden="true" />
                 <div className="communication-tab__channel-info">
                   <span className="communication-tab__channel-label">{channel.label}</span>
                   <span className="communication-tab__channel-target">
-                    {channel.channel_type === "email" ? channel.email : channel.teams_webhook_url || "Webhook non renseigné"}
+                    {channel.teams_channel_name || "Canal non renseigné"}
+                    {channel.teams_channel_id ? ` · ${channel.teams_channel_id}` : ""}
                   </span>
                 </div>
+                {Object.keys(channel.payload_template ?? {}).length > 0 && (
+                  <StatusBadge label="Payload personnalisé" tone="neutral" />
+                )}
                 {channel.notify_incident_created && (
                   <StatusBadge label="Auto à la création d'incident" tone="neutral" />
                 )}
@@ -311,45 +281,113 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
           <div className="communication-tab__form">
             <div className="communication-tab__form-row">
               <label className="communication-tab__field">
-                <span>Type</span>
-                <Combobox
-                  options={CHANNEL_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-                  value={channelType}
-                  onChange={(v) => {
-                    setChannelType(v as CommunicationChannelType);
-                    setChannelTarget("");
-                  }}
-                  clearable={false}
-                />
-              </label>
-              <label className="communication-tab__field">
                 <span>Libellé</span>
                 <input
                   value={channelLabel}
                   onChange={(e) => setChannelLabel(e.target.value)}
-                  placeholder={channelType === "email" ? "Ex. Support client" : "Ex. #suivi-projet"}
+                  placeholder="Ex. #suivi-projet"
+                />
+              </label>
+              <label className="communication-tab__field">
+                <span>Nom du canal Teams</span>
+                <input
+                  value={channelName}
+                  onChange={(e) => setChannelName(e.target.value)}
+                  placeholder="Ex. Suivi projet"
                 />
               </label>
             </div>
             <label className="communication-tab__field">
-              <span>{channelType === "email" ? "Adresse mail" : "URL du flux Power Automate"}</span>
+              <span>ID du canal Teams</span>
               <input
-                type={channelType === "email" ? "email" : "url"}
-                value={channelTarget}
-                onChange={(e) => setChannelTarget(e.target.value)}
-                placeholder={channelType === "email" ? "equipe@reparstores.com" : "https://prod-00.westeurope.logic.azure.com/…"}
+                value={channelId}
+                onChange={(e) => setChannelId(e.target.value)}
+                placeholder="19:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx@thread.tacv2"
+              />
+            </label>
+            <label className="communication-tab__field">
+              <span>URL du flux Power Automate</span>
+              <input
+                type="url"
+                value={channelWebhook}
+                onChange={(e) => setChannelWebhook(e.target.value)}
+                placeholder="https://prod-00.westeurope.logic.azure.com/…"
               />
             </label>
             <label className="communication-tab__switch-row">
               <Checkbox checked={channelNotifyIncident} onCheckedChange={setChannelNotifyIncident} aria-label="Notifier à la création d'un incident" />
               <span>Notifier automatiquement ce canal à la création d'un incident sur ce projet</span>
             </label>
+
+            <div className="communication-tab__template">
+              <button
+                type="button"
+                className="communication-tab__disclosure"
+                onClick={() => setTemplateOpen((v) => !v)}
+                aria-expanded={templateOpen}
+              >
+                <ChevronDown
+                  size={13}
+                  strokeWidth={1.75}
+                  aria-hidden="true"
+                  className={templateOpen ? "communication-tab__disclosure-icon communication-tab__disclosure-icon--open" : "communication-tab__disclosure-icon"}
+                />
+                Personnaliser le payload envoyé au flow (optionnel)
+              </button>
+              {templateOpen && (
+                <div className="communication-tab__template-body">
+                  <p className="communication-tab__hint">
+                    Par défaut, le canal reçoit un payload standard (sujet, corps, projet…). Définissez vos
+                    propres clés ci-dessous pour le remplacer entièrement — insérez un champ Awtodo ou tapez une
+                    valeur fixe pour votre propre automatisation.
+                  </p>
+                  <div className="communication-tab__template-rows">
+                    {templateRows.map((row, index) => (
+                      <div key={index} className="communication-tab__template-row">
+                        <input
+                          className="communication-tab__template-key"
+                          value={row.key}
+                          onChange={(e) => updateTemplateRow(index, { key: e.target.value })}
+                          placeholder="clé JSON"
+                        />
+                        <input
+                          className="communication-tab__template-value"
+                          value={row.value}
+                          onChange={(e) => updateTemplateRow(index, { value: e.target.value })}
+                          placeholder="valeur, ou {{message.subject}}"
+                        />
+                        <Combobox
+                          options={FIELD_OPTIONS}
+                          value=""
+                          onChange={(v) => insertFieldIntoRow(index, v)}
+                          placeholder="+ champ"
+                          clearable={false}
+                        />
+                        <button
+                          type="button"
+                          className="communication-tab__icon-btn"
+                          onClick={() => removeTemplateRow(index)}
+                          aria-label="Retirer ce champ"
+                        >
+                          <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <button type="button" className="communication-tab__btn" onClick={addTemplateRow}>
+                    <Plus size={13} strokeWidth={1.75} aria-hidden="true" />
+                    Ajouter un champ
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div className="communication-tab__form-footer">
               <button
                 type="button"
                 className="communication-tab__btn communication-tab__btn--primary"
                 onClick={handleCreateChannel}
-                disabled={channelBusy || !channelLabel.trim() || !channelTarget.trim()}
+                disabled={channelBusy || !canCreateChannel}
               >
                 Ajouter le canal
               </button>
@@ -377,6 +415,28 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
               <span>Message</span>
               <textarea rows={4} value={body} onChange={(e) => setBody(e.target.value)} />
             </label>
+            <div className="communication-tab__form-row">
+              <label className="communication-tab__field">
+                <span>Tâche liée (optionnel)</span>
+                <Combobox
+                  options={projectTasks.map((t) => ({ value: t.id, label: t.title }))}
+                  value={attachedTaskId}
+                  onChange={setAttachedTaskId}
+                  placeholder="Aucune"
+                  clearable
+                />
+              </label>
+              <label className="communication-tab__field">
+                <span>Incident lié (optionnel)</span>
+                <Combobox
+                  options={projectIncidents.map((i) => ({ value: i.id, label: i.title }))}
+                  value={attachedIncidentId}
+                  onChange={setAttachedIncidentId}
+                  placeholder="Aucun"
+                  clearable
+                />
+              </label>
+            </div>
             <div className="communication-tab__field">
               <span>Destinataires</span>
               {activeChannels.length === 0 && (
@@ -419,21 +479,42 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
         {messages !== null && (
           <ul className="communication-tab__message-list">
             {messages.map((message) => {
-              const Icon = MESSAGE_STATUS_ICON[message.status];
+              const Icon = STATUS_ICON[message.status];
               return (
                 <li key={message.id} className="communication-tab__message">
                   <div className="communication-tab__message-header">
                     <span className="communication-tab__message-subject">{message.subject}</span>
-                    <StatusBadge label={message.status_display} tone="neutral" icon={Icon} />
+                    <StatusBadge label={message.status_display} tone={STATUS_TONE[message.status]} icon={Icon} />
                   </div>
                   <p className="communication-tab__message-body">{message.body}</p>
                   <div className="communication-tab__message-meta">
                     <span>
                       {message.trigger_display}
                       {message.created_by && ` · ${displayName(message.created_by)}`}
+                      {message.task_title && ` · tâche : ${message.task_title}`}
+                      {message.incident_title && ` · incident : ${message.incident_title}`}
                     </span>
-                    <span>{message.channels.map((c) => c.label).join(", ") || "Aucun destinataire"}</span>
                   </div>
+                  <ul className="communication-tab__delivery-list">
+                    {message.deliveries.map((delivery: CommunicationDelivery) => {
+                      const DeliveryIcon = STATUS_ICON[delivery.status];
+                      return (
+                        <li key={delivery.id} className="communication-tab__delivery">
+                          <StatusBadge
+                            label={`${delivery.channel_label} · ${delivery.status_display}`}
+                            tone={STATUS_TONE[delivery.status]}
+                            icon={DeliveryIcon}
+                          />
+                          {delivery.status === "echec" && delivery.response_detail && (
+                            <span className="communication-tab__delivery-detail">{delivery.response_detail}</span>
+                          )}
+                        </li>
+                      );
+                    })}
+                    {message.deliveries.length === 0 && (
+                      <li className="communication-tab__empty">Aucun destinataire</li>
+                    )}
+                  </ul>
                 </li>
               );
             })}

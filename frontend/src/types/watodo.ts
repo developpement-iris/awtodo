@@ -29,17 +29,40 @@ export interface Me extends User {
    * 2026-09-22/23) — câblée réellement (événements, participants,
    * créneaux, occurrences uniques). */
   outlook_calendar_sync_enabled: boolean;
-  /** Couleur d'accent de l'interface, par utilisateur (session du
-   * 2026-09-23, écran Réglages) — vide = habillage Awtodo par défaut. */
-  accent_color: string;
+  /** Capacités effectives via profils de droits personnalisés (session du
+   * 2026-09-28) — additives à `organisation_role`/`is_platform_admin`, pas
+   * un remplacement. Combiner avec `isOrgAdmin` pour la visibilité d'un
+   * écran d'administration (ex. `isOrgAdmin || capabilities.includes("manage_integrations")`). */
+  capabilities: PermissionCapabilityKey[];
+}
+
+// Profils de droits personnalisés, portée organisation (session du
+// 2026-09-28) — couche additive aux rôles existants (organisation_role,
+// ProjectMembership, TeamMembership), jamais un remplacement. Seul un admin
+// d'organisation peut créer/modifier/assigner un profil.
+export type PermissionCapabilityKey = "manage_members" | "manage_branding" | "manage_integrations";
+
+export interface PermissionProfile {
+  id: string;
+  name: string;
+  capabilities: PermissionCapabilityKey[];
+  status: "active" | "archived";
+  assigned_users: { id: string; username: string; first_name: string; last_name: string }[];
+}
+
+// Couleurs de marque de l'organisation (session du 2026-09-28, Administration
+// > Marque) — remplace l'ancienne préférence d'accent par utilisateur. Vide =
+// habillage Awtodo par défaut. Voir frontend/src/theme/brandColors.ts.
+export interface OrganisationBranding {
+  brand_primary_color: string;
+  brand_secondary_color: string;
 }
 
 // Connexion par mot de passe — voir docs/organisation-et-comptes.md >
 // "Comptes et invitations" > authentification, session du 2026-08-06.
 // `user` est en réalité un `Me` (LoginView renvoie `MeSerializer(user).data`,
 // même chose que `GET /accounts/me/`) — typé comme tel depuis la session du
-// 2026-09-23 pour que `CurrentUserContext.currentUser` porte `accent_color`
-// sans caster.
+// 2026-09-23.
 export interface LoginResponse {
   access: string;
   refresh: string;
@@ -132,14 +155,14 @@ export interface ProjectPermissions {
 }
 
 // --- Communication de projet (onglet hub) --------------------------------
-// Voir docs/modeles-et-api.md > "Module Communication". Câblage d'envoi
-// (Microsoft Graph / Power Automate) reporté au déploiement AWS.
+// Voir docs/modeles-et-api.md > "Module Communication". Canaux Teams
+// uniquement (mail abandonné, session du 2026-09-28) — envoi réel via un
+// flow Power Automate déclenché sur `teams_webhook_url`.
 
 export interface O365Connection {
   tenant_id: string;
   client_id: string;
   has_client_secret: boolean;
-  sender_mailbox: string;
   is_enabled: boolean;
   is_configured: boolean;
 }
@@ -161,17 +184,30 @@ export interface ApiKeyCreated extends ApiKey {
   key: string;
 }
 
-export type CommunicationChannelType = "email" | "teams";
+// Gabarit de payload personnalisable (session du 2026-09-28) — objet plat
+// {clé: "{{espace.champ}}" | valeur littérale}, résolu côté backend
+// (apps.communication.payload). Vide = payload par défaut.
+export type CommunicationPayloadTemplate = Record<string, string | number | boolean>;
 
 export interface CommunicationChannel {
   id: string;
-  channel_type: CommunicationChannelType;
-  channel_type_display: string;
   label: string;
-  email: string;
+  teams_channel_id: string;
+  teams_channel_name: string;
   teams_webhook_url: string;
+  payload_template: CommunicationPayloadTemplate;
   notify_incident_created: boolean;
   status: "active" | "archived";
+}
+
+export interface CommunicationDelivery {
+  id: string;
+  channel: string;
+  channel_label: string;
+  status: "en_attente" | "envoye" | "echec";
+  status_display: string;
+  response_detail: string;
+  responded_at: string | null;
 }
 
 export interface CommunicationMessage {
@@ -183,8 +219,11 @@ export interface CommunicationMessage {
   status: "en_attente" | "envoye" | "echec";
   status_display: string;
   created_by: User | null;
-  channels: CommunicationChannel[];
+  deliveries: CommunicationDelivery[];
+  task: string | null;
+  task_title: string | null;
   incident: string | null;
+  incident_title: string | null;
   created_at: string;
   sent_at: string | null;
 }

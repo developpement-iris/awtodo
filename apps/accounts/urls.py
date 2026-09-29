@@ -2,16 +2,17 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
-    AppearancePreferencesView,
     ChangePasswordView,
     InvitationViewSet,
     LoginView,
     MeView,
     NotificationPreferencesView,
+    OrganisationBrandingView,
     OrganisationViewSet,
     PasswordResetConfirmView,
     PasswordResetRequestView,
     PasswordResetTokenView,
+    PermissionProfileViewSet,
     PlanningPreferencesView,
     TeamViewSet,
     UserViewSet,
@@ -22,14 +23,15 @@ router.register("users", UserViewSet, basename="user")
 router.register("teams", TeamViewSet, basename="team")
 router.register("organisations", OrganisationViewSet, basename="organisation")
 router.register("invitations", InvitationViewSet, basename="invitation")
+router.register("permission-profiles", PermissionProfileViewSet, basename="permission-profile")
 
 urlpatterns = router.urls + [
     path("login/", LoginView.as_view(), name="login"),
     path("me/", MeView.as_view(), name="me"),
     path("me/change-password/", ChangePasswordView.as_view(), name="change-password"),
     path("me/notification-preferences/", NotificationPreferencesView.as_view(), name="notification-preferences"),
-    path("me/appearance-preferences/", AppearancePreferencesView.as_view(), name="appearance-preferences"),
     path("me/planning-preferences/", PlanningPreferencesView.as_view(), name="planning-preferences"),
+    path("organisation/branding/", OrganisationBrandingView.as_view(), name="organisation-branding"),
     # `<uuid:token>` plutôt qu'un ViewSet routé : évite toute ambiguïté avec
     # `password-reset/request/` (un routeur DRF classique sur `token` capture
     # n'importe quel segment, y compris littéralement "request").

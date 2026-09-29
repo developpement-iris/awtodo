@@ -11,7 +11,17 @@ from django.db.models import Q
 from django.utils import timezone
 from django.utils.html import escape
 
-from .models import PASSWORD_RESET_TOKEN_LIFETIME, Invitation, Organisation, PasswordResetRequest, Team, TeamMembership, User
+from .models import (
+    PASSWORD_RESET_TOKEN_LIFETIME,
+    PERMISSION_CAPABILITY_KEYS,
+    Invitation,
+    Organisation,
+    PasswordResetRequest,
+    PermissionProfile,
+    Team,
+    TeamMembership,
+    User,
+)
 from .signals import outlook_calendar_sync_enabled_activated
 
 
@@ -233,6 +243,94 @@ def is_organisation_admin(user, organisation=None):
     return organisation is None or user.organisation_id == getattr(organisation, "id", organisation)
 
 
+def has_capability(user, capability_key, organisation=None):
+    """Vrai si `user` détient `capability_key` via un `PermissionProfile`
+    actif — **additif** à `is_organisation_admin`, jamais un remplacement :
+    chaque appelant doit tester `is_organisation_admin(...) or
+    has_capability(..., "clé_précise")`, jamais l'un sans l'autre (un profil
+    n'accorde QUE la capacité demandée, pas le statut d'admin complet). Un
+    admin de plateforme a toujours toutes les capacités, cohérent avec
+    `is_organisation_admin`."""
+    if user is None or not getattr(user, "is_authenticated", False):
+        return False
+    if getattr(user, "is_platform_admin", False):
+        return True
+    org = organisation or getattr(user, "organisation", None)
+    if org is None:
+        return False
+    org_id = getattr(org, "id", org)
+    return any(
+        capability_key in profile.capabilities
+        for profile in user.permission_profiles.filter(organisation_id=org_id, status="active")
+    )
+
+
+# --- Profils de droits personnalisés (portée organisation) --------------
+
+
+def list_permission_profiles(organisation):
+    return PermissionProfile.objects.filter(organisation=organisation)
+
+
+def _validate_capabilities(capabilities):
+    invalid = set(capabilities) - PERMISSION_CAPABILITY_KEYS
+    if invalid:
+        raise AccountValidationError(f"Capacités inconnues : {', '.join(sorted(invalid))}.")
+
+
+def create_permission_profile(*, actor, organisation, name, capabilities):
+    if not is_organisation_admin(actor, organisation):
+        raise AccountPermissionError("Seul un administrateur de l'organisation peut créer un profil de droits.")
+    if not name or not name.strip():
+        raise AccountValidationError("Le nom du profil est obligatoire.")
+    capabilities = list(capabilities or [])
+    _validate_capabilities(capabilities)
+    return PermissionProfile.objects.create(organisation=organisation, name=name.strip(), capabilities=capabilities)
+
+
+def update_permission_profile(*, actor, profile, name=None, capabilities=None):
+    if not is_organisation_admin(actor, profile.organisation):
+        raise AccountPermissionError("Seul un administrateur de l'organisation peut modifier un profil de droits.")
+    changed = []
+    if name is not None:
+        if not name.strip():
+            raise AccountValidationError("Le nom du profil est obligatoire.")
+        profile.name = name.strip()
+        changed.append("name")
+    if capabilities is not None:
+        capabilities = list(capabilities)
+        _validate_capabilities(capabilities)
+        profile.capabilities = capabilities
+        changed.append("capabilities")
+    if changed:
+        profile.save(update_fields=[*changed, "updated_at"])
+    return profile
+
+
+def archive_permission_profile(*, actor, profile):
+    if not is_organisation_admin(actor, profile.organisation):
+        raise AccountPermissionError("Seul un administrateur de l'organisation peut archiver un profil de droits.")
+    profile.status = "archived"
+    profile.save(update_fields=["status", "updated_at"])
+    return profile
+
+
+def assign_permission_profile(*, actor, profile, target_user):
+    if not is_organisation_admin(actor, profile.organisation):
+        raise AccountPermissionError("Seul un administrateur de l'organisation peut assigner un profil de droits.")
+    if target_user.organisation_id != profile.organisation_id:
+        raise AccountValidationError("Cet utilisateur n'appartient pas à l'organisation de ce profil.")
+    target_user.permission_profiles.add(profile)
+    return target_user
+
+
+def unassign_permission_profile(*, actor, profile, target_user):
+    if not is_organisation_admin(actor, profile.organisation):
+        raise AccountPermissionError("Seul un administrateur de l'organisation peut retirer un profil de droits.")
+    target_user.permission_profiles.remove(profile)
+    return target_user
+
+
 def deactivate_account(*, actor, target_user):
     """Coupe l'accès d'un compte de l'organisation (session du 2026-09-16) —
     réversible (`reactivate_account`), aucune donnée touchée (tâches,
@@ -246,7 +344,10 @@ def deactivate_account(*, actor, target_user):
     lui, ne s'appuie plus sur ce champ) — sans lui, une session déjà ouverte
     ne serait coupée qu'à l'expiration du token (jusqu'à 8h, voir
     `SIMPLE_JWT`), pas immédiatement."""
-    if not is_organisation_admin(actor, target_user.organisation):
+    if not (
+        is_organisation_admin(actor, target_user.organisation)
+        or has_capability(actor, "manage_members", target_user.organisation)
+    ):
         raise AccountPermissionError("Seul un administrateur d'organisation peut désactiver un compte.")
     if target_user.id == actor.id:
         raise AccountValidationError("Vous ne pouvez pas désactiver votre propre compte.")
@@ -260,7 +361,10 @@ def deactivate_account(*, actor, target_user):
 
 
 def reactivate_account(*, actor, target_user):
-    if not is_organisation_admin(actor, target_user.organisation):
+    if not (
+        is_organisation_admin(actor, target_user.organisation)
+        or has_capability(actor, "manage_members", target_user.organisation)
+    ):
         raise AccountPermissionError("Seul un administrateur d'organisation peut réactiver un compte.")
     if target_user.account_status != "desactive":
         raise AccountValidationError("Seul un compte désactivé peut être réactivé.")
@@ -295,14 +399,25 @@ def update_notification_preferences(*, actor, email_notifications_enabled):
     return actor
 
 
-def update_appearance_preferences(*, actor, accent_color):
-    """`accent_color=""` réinitialise à l'habillage Awtodo par défaut —
-    valeur valide, pas un champ "non fourni" (écran Réglages, bouton
-    "Par défaut", session du 2026-09-23)."""
-    _require_actor(actor)
-    actor.accent_color = accent_color
-    actor.save(update_fields=["accent_color"])
-    return actor
+def update_organisation_branding(*, actor, organisation, primary_color=None, secondary_color=None):
+    """Couleurs de marque de l'organisation (session du 2026-09-28,
+    remplace l'ancienne préférence d'accent par utilisateur) — chaîne vide
+    réinitialise ce champ précis à l'habillage Awtodo par défaut, `None`
+    (absent du payload) le laisse inchangé."""
+    if not (is_organisation_admin(actor, organisation) or has_capability(actor, "manage_branding", organisation)):
+        raise AccountPermissionError(
+            "Seul un administrateur de l'organisation peut modifier la couleur de marque."
+        )
+    changed = []
+    if primary_color is not None:
+        organisation.brand_primary_color = primary_color
+        changed.append("brand_primary_color")
+    if secondary_color is not None:
+        organisation.brand_secondary_color = secondary_color
+        changed.append("brand_secondary_color")
+    if changed:
+        organisation.save(update_fields=changed)
+    return organisation
 
 
 def update_planning_preferences(*, actor, planning_color=None, outlook_calendar_sync_enabled=None):

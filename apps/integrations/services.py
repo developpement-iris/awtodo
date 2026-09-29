@@ -4,7 +4,7 @@ import secrets
 from django.utils import timezone
 
 from apps.accounts.models import User
-from apps.accounts.services import is_organisation_admin
+from apps.accounts.services import has_capability, is_organisation_admin
 
 from .models import ApiKey
 
@@ -18,7 +18,7 @@ class IntegrationValidationError(Exception):
 
 
 def _ensure_can_manage_api_keys(actor, organisation):
-    if not is_organisation_admin(actor, organisation):
+    if not (is_organisation_admin(actor, organisation) or has_capability(actor, "manage_integrations", organisation)):
         raise IntegrationPermissionError("Seul un administrateur de l'organisation peut gérer les clés API.")
 
 

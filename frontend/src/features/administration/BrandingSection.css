@@ -1,0 +1,108 @@
+.branding-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  max-width: 640px;
+}
+
+.branding-section__intro {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--color-text-muted);
+}
+
+.branding-section__error {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--tone-error-text) 12%, transparent);
+  color: var(--tone-error-text);
+  font-size: 0.85rem;
+}
+
+.branding-section__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.branding-section__header h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  color: var(--color-text);
+}
+
+.branding-section__header h3 svg {
+  color: var(--color-text-muted);
+}
+
+.branding-section__rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.branding-section__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.branding-section__color-label {
+  cursor: pointer;
+}
+
+.branding-section__color-input {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  background: none;
+  flex: none;
+}
+
+.branding-section__row-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.88rem;
+  color: var(--color-text);
+}
+
+.branding-section__hint {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.branding-section__btn {
+  flex: none;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.branding-section__btn:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+.branding-section__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

@@ -8,9 +8,8 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import Invitation, Organisation, PasswordResetRequest, Team, User
+from .models import Invitation, Organisation, PasswordResetRequest, PermissionProfile, Team, User
 from .serializers import (
-    AppearancePreferencesSerializer,
     ChangePasswordSerializer,
     InvitationAcceptSerializer,
     InvitationCreateSerializer,
@@ -18,12 +17,18 @@ from .serializers import (
     LoginSerializer,
     MeSerializer,
     NotificationPreferencesSerializer,
+    OrganisationBrandingSerializer,
+    OrganisationBrandingUpdateSerializer,
     OrganisationCreateSerializer,
     OrganisationRoleUpdateSerializer,
     OrganisationSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
     PasswordResetTokenSerializer,
+    PermissionProfileAssignSerializer,
+    PermissionProfileCreateSerializer,
+    PermissionProfileSerializer,
+    PermissionProfileUpdateSerializer,
     PlanningPreferencesSerializer,
     TeamCreateSerializer,
     TeamMemberRoleSerializer,
@@ -37,22 +42,28 @@ from .services import (
     AccountValidationError,
     accept_invitation,
     add_team_member,
+    archive_permission_profile,
+    assign_permission_profile,
     authenticate_user,
     change_own_password,
     change_team_member_role,
     confirm_password_reset,
     create_invitation,
     create_organisation,
+    create_permission_profile,
     create_team,
     deactivate_account,
+    list_permission_profiles,
     reactivate_account,
     remove_team_member,
     rename_team,
     request_password_reset,
     resend_invitation,
     set_organisation_role,
-    update_appearance_preferences,
+    unassign_permission_profile,
     update_notification_preferences,
+    update_organisation_branding,
+    update_permission_profile,
     update_planning_preferences,
 )
 
@@ -129,18 +140,101 @@ class NotificationPreferencesView(APIView):
         return Response(MeSerializer(updated).data)
 
 
-class AppearancePreferencesView(APIView):
-    """Écran Réglages (session du 2026-09-23) — couleur d'accent de
-    l'interface, par utilisateur. Voir `update_appearance_preferences`."""
+class OrganisationBrandingView(APIView):
+    """Couleurs de marque de l'organisation courante (session du 2026-09-28,
+    remplace l'ancienne préférence d'accent par utilisateur — écran
+    Administration > Marque). Lecture ouverte à tout utilisateur
+    authentifié (le thème doit s'appliquer avant même d'agir), écriture
+    réservée à un admin d'organisation (garde dans le service)."""
+
+    def get(self, request):
+        if not request.user or not request.user.is_authenticated:
+            return Response({"detail": "Utilisateur non identifié."}, status=401)
+        return Response(OrganisationBrandingSerializer(request.user.organisation).data)
 
     def patch(self, request):
         if not request.user or not request.user.is_authenticated:
             return Response({"detail": "Utilisateur non identifié."}, status=401)
-        serializer = AppearancePreferencesSerializer(data=request.data)
+        serializer = OrganisationBrandingUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        updated = update_appearance_preferences(actor=request.user, **serializer.validated_data)
-        return Response(MeSerializer(updated).data)
+        try:
+            organisation = update_organisation_branding(
+                actor=request.user, organisation=request.user.organisation, **serializer.validated_data
+            )
+        except AccountPermissionError as exc:
+            return Response({"detail": str(exc)}, status=403)
+        return Response(OrganisationBrandingSerializer(organisation).data)
+
+
+class PermissionProfileViewSet(viewsets.GenericViewSet):
+    """Profils de droits personnalisés (session du 2026-09-28) — portée
+    organisation, réservés à un admin d'organisation (garde dans chaque
+    fonction de service). Voir CLAUDE.md > "Roadmap macro" pour le cadrage
+    (couche additive aux rôles existants, jamais un remplacement)."""
+
+    queryset = PermissionProfile.objects.none()
+    serializer_class = PermissionProfileSerializer
+
+    def _handle(self, fn, *args, **kwargs):
+        try:
+            return fn(*args, **kwargs), None
+        except AccountPermissionError as exc:
+            return None, Response({"detail": str(exc)}, status=403)
+        except AccountValidationError as exc:
+            return None, Response({"detail": str(exc)}, status=400)
+
+    def list(self, request):
+        profiles = list_permission_profiles(request.user.organisation)
+        return Response(PermissionProfileSerializer(profiles, many=True).data)
+
+    def create(self, request):
+        serializer = PermissionProfileCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        profile, err = self._handle(
+            create_permission_profile, actor=request.user, organisation=request.user.organisation, **serializer.validated_data
+        )
+        if err:
+            return err
+        return Response(PermissionProfileSerializer(profile).data, status=201)
+
+    def partial_update(self, request, pk=None):
+        profile = get_object_or_404(PermissionProfile.all_objects, id=pk, organisation=request.user.organisation)
+        serializer = PermissionProfileUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        profile, err = self._handle(update_permission_profile, actor=request.user, profile=profile, **serializer.validated_data)
+        if err:
+            return err
+        return Response(PermissionProfileSerializer(profile).data)
+
+    def destroy(self, request, pk=None):
+        profile = get_object_or_404(PermissionProfile.all_objects, id=pk, organisation=request.user.organisation)
+        _, err = self._handle(archive_permission_profile, actor=request.user, profile=profile)
+        if err:
+            return err
+        return Response(status=204)
+
+    @action(detail=True, methods=["post"])
+    def assign(self, request, pk=None):
+        profile = get_object_or_404(PermissionProfile.all_objects, id=pk, organisation=request.user.organisation)
+        serializer = PermissionProfileAssignSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        target_user = get_object_or_404(User, id=serializer.validated_data["user_id"])
+        _, err = self._handle(assign_permission_profile, actor=request.user, profile=profile, target_user=target_user)
+        if err:
+            return err
+        return Response(PermissionProfileSerializer(profile).data)
+
+    @action(detail=True, methods=["post"])
+    def unassign(self, request, pk=None):
+        profile = get_object_or_404(PermissionProfile.all_objects, id=pk, organisation=request.user.organisation)
+        serializer = PermissionProfileAssignSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        target_user = get_object_or_404(User, id=serializer.validated_data["user_id"])
+        _, err = self._handle(unassign_permission_profile, actor=request.user, profile=profile, target_user=target_user)
+        if err:
+            return err
+        return Response(PermissionProfileSerializer(profile).data)
 
 
 class PlanningPreferencesView(APIView):

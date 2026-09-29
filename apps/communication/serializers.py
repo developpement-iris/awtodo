@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from apps.accounts.serializers import UserSerializer
 
-from .models import CommunicationChannel, CommunicationMessage, O365Connection
+from .models import CommunicationChannel, CommunicationDelivery, CommunicationMessage, O365Connection
 
 
 class O365ConnectionSerializer(serializers.ModelSerializer):
@@ -19,7 +19,6 @@ class O365ConnectionSerializer(serializers.ModelSerializer):
             "client_id",
             "client_secret",
             "has_client_secret",
-            "sender_mailbox",
             "is_enabled",
             "is_configured",
         ]
@@ -29,42 +28,54 @@ class O365ConnectionSerializer(serializers.ModelSerializer):
 
 
 class CommunicationChannelSerializer(serializers.ModelSerializer):
-    channel_type_display = serializers.CharField(source="get_channel_type_display", read_only=True)
-
     class Meta:
         model = CommunicationChannel
         fields = [
             "id",
-            "channel_type",
-            "channel_type_display",
             "label",
-            "email",
+            "teams_channel_id",
+            "teams_channel_name",
             "teams_webhook_url",
+            "payload_template",
             "notify_incident_created",
             "status",
         ]
 
 
 class CommunicationChannelCreateSerializer(serializers.Serializer):
-    channel_type = serializers.ChoiceField(choices=CommunicationChannel.TYPE_CHOICES)
     label = serializers.CharField(max_length=150)
-    email = serializers.EmailField(required=False, allow_blank=True, default="")
+    teams_channel_id = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
+    teams_channel_name = serializers.CharField(max_length=150, required=False, allow_blank=True, default="")
     teams_webhook_url = serializers.URLField(required=False, allow_blank=True, default="")
+    payload_template = serializers.JSONField(required=False, default=dict)
     notify_incident_created = serializers.BooleanField(required=False, default=False)
 
 
 class CommunicationChannelUpdateSerializer(serializers.Serializer):
     label = serializers.CharField(max_length=150, required=False)
-    email = serializers.EmailField(required=False, allow_blank=True)
+    teams_channel_id = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    teams_channel_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
     teams_webhook_url = serializers.URLField(required=False, allow_blank=True)
+    payload_template = serializers.JSONField(required=False)
     notify_incident_created = serializers.BooleanField(required=False)
+
+
+class CommunicationDeliverySerializer(serializers.ModelSerializer):
+    channel_label = serializers.CharField(source="channel.label", read_only=True)
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+
+    class Meta:
+        model = CommunicationDelivery
+        fields = ["id", "channel", "channel_label", "status", "status_display", "response_detail", "responded_at"]
 
 
 class CommunicationMessageSerializer(serializers.ModelSerializer):
     trigger_display = serializers.CharField(source="get_trigger_display", read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     created_by = UserSerializer(read_only=True)
-    channels = CommunicationChannelSerializer(many=True, read_only=True)
+    deliveries = CommunicationDeliverySerializer(many=True, read_only=True)
+    task_title = serializers.CharField(source="task.title", read_only=True, default=None)
+    incident_title = serializers.CharField(source="incident.title", read_only=True, default=None)
 
     class Meta:
         model = CommunicationMessage
@@ -77,8 +88,11 @@ class CommunicationMessageSerializer(serializers.ModelSerializer):
             "status",
             "status_display",
             "created_by",
-            "channels",
+            "deliveries",
+            "task",
+            "task_title",
             "incident",
+            "incident_title",
             "created_at",
             "sent_at",
         ]
@@ -88,3 +102,8 @@ class CommunicationComposeSerializer(serializers.Serializer):
     subject = serializers.CharField(max_length=255)
     body = serializers.CharField()
     channel_ids = serializers.ListField(child=serializers.UUIDField(), allow_empty=False)
+    # Rendent les champs de la tâche/de l'incident disponibles au gabarit de
+    # payload (`{{task.*}}`/`{{incident.*}}`) — optionnels, aucun des deux
+    # n'est requis pour un envoi manuel classique.
+    task_id = serializers.UUIDField(required=False, allow_null=True)
+    incident_id = serializers.UUIDField(required=False, allow_null=True)

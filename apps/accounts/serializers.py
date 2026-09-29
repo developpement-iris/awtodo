@@ -1,13 +1,71 @@
 from rest_framework import serializers
 
-from .models import ORGANISATION_ROLE_CHOICES, Invitation, Organisation, PasswordResetRequest, Team, TeamMembership, User
-from .services import can_manage_team
+from .models import (
+    ORGANISATION_ROLE_CHOICES,
+    PERMISSION_CAPABILITY_CHOICES,
+    Invitation,
+    Organisation,
+    PasswordResetRequest,
+    PermissionProfile,
+    Team,
+    TeamMembership,
+    User,
+)
+from .services import can_manage_team, has_capability
 
 
 class OrganisationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Organisation
         fields = ["id", "name", "created_at"]
+
+
+class OrganisationBrandingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Organisation
+        fields = ["brand_primary_color", "brand_secondary_color"]
+
+
+class OrganisationBrandingUpdateSerializer(serializers.Serializer):
+    # `allow_blank=True` : chaîne vide = réinitialisation à l'habillage
+    # Awtodo par défaut pour ce champ précis, valeur valide ; absent du
+    # payload (pas `required`) = ce champ reste inchangé.
+    primary_color = serializers.CharField(max_length=7, allow_blank=True, required=False)
+    secondary_color = serializers.CharField(max_length=7, allow_blank=True, required=False)
+
+
+class PermissionProfileSerializer(serializers.ModelSerializer):
+    # Assignation affichée depuis le profil (faible volume, écran
+    # Administration > Profils uniquement) plutôt que sur `UserSerializer` —
+    # celui-ci est imbriqué partout (assigné de tâche, membres de projet,
+    # auteur de commentaire...) : y ajouter une requête par utilisateur a
+    # provoqué une régression N+1 mesurée par `test_list_performance`
+    # (session du 2026-09-28), corrigée en déplaçant l'info ici.
+    assigned_users = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PermissionProfile
+        fields = ["id", "name", "capabilities", "status", "assigned_users"]
+
+    def get_assigned_users(self, obj):
+        return [
+            {"id": str(u.id), "username": u.username, "first_name": u.first_name, "last_name": u.last_name}
+            for u in obj.users.all()
+        ]
+
+
+class PermissionProfileCreateSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=100)
+    capabilities = serializers.ListField(child=serializers.CharField(), required=False, default=list)
+
+
+class PermissionProfileUpdateSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=100, required=False)
+    capabilities = serializers.ListField(child=serializers.CharField(), required=False)
+
+
+class PermissionProfileAssignSerializer(serializers.Serializer):
+    user_id = serializers.UUIDField()
 
 
 class OrganisationCreateSerializer(serializers.Serializer):
@@ -65,11 +123,20 @@ class MeSerializer(UserSerializer):
     l'intéressé lui-même. Utilisé par `MeView` et les deux endpoints de
     l'écran Paramètres (mot de passe, préférences)."""
 
+    # Capacités effectives via profils de droits (session du 2026-09-28) —
+    # additives à `organisation_role`/`is_platform_admin`, le frontend
+    # combine les deux pour décider quels écrans d'administration montrer
+    # (ex. `isOrgAdmin || capabilities.includes("manage_integrations")`).
+    capabilities = serializers.SerializerMethodField()
+
+    def get_capabilities(self, obj):
+        return [key for key, _ in PERMISSION_CAPABILITY_CHOICES if has_capability(obj, key)]
+
     class Meta(UserSerializer.Meta):
         fields = UserSerializer.Meta.fields + [
             "email_notifications_enabled",
             "outlook_calendar_sync_enabled",
-            "accent_color",
+            "capabilities",
         ]
 
 
@@ -82,11 +149,6 @@ class NotificationPreferencesSerializer(serializers.Serializer):
     email_notifications_enabled = serializers.BooleanField()
 
 
-class AppearancePreferencesSerializer(serializers.Serializer):
-    # `allow_blank=True` : chaîne vide = réinitialisation à l'habillage
-    # Awtodo par défaut, valeur valide (bouton "Par défaut" de l'écran
-    # Réglages), pas une absence de champ.
-    accent_color = serializers.CharField(max_length=7, allow_blank=True)
 
 
 class PlanningPreferencesSerializer(serializers.Serializer):

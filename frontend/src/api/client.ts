@@ -9,8 +9,8 @@ import type {
   CalendarShare,
   CalendarShareList,
   CommunicationChannel,
-  CommunicationChannelType,
   CommunicationMessage,
+  CommunicationPayloadTemplate,
   O365Connection,
   ProjectPlanningBundle,
   ProjectPlanningOccurrence,
@@ -29,7 +29,10 @@ import type {
   Me,
   Notification,
   Organisation,
+  OrganisationBranding,
   PasswordResetToken,
+  PermissionCapabilityKey,
+  PermissionProfile,
   Project,
   ProjectMembership,
   ProjectUserStats,
@@ -292,6 +295,39 @@ export function setOrganisationRole(userId: string, role: User["organisation_rol
   return patchJson<User>(`/accounts/users/${userId}/organisation-role/`, { organisation_role: role });
 }
 
+// --- Profils de droits personnalisés (session du 2026-09-28) --------------
+// Voir docs/organisation-et-comptes.md > "Écran Administration" > "6. Profils".
+
+export function getPermissionProfiles(): Promise<PermissionProfile[]> {
+  return getJson<PermissionProfile[]>("/accounts/permission-profiles/");
+}
+
+export function createPermissionProfile(payload: {
+  name: string;
+  capabilities: PermissionCapabilityKey[];
+}): Promise<PermissionProfile> {
+  return postJson<PermissionProfile>("/accounts/permission-profiles/", payload);
+}
+
+export function updatePermissionProfile(
+  profileId: string,
+  payload: Partial<{ name: string; capabilities: PermissionCapabilityKey[] }>,
+): Promise<PermissionProfile> {
+  return patchJson<PermissionProfile>(`/accounts/permission-profiles/${profileId}/`, payload);
+}
+
+export function archivePermissionProfile(profileId: string): Promise<void> {
+  return deleteJson<void>(`/accounts/permission-profiles/${profileId}/`);
+}
+
+export function assignPermissionProfile(profileId: string, userId: string): Promise<PermissionProfile> {
+  return postJson<PermissionProfile>(`/accounts/permission-profiles/${profileId}/assign/`, { user_id: userId });
+}
+
+export function unassignPermissionProfile(profileId: string, userId: string): Promise<PermissionProfile> {
+  return postJson<PermissionProfile>(`/accounts/permission-profiles/${profileId}/unassign/`, { user_id: userId });
+}
+
 export function getOrganisations(): Promise<Organisation[]> {
   return getJson<Organisation[]>("/accounts/organisations/");
 }
@@ -378,11 +414,19 @@ export function updateNotificationPreferences(emailNotificationsEnabled: boolean
   });
 }
 
-// Couleur d'accent de l'interface, par utilisateur (session du 2026-09-23,
-// écran Réglages) — `accentColor: ""` revient à l'habillage Awtodo par
-// défaut (bouton "Par défaut" du sélecteur).
-export function updateAppearancePreferences(accentColor: string): Promise<Me> {
-  return patchJson<Me>("/accounts/me/appearance-preferences/", { accent_color: accentColor });
+// Couleurs de marque de l'organisation (session du 2026-09-28, Administration
+// > Marque) — lecture ouverte à tout utilisateur authentifié, écriture
+// réservée à un admin d'organisation. Une chaîne vide réinitialise le champ
+// concerné à l'habillage Awtodo par défaut ; un champ absent du payload
+// reste inchangé.
+export function getOrganisationBranding(): Promise<OrganisationBranding> {
+  return getJson<OrganisationBranding>("/accounts/organisation/branding/");
+}
+
+export function updateOrganisationBranding(
+  payload: Partial<{ primary_color: string; secondary_color: string }>,
+): Promise<OrganisationBranding> {
+  return patchJson<OrganisationBranding>("/accounts/organisation/branding/", payload);
 }
 
 // Couleur du calendrier personnel — session du 2026-09-18. Mise à jour
@@ -996,7 +1040,6 @@ export function updateO365Connection(
     tenant_id: string;
     client_id: string;
     client_secret: string;
-    sender_mailbox: string;
     is_enabled: boolean;
   }>,
 ): Promise<O365Connection> {
@@ -1025,10 +1068,11 @@ export function getProjectCommunicationChannels(projectId: string): Promise<Comm
 export function createProjectCommunicationChannel(
   projectId: string,
   payload: {
-    channel_type: CommunicationChannelType;
     label: string;
-    email?: string;
-    teams_webhook_url?: string;
+    teams_channel_id: string;
+    teams_channel_name: string;
+    teams_webhook_url: string;
+    payload_template?: CommunicationPayloadTemplate;
     notify_incident_created?: boolean;
   },
 ): Promise<CommunicationChannel> {
@@ -1040,8 +1084,10 @@ export function updateProjectCommunicationChannel(
   channelId: string,
   payload: Partial<{
     label: string;
-    email: string;
+    teams_channel_id: string;
+    teams_channel_name: string;
     teams_webhook_url: string;
+    payload_template: CommunicationPayloadTemplate;
     notify_incident_created: boolean;
   }>,
 ): Promise<CommunicationChannel> {
@@ -1064,7 +1110,7 @@ export function getProjectCommunicationMessages(projectId: string): Promise<Comm
 
 export function composeProjectCommunicationMessage(
   projectId: string,
-  payload: { subject: string; body: string; channel_ids: string[] },
+  payload: { subject: string; body: string; channel_ids: string[]; task_id?: string; incident_id?: string },
 ): Promise<CommunicationMessage> {
   return postJson<CommunicationMessage>(`/communication/projects/${projectId}/messages/`, payload);
 }

@@ -17,9 +17,62 @@ class Organisation(UUIDModel, TimeStampedModel):
     n'est exposé dans cette passe — à ajouter si ce besoin apparaît."""
 
     name = models.CharField(max_length=200)
+    # Couleurs de marque de l'organisation (session du 2026-09-28) —
+    # remplacent l'ancienne préférence d'accent par utilisateur. Vide =
+    # charte Awtodo par défaut (brique). `brand_primary_color` recolore le
+    # fond/surface de l'appli (une rampe bg/surface/texte calculée depuis
+    # cette seule teinte) ; `brand_secondary_color` recolore la bande de
+    # marque fixe (BinderTabs/SectionSidebar) + les boutons d'accent — voir
+    # frontend/src/theme/brandColors.ts.
+    brand_primary_color = models.CharField(max_length=7, blank=True, default="")
+    brand_secondary_color = models.CharField(max_length=7, blank=True, default="")
 
     def __str__(self):
         return self.name
+
+
+# Catalogue fixe des capacités qu'un profil de droits peut accorder (session
+# du 2026-09-28) — délibérément limité aux actions déjà gouvernées par
+# `is_organisation_admin` (portée organisation : membres, marque,
+# intégrations), PAS aux rôles projet (`ProjectMembership.role`, déjà un
+# mécanisme de rôles qui fonctionne et n'a pas besoin d'être remplacé) ni aux
+# actions par objet (transitions de tâche/incident, qui dépendent de l'état
+# de l'objet, pas seulement du rôle). Un profil est donc une **couche
+# additive** aux rôles existants (`organisation_role`, `ProjectMembership`,
+# `TeamMembership`) — jamais un remplacement.
+PERMISSION_CAPABILITY_CHOICES = [
+    ("manage_members", "Gérer les membres et leurs rôles"),
+    ("manage_branding", "Gérer les couleurs de marque de l'organisation"),
+    ("manage_integrations", "Gérer la connexion Office 365 et les clés API"),
+]
+PERMISSION_CAPABILITY_KEYS = frozenset(key for key, _ in PERMISSION_CAPABILITY_CHOICES)
+
+
+class PermissionProfile(UUIDModel, TimeStampedModel, StatusLifecycleModel):
+    """Profil de droits personnalisé, portée organisation (session du
+    2026-09-28) — demande explicite : un admin d'organisation doit pouvoir
+    créer des profils sur mesure (ex. « Intégrateur » : gère les
+    intégrations, sans les autres droits d'admin) plutôt que de se limiter
+    aux rôles fixes existants. Seul un admin d'organisation peut créer,
+    modifier ou assigner un profil — voir `apps.accounts.services`."""
+
+    STATUS_CHOICES = [("active", "Actif"), ("archived", "Archivé")]
+    ACTIVE_STATUSES = frozenset({"active"})
+
+    organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE, related_name="permission_profiles")
+    name = models.CharField(max_length=100)
+    # Liste de clés parmi `PERMISSION_CAPABILITY_KEYS` — validée à l'écriture
+    # dans le service, pas de contrainte DB (JSONField).
+    capabilities = models.JSONField(blank=True, default=list)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active")
+
+    class Meta:
+        default_manager_name = "all_objects"
+        base_manager_name = "all_objects"
+        ordering = ["name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.organisation})"
 
 
 def default_organisation_id():
@@ -139,6 +192,12 @@ class User(UUIDModel, AbstractUser):
     )
     organisation_role = models.CharField(max_length=20, choices=ORGANISATION_ROLE_CHOICES, default="membre")
     is_platform_admin = models.BooleanField(default=False)
+    # Profils de droits personnalisés (session du 2026-09-28) — additifs aux
+    # rôles ci-dessus, voir `PermissionProfile`. Un utilisateur peut cumuler
+    # plusieurs profils.
+    permission_profiles = models.ManyToManyField(
+        PermissionProfile, blank=True, related_name="users"
+    )
     # Compte technique (préfigure le futur compte de service ticketing, voir
     # CLAUDE.md > "Stack technique" > Auth — pas encore de clé API dédiée).
     # `apps.incidents.views.IncidentViewSet.create` traite un tel utilisateur
@@ -173,14 +232,6 @@ class User(UUIDModel, AbstractUser):
     # l'inverse.
     planning_color = models.CharField(max_length=7, blank=True, default="")
 
-    # Personnalisation de l'accent de l'interface, par utilisateur (session
-    # du 2026-09-23, écran Réglages) — distinct de `planning_color` (limité
-    # à une palette de 6 teintes pour un usage précis, le calendrier) : ici
-    # une couleur libre choisie via un vrai sélecteur, qui remplace
-    # `--color-accent` (et son pendant `--color-accent-contrast`, recalculé
-    # côté frontend pour rester lisible) sur toute l'interface. Vide =
-    # habillage Awtodo par défaut ("bouton par défaut" du sélecteur).
-    accent_color = models.CharField(max_length=7, blank=True, default="")
 
     # Synchronisation Outlook, sens unique Awtodo → Outlook (scaffolding,
     # session du 2026-09-22 — voir `apps.planning.signals` pour le détail du

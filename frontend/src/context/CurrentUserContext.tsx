@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { getMe, getUsers, login as loginRequest, setAccessToken } from "../api/client";
+import { getMe, getOrganisationBranding, getUsers, login as loginRequest, setAccessToken } from "../api/client";
 import type { Me, User } from "../types/watodo";
-import { applyAccentColor } from "../theme/accentColor";
+import { applyBrandColors } from "../theme/brandColors";
 
 const ACCESS_TOKEN_STORAGE_KEY = "watodo-access-token";
 
@@ -21,10 +21,13 @@ interface CurrentUserContextValue {
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
   /** Recharge `currentUser` depuis `/accounts/me/` — utilisé après un
-   * changement de préférence personnelle (ex. couleur d'accent, écran
-   * Réglages) pour que le reste de l'app reflète le changement sans
-   * recharger la page. */
+   * changement de préférence personnelle (écran Réglages) pour que le reste
+   * de l'app reflète le changement sans recharger la page. */
   refreshCurrentUser: () => Promise<void>;
+  /** Recharge et réapplique les couleurs de marque de l'organisation —
+   * utilisé après un changement dans Administration > Marque, sans recharger
+   * la page. */
+  refreshBranding: () => Promise<void>;
 }
 
 const CurrentUserContext = createContext<CurrentUserContextValue | null>(null);
@@ -35,11 +38,25 @@ export function CurrentUserProvider({ children }: { children: ReactNode }) {
   const [usersLoaded, setUsersLoaded] = useState(false);
   const [authRestored, setAuthRestored] = useState(false);
 
-  // Couleur d'accent par utilisateur (session du 2026-09-23) — appliquée
-  // dès que l'identité courante change, retirée à la déconnexion.
+  // Couleurs de marque de l'organisation (session du 2026-09-28, remplace
+  // l'ancienne préférence d'accent par utilisateur) — chargées et
+  // appliquées dès qu'une identité est connue, retirées à la déconnexion.
+  // Lecture ouverte à tout utilisateur authentifié (voir OrganisationBrandingView).
   useEffect(() => {
-    applyAccentColor(authUser?.accent_color ?? "");
-  }, [authUser?.accent_color]);
+    if (!authUser) {
+      applyBrandColors("", "");
+      return;
+    }
+    getOrganisationBranding()
+      .then((branding) => applyBrandColors(branding.brand_primary_color, branding.brand_secondary_color))
+      .catch(() => undefined);
+  }, [authUser?.id]);
+
+  async function refreshBranding() {
+    if (!authUser) return;
+    const branding = await getOrganisationBranding();
+    applyBrandColors(branding.brand_primary_color, branding.brand_secondary_color);
+  }
 
   // Restauration d'une connexion réelle déjà en cours (token stocké) — un
   // token invalide/expiré est purgé silencieusement, l'utilisateur retombe
@@ -101,6 +118,7 @@ export function CurrentUserProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         refreshCurrentUser,
+        refreshBranding,
       }}
     >
       {children}

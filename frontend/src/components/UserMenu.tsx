@@ -1,6 +1,6 @@
 import { ChevronDown, KeyRound, LogIn, LogOut, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { changePassword, updateAppearancePreferences, updateNotificationPreferences } from "../api/client";
+import { changePassword, updateNotificationPreferences } from "../api/client";
 import { useCurrentUser } from "../context/CurrentUserContext";
 import { Checkbox } from "./Checkbox";
 import "./UserMenu.css";
@@ -38,7 +38,6 @@ export function UserMenu({ onLoginClick }: UserMenuProps) {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
   const [prefSubmitting, setPrefSubmitting] = useState(false);
-  const [appearanceSubmitting, setAppearanceSubmitting] = useState(false);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -90,16 +89,6 @@ export function UserMenu({ onLoginClick }: UserMenuProps) {
     }
   }
 
-  async function handleChangeAccentColor(color: string) {
-    setAppearanceSubmitting(true);
-    try {
-      await updateAppearancePreferences(color);
-      await refreshCurrentUser();
-    } finally {
-      setAppearanceSubmitting(false);
-    }
-  }
-
   return (
     <div className="user-menu" ref={menuRef}>
       <button type="button" className="user-menu__trigger" onClick={() => setOpen((value) => !value)}>
@@ -142,36 +131,6 @@ export function UserMenu({ onLoginClick }: UserMenuProps) {
                   <ShieldCheck size={11} strokeWidth={2} aria-hidden="true" />
                   Admin plateforme
                 </span>
-              )}
-            </div>
-          </div>
-
-          <div className="account-card__section">
-            <span className="account-card__section-title">Apparence</span>
-            <div className="account-card__row">
-              <label className="account-card__color-label">
-                <input
-                  type="color"
-                  value={currentUser.accent_color || "#753030"}
-                  onChange={(event) => void handleChangeAccentColor(event.target.value)}
-                  disabled={appearanceSubmitting}
-                  aria-label="Couleur d'accent de l'interface"
-                  className="account-card__color-input"
-                />
-              </label>
-              <span className="account-card__row-label">
-                Couleur de l'interface
-                <span className="account-card__hint">Remplace la charte graphique pour vous seul.</span>
-              </span>
-              {currentUser.accent_color && (
-                <button
-                  type="button"
-                  className="account-card__ghost-btn"
-                  onClick={() => void handleChangeAccentColor("")}
-                  disabled={appearanceSubmitting}
-                >
-                  Par défaut
-                </button>
               )}
             </div>
           </div>

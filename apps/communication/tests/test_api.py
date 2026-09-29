@@ -1,10 +1,13 @@
+from unittest.mock import Mock, patch
+
 from django.test import override_settings
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import Organisation, User
-from apps.communication.models import CommunicationChannel, CommunicationMessage, O365Connection
+from apps.communication.models import CommunicationChannel, CommunicationDelivery, CommunicationMessage, O365Connection
 from apps.incidents.services import create_incident
-from apps.projects.models import Project, ProjectMembership
+from apps.projects.models import Project, ProjectMembership, ProjectVersion
+from apps.tasks.models import Task
 
 
 @override_settings(
@@ -34,12 +37,28 @@ class CommunicationApiTests(APITestCase):
     def _channels_url(self):
         return f"/api/v1/communication/projects/{self.project.id}/channels/"
 
+    def _make_channel(self, **kwargs):
+        defaults = {
+            "project": self.project,
+            "label": "X",
+            "teams_channel_id": "19:abc@thread.tacv2",
+            "teams_channel_name": "#suivi-projet",
+            "teams_webhook_url": "https://prod-00.westeurope.logic.azure.com/x",
+        }
+        defaults.update(kwargs)
+        return CommunicationChannel.objects.create(**defaults)
+
     # --- Canaux -------------------------------------------------------
-    def test_manager_creates_email_channel(self):
+    def test_manager_creates_teams_channel(self):
         self._as(self.manager)
         r = self.client.post(
             self._channels_url(),
-            {"channel_type": "email", "label": "Support", "email": "support@x.io"},
+            {
+                "label": "Support",
+                "teams_channel_id": "19:abc@thread.tacv2",
+                "teams_channel_name": "#suivi-projet",
+                "teams_webhook_url": "https://prod-00.westeurope.logic.azure.com/x",
+            },
             format="json",
         )
         self.assertEqual(r.status_code, 201)
@@ -49,22 +68,26 @@ class CommunicationApiTests(APITestCase):
         self._as(self.member)
         r = self.client.post(
             self._channels_url(),
-            {"channel_type": "email", "label": "X", "email": "x@x.io"},
+            {"label": "X", "teams_channel_id": "1", "teams_channel_name": "#x", "teams_webhook_url": "https://x.io/y"},
             format="json",
         )
         self.assertEqual(r.status_code, 403)
 
-    def test_email_channel_requires_address(self):
-        self._as(self.manager)
-        r = self.client.post(
-            self._channels_url(), {"channel_type": "email", "label": "X"}, format="json"
-        )
-        self.assertEqual(r.status_code, 400)
-
     def test_teams_channel_requires_webhook(self):
         self._as(self.manager)
         r = self.client.post(
-            self._channels_url(), {"channel_type": "teams", "label": "#canal"}, format="json"
+            self._channels_url(),
+            {"label": "#canal", "teams_channel_id": "1", "teams_channel_name": "#canal"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+
+    def test_teams_channel_requires_channel_id(self):
+        self._as(self.manager)
+        r = self.client.post(
+            self._channels_url(),
+            {"label": "#canal", "teams_channel_name": "#canal", "teams_webhook_url": "https://x.io/y"},
+            format="json",
         )
         self.assertEqual(r.status_code, 400)
 
@@ -74,9 +97,7 @@ class CommunicationApiTests(APITestCase):
         self.assertEqual(r.status_code, 404)
 
     def test_archive_channel(self):
-        channel = CommunicationChannel.objects.create(
-            project=self.project, channel_type="email", label="X", email="x@x.io"
-        )
+        channel = self._make_channel()
         self._as(self.manager)
         r = self.client.delete(f"{self._channels_url()}{channel.id}/")
         self.assertEqual(r.status_code, 204)
@@ -86,21 +107,127 @@ class CommunicationApiTests(APITestCase):
         self.assertEqual(len(self.client.get(self._channels_url()).data), 0)
 
     # --- Messages ---------------------------------------------------
-    def test_member_composes_pending_message(self):
-        channel = CommunicationChannel.objects.create(
-            project=self.project, channel_type="email", label="X", email="x@x.io"
+    @patch("apps.communication.tasks.requests.post")
+    def test_member_composes_and_sends_message(self, mock_post):
+        mock_post.return_value = Mock(status_code=200, text="ok")
+        channel = self._make_channel()
+        self._as(self.member)
+        with self.captureOnCommitCallbacks(execute=True):
+            r = self.client.post(
+                f"/api/v1/communication/projects/{self.project.id}/messages/",
+                {"subject": "Point", "body": "Bonjour", "channel_ids": [str(channel.id)]},
+                format="json",
+            )
+        self.assertEqual(r.status_code, 201)
+        message = CommunicationMessage.objects.get()
+        self.assertEqual(message.status, "envoye")  # CELERY_TASK_ALWAYS_EAGER : envoi synchrone dans le test
+        self.assertEqual(message.trigger, "manuel")
+        self.assertEqual(message.created_by, self.member)
+        delivery = CommunicationDelivery.objects.get(message=message, channel=channel)
+        self.assertEqual(delivery.status, "envoye")
+        mock_post.assert_called_once()
+        payload = mock_post.call_args.kwargs["json"]
+        self.assertEqual(payload["channel_id"], channel.teams_channel_id)
+        self.assertEqual(payload["channel_name"], channel.teams_channel_name)
+        self.assertEqual(payload["subject"], "Point")
+
+    @patch("apps.communication.tasks.requests.post")
+    def test_channel_failure_does_not_block_others(self, mock_post):
+        ok_channel = self._make_channel(label="OK", teams_channel_id="1")
+        ko_channel = self._make_channel(label="KO", teams_channel_id="2")
+
+        def _side_effect(url, json, timeout):
+            if json["channel_id"] == "2":
+                return Mock(status_code=500, text="boom")
+            return Mock(status_code=202, text="")
+
+        mock_post.side_effect = _side_effect
+        self._as(self.member)
+        with self.captureOnCommitCallbacks(execute=True):
+            r = self.client.post(
+                f"/api/v1/communication/projects/{self.project.id}/messages/",
+                {"subject": "X", "body": "Y", "channel_ids": [str(ok_channel.id), str(ko_channel.id)]},
+                format="json",
+            )
+        self.assertEqual(r.status_code, 201)
+        message = CommunicationMessage.objects.get()
+        self.assertEqual(message.status, "echec")
+        self.assertEqual(
+            CommunicationDelivery.objects.get(message=message, channel=ok_channel).status, "envoye"
         )
+        self.assertEqual(
+            CommunicationDelivery.objects.get(message=message, channel=ko_channel).status, "echec"
+        )
+
+    # --- Gabarit de payload personnalisable (session du 2026-09-28) -----
+    def test_custom_payload_template_resolves_task_fields(self):
+        version = ProjectVersion.objects.create(project=self.project, label="v1", is_current=True)
+        task = Task.objects.create(
+            project=self.project, version=version, title="Corriger le bug", task_type="correction", priority="haute"
+        )
+        channel = self._make_channel(
+            payload_template={
+                "titre_tache": "{{task.title}}",
+                "priorite": "{{task.priority}}",
+                "source": "awtodo-custom",  # valeur littérale, pas un placeholder
+                "inconnu": "{{task.champ_qui_n_existe_pas}}",
+            }
+        )
+        with patch("apps.communication.tasks.requests.post") as mock_post:
+            mock_post.return_value = Mock(status_code=200, text="ok")
+            self._as(self.member)
+            with self.captureOnCommitCallbacks(execute=True):
+                r = self.client.post(
+                    f"/api/v1/communication/projects/{self.project.id}/messages/",
+                    {
+                        "subject": "Point",
+                        "body": "Bonjour",
+                        "channel_ids": [str(channel.id)],
+                        "task_id": str(task.id),
+                    },
+                    format="json",
+                )
+        self.assertEqual(r.status_code, 201)
+        payload = mock_post.call_args.kwargs["json"]
+        self.assertEqual(payload["titre_tache"], "Corriger le bug")
+        self.assertEqual(payload["priorite"], "haute")
+        self.assertEqual(payload["source"], "awtodo-custom")
+        self.assertEqual(payload["inconnu"], "")  # champ inconnu résolu en chaîne vide, jamais une erreur
+        # Les champs par défaut (subject/body/...) ne sont plus envoyés dès
+        # qu'un gabarit personnalisé est défini — le gabarit remplace
+        # entièrement le payload par défaut, pas un complément.
+        self.assertNotIn("subject", payload)
+        self.assertEqual(str(r.data["task"]), str(task.id))
+
+    def test_channel_rejects_invalid_payload_template(self):
+        self._as(self.manager)
+        r = self.client.post(
+            self._channels_url(),
+            {
+                "label": "X",
+                "teams_channel_id": "1",
+                "teams_channel_name": "#x",
+                "teams_webhook_url": "https://x.io/y",
+                "payload_template": {"cle": ["pas", "une", "chaine"]},
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+
+    def test_compose_rejects_task_from_another_project(self):
+        other_project = Project.objects.create(name="Autre", organisation=self.org)
+        version = ProjectVersion.objects.create(project=other_project, label="v1", is_current=True)
+        task = Task.objects.create(
+            project=other_project, version=version, title="Ailleurs", task_type="correction"
+        )
+        channel = self._make_channel()
         self._as(self.member)
         r = self.client.post(
             f"/api/v1/communication/projects/{self.project.id}/messages/",
-            {"subject": "Point", "body": "Bonjour", "channel_ids": [str(channel.id)]},
+            {"subject": "X", "body": "Y", "channel_ids": [str(channel.id)], "task_id": str(task.id)},
             format="json",
         )
-        self.assertEqual(r.status_code, 201)
-        message = CommunicationMessage.objects.get()
-        self.assertEqual(message.status, "en_attente")  # rien n'est envoyé dans cette passe
-        self.assertEqual(message.trigger, "manuel")
-        self.assertEqual(message.created_by, self.member)
+        self.assertEqual(r.status_code, 400)
 
     def test_compose_requires_a_channel(self):
         self._as(self.member)
@@ -112,9 +239,7 @@ class CommunicationApiTests(APITestCase):
         self.assertEqual(r.status_code, 400)
 
     def test_reader_cannot_compose(self):
-        channel = CommunicationChannel.objects.create(
-            project=self.project, channel_type="email", label="X", email="x@x.io"
-        )
+        channel = self._make_channel()
         self._as(self.reader)
         r = self.client.post(
             f"/api/v1/communication/projects/{self.project.id}/messages/",
@@ -123,12 +248,12 @@ class CommunicationApiTests(APITestCase):
         )
         self.assertEqual(r.status_code, 404)  # onglet inaccessible au lecteur
 
-    # --- Connexion O365 -------------------------------------------
+    # --- Connexion O365 (synchro Outlook uniquement) ----------------
     def test_org_admin_updates_o365_connection(self):
         self._as(self.org_admin)
         r = self.client.put(
             "/api/v1/communication/o365/",
-            {"tenant_id": "t", "client_id": "c", "client_secret": "s", "sender_mailbox": "no-reply@x.io"},
+            {"tenant_id": "t", "client_id": "c", "client_secret": "s"},
             format="json",
         )
         self.assertEqual(r.status_code, 200)

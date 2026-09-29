@@ -101,5 +101,7 @@ class ProjectCommunicationViewSet(_CommunicationExceptionMixin, viewsets.Generic
             subject=serializer.validated_data["subject"],
             body=serializer.validated_data["body"],
             channel_ids=serializer.validated_data["channel_ids"],
+            task_id=serializer.validated_data.get("task_id"),
+            incident_id=serializer.validated_data.get("incident_id"),
         )
         return Response(CommunicationMessageSerializer(message).data, status=201)

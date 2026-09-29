@@ -5,16 +5,22 @@ from django.dispatch import Signal
 from django.test import TestCase, override_settings
 from rest_framework.test import APITestCase
 
-from apps.accounts.models import Organisation, User
+from apps.accounts.models import Organisation, PermissionProfile, User
 from apps.accounts.services import (
     AccountPermissionError,
     AccountValidationError,
+    archive_permission_profile,
+    assign_permission_profile,
     authenticate_user,
     change_own_password,
+    create_permission_profile,
     deactivate_account,
+    has_capability,
+    is_organisation_admin,
     reactivate_account,
-    update_appearance_preferences,
+    unassign_permission_profile,
     update_notification_preferences,
+    update_organisation_branding,
     update_planning_preferences,
 )
 from apps.accounts.signals import outlook_calendar_sync_enabled_activated
@@ -107,6 +113,67 @@ class DeactivateAccountApiTests(APITestCase):
         other = User.objects.create_user(username="other-daa", organisation=self.org)
         r = self.client.post(f"/api/v1/accounts/users/{self.target.id}/deactivate/", **self.as_user(other))
         self.assertEqual(r.status_code, 403)
+
+
+@override_settings(
+    DEBUG=True,
+    REST_FRAMEWORK={
+        "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
+        "DEFAULT_AUTHENTICATION_CLASSES": [
+            "apps.accounts.authentication.DebugUserIdAuthentication",
+            "rest_framework.authentication.SessionAuthentication",
+        ],
+    },
+)
+class PermissionProfileApiTests(APITestCase):
+    def setUp(self):
+        self.org = Organisation.objects.create(name="Org A")
+        self.admin = User.objects.create_user(username="admin-ppa", organisation=self.org, organisation_role="admin")
+        self.member = User.objects.create_user(username="member-ppa", organisation=self.org)
+
+    def _as(self, user):
+        self.client.credentials(HTTP_X_DEBUG_USER_ID=str(user.id))
+
+    def test_admin_creates_lists_and_assigns_profile(self):
+        self._as(self.admin)
+        r = self.client.post(
+            "/api/v1/accounts/permission-profiles/",
+            {"name": "Intégrateur", "capabilities": ["manage_integrations"]},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        profile_id = r.json()["id"]
+
+        self._as(self.member)
+        r_list = self.client.get("/api/v1/accounts/permission-profiles/")
+        self.assertEqual(r_list.status_code, 200)
+        self.assertEqual(len(r_list.json()), 1)
+
+        self._as(self.admin)
+        r_assign = self.client.post(
+            f"/api/v1/accounts/permission-profiles/{profile_id}/assign/",
+            {"user_id": str(self.member.id)},
+            format="json",
+        )
+        self.assertEqual(r_assign.status_code, 200)
+        self.assertEqual([u["id"] for u in r_assign.json()["assigned_users"]], [str(self.member.id)])
+
+    def test_non_admin_cannot_create_profile_via_api(self):
+        self._as(self.member)
+        r = self.client.post(
+            "/api/v1/accounts/permission-profiles/",
+            {"name": "X", "capabilities": []},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 403)
+
+    def test_archive_profile_via_api(self):
+        profile = PermissionProfile.objects.create(organisation=self.org, name="X", capabilities=[])
+        self._as(self.admin)
+        r = self.client.delete(f"/api/v1/accounts/permission-profiles/{profile.id}/")
+        self.assertEqual(r.status_code, 204)
+        profile.refresh_from_db()
+        self.assertEqual(profile.status, "archived")
 
 
 class ChangeOwnPasswordTests(TestCase):
@@ -202,24 +269,106 @@ class NotificationPreferenceServiceTests(TestCase):
         self.assertFalse(user.email_notifications_enabled)
 
 
-class AppearancePreferenceServiceTests(TestCase):
+class OrganisationBrandingServiceTests(TestCase):
     def setUp(self):
-        org = Organisation.objects.create(name="Org A")
-        self.user = User.objects.create_user(username="appearance-user", organisation=org)
+        self.org = Organisation.objects.create(name="Org A")
+        self.admin = User.objects.create_user(username="org-admin", organisation=self.org, organisation_role="admin")
+        self.member = User.objects.create_user(username="org-member", organisation=self.org)
 
-    def test_set_accent_color(self):
-        updated = update_appearance_preferences(actor=self.user, accent_color="#7A4F9E")
+    def test_admin_sets_branding_colors(self):
+        updated = update_organisation_branding(actor=self.admin, organisation=self.org, primary_color="#7A4F9E", secondary_color="#123456")
 
-        self.assertEqual(updated.accent_color, "#7A4F9E")
-        self.user.refresh_from_db()
-        self.assertEqual(self.user.accent_color, "#7A4F9E")
+        self.assertEqual(updated.brand_primary_color, "#7A4F9E")
+        self.assertEqual(updated.brand_secondary_color, "#123456")
+        self.org.refresh_from_db()
+        self.assertEqual(self.org.brand_primary_color, "#7A4F9E")
 
-    def test_empty_string_resets_to_default(self):
-        update_appearance_preferences(actor=self.user, accent_color="#7A4F9E")
+    def test_empty_string_resets_a_field_to_default(self):
+        update_organisation_branding(actor=self.admin, organisation=self.org, primary_color="#7A4F9E")
 
-        updated = update_appearance_preferences(actor=self.user, accent_color="")
+        updated = update_organisation_branding(actor=self.admin, organisation=self.org, primary_color="")
 
-        self.assertEqual(updated.accent_color, "")
+        self.assertEqual(updated.brand_primary_color, "")
+
+    def test_non_admin_cannot_set_branding(self):
+        with self.assertRaises(AccountPermissionError):
+            update_organisation_branding(actor=self.member, organisation=self.org, primary_color="#7A4F9E")
+
+
+class PermissionProfileServiceTests(TestCase):
+    def setUp(self):
+        self.org = Organisation.objects.create(name="Org A")
+        self.admin = User.objects.create_user(username="org-admin", organisation=self.org, organisation_role="admin")
+        self.member = User.objects.create_user(username="org-member", organisation=self.org)
+        self.other_org = Organisation.objects.create(name="Org B")
+        self.outsider = User.objects.create_user(username="outsider", organisation=self.other_org)
+
+    def test_admin_creates_profile_and_grants_capability(self):
+        profile = create_permission_profile(
+            actor=self.admin, organisation=self.org, name="Intégrateur", capabilities=["manage_integrations"]
+        )
+        self.assertFalse(has_capability(self.member, "manage_integrations"))
+
+        assign_permission_profile(actor=self.admin, profile=profile, target_user=self.member)
+
+        self.assertTrue(has_capability(self.member, "manage_integrations"))
+        # N'accorde QUE cette capacité précise, jamais un statut admin complet.
+        self.assertFalse(has_capability(self.member, "manage_members"))
+        self.assertFalse(is_organisation_admin(self.member, self.org))
+
+    def test_non_admin_cannot_create_profile(self):
+        with self.assertRaises(AccountPermissionError):
+            create_permission_profile(actor=self.member, organisation=self.org, name="X", capabilities=[])
+
+    def test_rejects_unknown_capability(self):
+        with self.assertRaises(AccountValidationError):
+            create_permission_profile(actor=self.admin, organisation=self.org, name="X", capabilities=["devenir_dieu"])
+
+    def test_archived_profile_no_longer_grants_capability(self):
+        profile = create_permission_profile(
+            actor=self.admin, organisation=self.org, name="Intégrateur", capabilities=["manage_integrations"]
+        )
+        assign_permission_profile(actor=self.admin, profile=profile, target_user=self.member)
+        self.assertTrue(has_capability(self.member, "manage_integrations"))
+
+        archive_permission_profile(actor=self.admin, profile=profile)
+
+        self.assertFalse(has_capability(self.member, "manage_integrations"))
+
+    def test_unassign_removes_capability(self):
+        profile = create_permission_profile(
+            actor=self.admin, organisation=self.org, name="Intégrateur", capabilities=["manage_integrations"]
+        )
+        assign_permission_profile(actor=self.admin, profile=profile, target_user=self.member)
+        unassign_permission_profile(actor=self.admin, profile=profile, target_user=self.member)
+
+        self.assertFalse(has_capability(self.member, "manage_integrations"))
+
+    def test_cannot_assign_to_user_from_another_organisation(self):
+        profile = create_permission_profile(
+            actor=self.admin, organisation=self.org, name="Intégrateur", capabilities=["manage_integrations"]
+        )
+        with self.assertRaises(AccountValidationError):
+            assign_permission_profile(actor=self.admin, profile=profile, target_user=self.outsider)
+
+    def test_platform_admin_always_has_every_capability(self):
+        platform_admin = User.objects.create_user(
+            username="platform-admin", organisation=self.org, is_platform_admin=True
+        )
+        self.assertTrue(has_capability(platform_admin, "manage_integrations"))
+        self.assertTrue(has_capability(platform_admin, "manage_members"))
+        self.assertTrue(has_capability(platform_admin, "manage_branding"))
+
+    def test_capability_grants_deactivate_account_without_org_admin_role(self):
+        profile = create_permission_profile(
+            actor=self.admin, organisation=self.org, name="RH", capabilities=["manage_members"]
+        )
+        assign_permission_profile(actor=self.admin, profile=profile, target_user=self.member)
+        target = User.objects.create_user(username="to-deactivate", organisation=self.org)
+
+        updated = deactivate_account(actor=self.member, target_user=target)
+
+        self.assertEqual(updated.account_status, "desactive")
 
 
 class PlanningPreferenceServiceTests(TestCase):
