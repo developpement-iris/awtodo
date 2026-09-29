@@ -26,8 +26,11 @@ export function AdministrationPage() {
   const hasCapability = (key: PermissionCapabilityKey) => currentUser?.capabilities.includes(key) ?? false;
 
   const canSeeMembers = isOrgAdmin || hasCapability("manage_members");
-  const canSeeGroups = currentUser?.organisation_role === "admin" || currentUser?.organisation_role === "chef_de_projet";
-  const canSeeInvitations = canSeeGroups;
+  const canSeeGroups =
+    currentUser?.organisation_role === "admin" ||
+    currentUser?.organisation_role === "chef_de_projet" ||
+    hasCapability("manage_groups");
+  const canSeeInvitations = canSeeGroups || hasCapability("manage_invitations");
   const canSeeIntegrations = isOrgAdmin || hasCapability("manage_integrations");
   const canSeeBranding = isOrgAdmin || hasCapability("manage_branding");
   // La création/gestion des profils eux-mêmes reste réservée à un vrai admin

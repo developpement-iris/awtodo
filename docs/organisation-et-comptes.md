@@ -153,14 +153,24 @@ Visible par `admin` d'organisation ou `is_platform_admin` (même droit que "Int�
 - Frontend : `frontend/src/features/administration/BrandingSection.tsx`, deux sélecteurs `<input type="color">` + bouton "Par défaut" chacun (même patron que l'ancien sélecteur d'accent personnel). `CurrentUserContext` expose `refreshBranding()` pour réappliquer immédiatement après une modification, sans recharger la page.
 - **Calcul de la rampe "couleur principale"** (`applyPrimaryColor`, `brandColors.ts`) : la surface est toujours un cran plus claire que le fond, dans les deux sens de thème (déjà vrai dans la charte par défaut, blanc sur crème en clair, gris-brun clair sur presque-noir en sombre) ; texte/bordure s'éloignent au contraire du fond pour rester lisibles, dans le sens décidé par la luminance relative de la couleur choisie (assombris sur un fond clair, éclaircis sur un fond sombre) — pas de vraie palette light/dark distincte calculée séparément, même compromis "une couleur → un jeu de valeurs, indépendant du thème" déjà accepté pour l'ancien accent personnel.
 
-### 6. Profils (ajouté — session du 2026-09-28)
+### 6. Profils (ajouté — session du 2026-09-28, catalogue élargi le 2026-09-29)
 
-Visible par `admin` d'organisation ou `is_platform_admin`. Profils de droits personnalisés — accordent une ou plusieurs capacités précises (`manage_members`, `manage_branding`, `manage_integrations`) sans donner le statut d'admin d'organisation complet. Couche **additive** aux rôles existants, jamais un remplacement : voir CLAUDE.md > "Ce qui est hors périmètre techniquement" pour le cadrage exact de ce que ce système couvre (organisation uniquement) et ne couvre pas (rôles projet/groupe, actions par objet sur tâche/incident).
+Visible par `admin` d'organisation ou `is_platform_admin`. Profils de droits personnalisés — accordent une ou plusieurs capacités précises sans donner le statut d'admin d'organisation complet. Couche **additive** aux rôles existants, jamais un remplacement : voir CLAUDE.md > "Ce qui est hors périmètre techniquement" pour le cadrage exact de ce que ce système couvre (organisation, y compris les groupes) et ne couvre pas (rôles projet `ProjectMembership.role`, actions par objet sur tâche/incident).
+
+**Catalogue de capacités (`PERMISSION_CAPABILITY_CHOICES`, `apps.accounts.models`)** :
+
+| Clé | Couvre |
+|---|---|
+| `manage_members` | Activer/désactiver un compte membre (`deactivate_account`/`reactivate_account`) — **pas** le changement de rôle d'organisation (`set_organisation_role` reste exclusif à un vrai admin, risque d'escalade de privilège si une capacité pouvait le faire) |
+| `manage_groups` | Créer un groupe, gérer sa composition (ajout/retrait), le renommer — sur n'importe quel groupe de l'organisation, comme `_is_team_manager` le fait déjà pour un admin d'organisation |
+| `manage_invitations` | Inviter un compte interne vers n'importe quel groupe (comme un admin, pas seulement les groupes qu'on a créés), renvoyer une invitation en attente |
+| `manage_branding` | Couleurs de marque de l'organisation |
+| `manage_integrations` | Connexion Office 365 (synchro Outlook) et clés API machine-à-machine |
 
 - **Création/modification/archivage d'un profil, et assignation à un utilisateur** : réservés exclusivement à un admin d'organisation — un profil ne peut jamais s'accorder à lui-même le pouvoir de créer d'autres profils (demande explicite de l'utilisateur).
 - `PermissionProfile` (`apps.accounts.models`) : `name`, `capabilities` (liste de clés), `status` (`active`/`archived`, jamais de suppression physique). `User.permission_profiles` (M2M) — un utilisateur peut cumuler plusieurs profils.
 - `GET/POST /api/v1/accounts/permission-profiles/`, `PATCH/DELETE .../{id}/`, `POST .../{id}/assign/` et `.../{id}/unassign/` (body `{"user_id": "..."}`).
-- `MeSerializer.capabilities` : liste des clés effectivement détenues par l'utilisateur courant (admin de plateforme → toutes) — le frontend l'utilise pour décider si un onglet d'administration doit être visible, sans dupliquer la logique de garde déjà côté serveur.
+- `MeSerializer.capabilities` : liste des clés effectivement détenues par l'utilisateur courant (admin de plateforme → toutes) — le frontend l'utilise pour décider si un onglet d'administration doit être visible (`AdministrationPage.tsx`, Membres/Groupes/Invitations/Intégrations/Marque), sans dupliquer la logique de garde déjà côté serveur. `InvitationsSection.tsx` s'en sert aussi pour élargir le sélecteur de groupe cible (n'importe quel groupe, comme un admin) quand `manage_invitations` est détenu.
 - Frontend : `frontend/src/features/administration/ProfilesSection.tsx` — création (nom + cases à cocher de capacités), liste des profils actifs avec assignation/retrait par personne (`Combobox` sur les utilisateurs de l'organisation), archivage.
 
 ### 7. Organisations

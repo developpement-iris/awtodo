@@ -4,11 +4,11 @@ import { Combobox } from "../../components/Combobox";
 import { SkeletonTable } from "../../components/Skeleton";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useToast } from "../../context/ToastContext";
-import type { Invitation, Team, User } from "../../types/watodo";
+import type { Invitation, Me, Team } from "../../types/watodo";
 import "./InvitationsSection.css";
 
 interface InvitationsSectionProps {
-  currentUser: User;
+  currentUser: Me;
 }
 
 function invitationTone(status: Invitation["status"]) {
@@ -43,10 +43,15 @@ export function InvitationsSection({ currentUser }: InvitationsSectionProps) {
       .catch(() => undefined);
   }, []);
 
-  const invitableTeams =
-    currentUser.organisation_role === "admin"
-      ? teams.filter((team) => team.organisation === currentUser.organisation)
-      : teams.filter((team) => team.created_by === currentUser.id);
+  // `manage_invitations` (profil de droits, session du 2026-09-29) invite
+  // vers n'importe quel groupe, comme un admin — voir `create_invitation`.
+  const canInviteAnyTeam =
+    currentUser.organisation_role === "admin" ||
+    currentUser.is_platform_admin ||
+    currentUser.capabilities.includes("manage_invitations");
+  const invitableTeams = canInviteAnyTeam
+    ? teams.filter((team) => team.organisation === currentUser.organisation)
+    : teams.filter((team) => team.created_by === currentUser.id);
 
   async function handleCreate() {
     if (!email.trim()) return;

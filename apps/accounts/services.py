@@ -183,7 +183,9 @@ def create_team(*, actor, name, description=""):
     pourrait pas y rattacher de projet collaboratif juste après (contrainte
     "le créateur doit être membre du groupe", voir apps.projects.services)."""
     _require_actor(actor)
-    if actor.organisation_role not in {"admin", "chef_de_projet"}:
+    if actor.organisation_role not in {"admin", "chef_de_projet"} and not has_capability(
+        actor, "manage_groups", actor.organisation
+    ):
         raise AccountPermissionError("Seul un administrateur ou chef de projet d'organisation peut créer un groupe.")
     if not name or not name.strip():
         raise AccountValidationError("Le nom du groupe est obligatoire.")
@@ -208,8 +210,12 @@ def _is_team_manager(actor, team):
     membre promu `role="administrateur"` sur CE groupe précis (via
     `change_team_member_role`) gère aussi le groupe, sans être admin de toute
     l'organisation — portée volontairement plus étroite que les deux
-    premiers cas."""
+    premiers cas. **Élargi le 2026-09-29** : un profil de droits portant la
+    capacité `manage_groups` gère aussi n'importe quel groupe de son
+    organisation, sans être admin d'organisation — voir `has_capability`."""
     if team.created_by_id == actor.id or actor.is_platform_admin or actor.organisation_role == "admin":
+        return True
+    if has_capability(actor, "manage_groups", team.organisation):
         return True
     return TeamMembership.objects.filter(
         team=team, user=actor, status="active", role="administrateur"
@@ -557,8 +563,10 @@ def create_invitation(*, actor, email, first_name="", last_name="", team=None, p
       `organisation_role`). Import local de `apps.projects.models` : voir la
       note sur `Invitation.project` dans models.py, même justification.
     - `project` absent : compte interne — réservé à `organisation_role=admin`
-      (n'importe quel groupe) ou `chef_de_projet` (uniquement vers un groupe
-      dont il est `created_by`)."""
+      (n'importe quel groupe), `chef_de_projet` (uniquement vers un groupe
+      dont il est `created_by`), ou un profil portant la capacité
+      `manage_invitations` (n'importe quel groupe, comme un admin — session
+      du 2026-09-29, voir `has_capability`)."""
     _require_actor(actor)
 
     if project is not None:
@@ -569,7 +577,7 @@ def create_invitation(*, actor, email, first_name="", last_name="", team=None, p
         account_type = "externe"
         organisation = project.organisation
     else:
-        if actor.organisation_role == "admin":
+        if actor.organisation_role == "admin" or has_capability(actor, "manage_invitations", actor.organisation):
             pass
         elif actor.organisation_role == "chef_de_projet":
             if team is None or team.created_by_id != actor.id:
@@ -666,7 +674,11 @@ def resend_invitation(*, actor, invitation):
     _require_actor(actor)
     if invitation.status != "pending":
         raise AccountValidationError("Seule une invitation en attente peut être renvoyée.")
-    if actor.id != invitation.invited_by_id and actor.organisation_role != "admin":
+    if (
+        actor.id != invitation.invited_by_id
+        and actor.organisation_role != "admin"
+        and not has_capability(actor, "manage_invitations", actor.organisation)
+    ):
         raise AccountPermissionError("Vous ne pouvez pas renvoyer cette invitation.")
 
     with transaction.atomic():

@@ -40,7 +40,12 @@ export interface Me extends User {
 // 2026-09-28) — couche additive aux rôles existants (organisation_role,
 // ProjectMembership, TeamMembership), jamais un remplacement. Seul un admin
 // d'organisation peut créer/modifier/assigner un profil.
-export type PermissionCapabilityKey = "manage_members" | "manage_branding" | "manage_integrations";
+export type PermissionCapabilityKey =
+  | "manage_members"
+  | "manage_groups"
+  | "manage_invitations"
+  | "manage_branding"
+  | "manage_integrations";
 
 export interface PermissionProfile {
   id: string;

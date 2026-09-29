@@ -5,19 +5,24 @@ from django.dispatch import Signal
 from django.test import TestCase, override_settings
 from rest_framework.test import APITestCase
 
-from apps.accounts.models import Organisation, PermissionProfile, User
+from apps.accounts.models import Organisation, PermissionProfile, Team, User
 from apps.accounts.services import (
     AccountPermissionError,
     AccountValidationError,
+    add_team_member,
     archive_permission_profile,
     assign_permission_profile,
     authenticate_user,
     change_own_password,
+    create_invitation,
     create_permission_profile,
+    create_team,
     deactivate_account,
     has_capability,
     is_organisation_admin,
     reactivate_account,
+    rename_team,
+    resend_invitation,
     unassign_permission_profile,
     update_notification_preferences,
     update_organisation_branding,
@@ -369,6 +374,44 @@ class PermissionProfileServiceTests(TestCase):
         updated = deactivate_account(actor=self.member, target_user=target)
 
         self.assertEqual(updated.account_status, "desactive")
+
+    def test_manage_groups_capability_allows_team_management(self):
+        profile = create_permission_profile(
+            actor=self.admin, organisation=self.org, name="RH", capabilities=["manage_groups"]
+        )
+        assign_permission_profile(actor=self.admin, profile=profile, target_user=self.member)
+
+        team = create_team(actor=self.member, name="Support")
+        self.assertEqual(team.created_by, self.member)
+
+        renamed = rename_team(actor=self.member, team=team, name="Support N2")
+        self.assertEqual(renamed.name, "Support N2")
+
+        other = User.objects.create_user(username="to-add", organisation=self.org)
+        add_team_member(actor=self.member, team=team, user=other)
+        self.assertTrue(team.memberships.filter(user=other, status="active").exists())
+
+    def test_manage_invitations_capability_allows_invite_to_any_team(self):
+        profile = create_permission_profile(
+            actor=self.admin, organisation=self.org, name="RH", capabilities=["manage_invitations"]
+        )
+        assign_permission_profile(actor=self.admin, profile=profile, target_user=self.member)
+        someone_elses_team = Team.objects.create(name="Autre groupe", organisation=self.org, created_by=self.admin)
+
+        invitation = create_invitation(actor=self.member, email="new@example.com", team=someone_elses_team)
+
+        self.assertEqual(invitation.status, "pending")
+
+    def test_manage_invitations_capability_allows_resend(self):
+        profile = create_permission_profile(
+            actor=self.admin, organisation=self.org, name="RH", capabilities=["manage_invitations"]
+        )
+        assign_permission_profile(actor=self.admin, profile=profile, target_user=self.member)
+        invitation = create_invitation(actor=self.admin, email="resend@example.com")
+
+        resent = resend_invitation(actor=self.member, invitation=invitation)
+
+        self.assertEqual(resent.status, "pending")
 
 
 class PlanningPreferenceServiceTests(TestCase):

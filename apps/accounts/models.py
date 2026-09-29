@@ -32,16 +32,23 @@ class Organisation(UUIDModel, TimeStampedModel):
 
 
 # Catalogue fixe des capacités qu'un profil de droits peut accorder (session
-# du 2026-09-28) — délibérément limité aux actions déjà gouvernées par
-# `is_organisation_admin` (portée organisation : membres, marque,
-# intégrations), PAS aux rôles projet (`ProjectMembership.role`, déjà un
-# mécanisme de rôles qui fonctionne et n'a pas besoin d'être remplacé) ni aux
-# actions par objet (transitions de tâche/incident, qui dépendent de l'état
-# de l'objet, pas seulement du rôle). Un profil est donc une **couche
-# additive** aux rôles existants (`organisation_role`, `ProjectMembership`,
-# `TeamMembership`) — jamais un remplacement.
+# du 2026-09-28, élargi le 2026-09-29) — délibérément limité aux actions déjà
+# gouvernées par un droit d'admin d'organisation existant (membres, groupes,
+# invitations, marque, intégrations), PAS aux rôles projet
+# (`ProjectMembership.role`, déjà un mécanisme de rôles qui fonctionne et n'a
+# pas besoin d'être remplacé) ni aux actions par objet (transitions de
+# tâche/incident, qui dépendent de l'état de l'objet, pas seulement du rôle).
+# Un profil est donc une **couche additive** aux rôles existants
+# (`organisation_role`, `ProjectMembership`, `TeamMembership`) — jamais un
+# remplacement. `manage_members` en particulier ne couvre QUE
+# l'activation/désactivation de compte — jamais `set_organisation_role`
+# (changer le rôle de quelqu'un, y compris vers "admin", resterait un risque
+# d'escalade de privilège si une capacité pouvait le faire — voir
+# `has_capability`/`set_organisation_role`).
 PERMISSION_CAPABILITY_CHOICES = [
-    ("manage_members", "Gérer les membres et leurs rôles"),
+    ("manage_members", "Activer/désactiver des comptes membres"),
+    ("manage_groups", "Gérer les groupes (création, composition, renommage)"),
+    ("manage_invitations", "Inviter de nouveaux comptes internes"),
     ("manage_branding", "Gérer les couleurs de marque de l'organisation"),
     ("manage_integrations", "Gérer la connexion Office 365 et les clés API"),
 ]

@@ -18,7 +18,9 @@ import "./ProfilesSection.css";
 // Miroir de apps.accounts.models.PERMISSION_CAPABILITY_CHOICES (backend,
 // source de vérité) — à garder synchronisé.
 const CAPABILITY_OPTIONS: { key: PermissionCapabilityKey; label: string }[] = [
-  { key: "manage_members", label: "Gérer les membres et leurs rôles" },
+  { key: "manage_members", label: "Activer/désactiver des comptes membres" },
+  { key: "manage_groups", label: "Gérer les groupes (création, composition, renommage)" },
+  { key: "manage_invitations", label: "Inviter de nouveaux comptes internes" },
   { key: "manage_branding", label: "Gérer les couleurs de marque de l'organisation" },
   { key: "manage_integrations", label: "Gérer la connexion Office 365 et les clés API" },
 ];
