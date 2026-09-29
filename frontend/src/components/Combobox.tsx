@@ -25,6 +25,11 @@ interface ComboboxProps {
    * `false` pour un choix obligatoire (type, priorité…). */
   clearable?: boolean;
   id?: string;
+  /** Largeur du panneau : `anchor` (défaut) = celle du déclencheur, `auto` =
+   * dictée par le contenu — à utiliser quand le déclencheur est volontairement
+   * étroit (ex. un bouton "+ champ") mais que les libellés d'options sont
+   * plus longs, pour éviter un panneau écrasé (texte tronqué, double scroll). */
+  panelWidth?: "anchor" | "auto";
 }
 
 const SEARCH_THRESHOLD = 7;
@@ -46,6 +51,7 @@ export function Combobox({
   searchable,
   clearable = true,
   id,
+  panelWidth = "anchor",
 }: ComboboxProps) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -76,7 +82,12 @@ export function Combobox({
       </button>
 
       {open && (
-        <AnchoredPanel anchorRef={triggerRef} onClose={() => setOpen(false)} className="combobox__panel">
+        <AnchoredPanel
+          anchorRef={triggerRef}
+          onClose={() => setOpen(false)}
+          className="combobox__panel"
+          width={panelWidth}
+        >
           <Command loop label={placeholder} shouldFilter={showSearch}>
             {showSearch && (
               <Command.Input autoFocus placeholder={searchPlaceholder} className="combobox__input" />

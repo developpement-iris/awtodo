@@ -267,3 +267,46 @@
   --shadow-hover: 0 2px 4px rgba(25, 16, 51, 0.08), 0 10px 24px rgba(25, 16, 51, 0.12);
   --shadow-overlay: 0 12px 20px rgba(25, 16, 51, 0.14), 0 32px 64px rgba(25, 16, 51, 0.2);
 }
+
+/*
+  Scrollbar personnalisée (session du 2026-09-29, retour direct sur la
+  scrollbar par défaut du navigateur) — dégradé basé sur `--sidebar-bg`
+  (couleur "secondaire" de la marque, voir Administration > Marque et
+  frontend/src/theme/brandColors.ts) plutôt qu'une couleur fixe : suit
+  automatiquement la personnalisation de marque de l'organisation. Le jeton
+  est déjà constant entre les deux thèmes clair/sombre, donc une seule règle
+  suffit pour les deux.
+*/
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sidebar-bg) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--sidebar-bg) 100%, white 20%),
+    var(--sidebar-bg)
+  );
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--sidebar-bg) 100%, white 10%),
+    var(--sidebar-bg)
+  );
+  background-clip: padding-box;
+}

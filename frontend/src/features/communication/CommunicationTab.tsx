@@ -362,6 +362,7 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
                           onChange={(v) => insertFieldIntoRow(index, v)}
                           placeholder="+ champ"
                           clearable={false}
+                          panelWidth="auto"
                         />
                         <button
                           type="button"
