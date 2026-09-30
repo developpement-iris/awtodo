@@ -116,9 +116,8 @@ export function ProfilesSection() {
   return (
     <div className="profiles-section">
       <p className="profiles-section__intro">
-        Profils de droits personnalisés — accordent des capacités précises (ex. « gérer les intégrations »)
-        sans donner le statut d'administrateur d'organisation complet. S'ajoutent aux rôles existants, ne les
-        remplacent jamais.
+        Accordent des capacités précises (ex. « gérer les intégrations ») sans le statut d'administrateur
+        complet — s'ajoutent aux rôles existants, ne les remplacent jamais.
       </p>
 
       {error && <p className="profiles-section__error">{error}</p>}

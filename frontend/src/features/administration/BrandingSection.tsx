@@ -37,7 +37,7 @@ export function BrandingSection() {
     <div className="branding-section">
       <p className="branding-section__intro">
         Couleurs de marque pour toute l'organisation — remplacent la charte graphique par défaut pour tous les
-        utilisateurs. Réservé à un administrateur d'organisation.
+        utilisateurs.
       </p>
 
       {error && <p className="branding-section__error">{error}</p>}

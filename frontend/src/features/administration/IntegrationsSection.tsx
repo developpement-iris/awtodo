@@ -117,10 +117,8 @@ export function IntegrationsSection() {
   return (
     <div className="integrations-section">
       <p className="integrations-section__intro">
-        Identifiants Microsoft Graph (tenant, application, secret) pour toute l'organisation — sert à
-        la synchronisation Outlook du planning (« Mon planning ») et, plus tard, à l'envoi de
-        mails/Teams (module Communication). Réservé à un administrateur d'organisation. La boîte
-        expéditrice pour les mails se configure par projet, dans l'onglet Communication.
+        Identifiants Microsoft Graph pour toute l'organisation — sert à la synchronisation Outlook du planning
+        (« Mon planning »).
       </p>
 
       {error && <p className="integrations-section__error">{error}</p>}
@@ -225,10 +223,7 @@ export function IntegrationsSection() {
         </div>
 
         <p className="integrations-section__intro">
-          Pour connecter un système externe (outil de ticketing, Power Automate…) sans compte Awtodo
-          personnel. Valable en production, indépendamment de l'hébergement — seule l'URL de base change
-          en cas de migration, jamais cette clé. Une clé générée agit avec les mêmes droits que le
-          contournement déjà en place pour la création automatique d'incidents.
+          Pour connecter un système externe (outil de ticketing, Power Automate…) sans compte Awtodo personnel.
         </p>
 
         {apiKeysError && <p className="integrations-section__error">{apiKeysError}</p>}

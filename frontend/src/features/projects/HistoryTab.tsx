@@ -35,8 +35,7 @@ export function HistoryTab({ project }: HistoryTabProps) {
   return (
     <div className="history-tab">
       <p className="history-tab__intro">
-        Historique complet des actions faites sur ce projet — tâches, incidents, membres, budget, documentation,
-        communication, planning. Visible par le chef de projet uniquement.
+        Tâches, incidents, membres, budget, documentation, communication, planning.
       </p>
 
       {error && <p className="history-tab__error">{error}</p>}
