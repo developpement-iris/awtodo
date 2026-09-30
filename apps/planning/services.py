@@ -10,7 +10,7 @@ from dateutil.rrule import rrulestr
 from django.db.models import Q
 from django.utils import timezone
 
-from apps.common.audit import record_changes
+from apps.common.audit import record_changes, record_event
 from apps.common.permissions import check_permission
 from apps.projects.models import ProjectMembership
 from apps.projects.services import is_project_manager, is_project_member
@@ -798,7 +798,7 @@ def create_project_entry(
     if assignee is not None and not is_project_member(assignee, project):
         raise PlanningValidationError("La personne assignée doit être membre du projet.")
     rule = _validate_recurrence_rule(recurrence_rule, start)
-    return ProjectPlanningEntry.objects.create(
+    entry = ProjectPlanningEntry.objects.create(
         project=project,
         title=title.strip()[:255],
         description=description or "",
@@ -809,6 +809,10 @@ def create_project_entry(
         end=end,
         recurrence_rule=rule,
     )
+    record_event(
+        entry, actor=actor, verb="created", description=f"Entrée de planning créée : « {entry.title} »", project=project
+    )
+    return entry
 
 
 def update_project_entry(
@@ -828,7 +832,7 @@ def update_project_entry(
     new_start = entry.start if start is _UNSET else start
     new_end = entry.end if end is _UNSET else end
     _validate_window(new_start, new_end)
-    with record_changes(entry, actor=actor):
+    with record_changes(entry, actor=actor, project=entry.project):
         if title is not _UNSET:
             if not title or not title.strip():
                 raise PlanningValidationError("Le titre est obligatoire.")

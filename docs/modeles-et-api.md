@@ -960,3 +960,69 @@ ConfidentialClientApplication(
 Aucun appel si le modèle (ou la copie du destinataire visé) n'a pas encore d'`outlook_event_id` — rien à cibler côté Graph. L'id d'instance résolu est mis en cache dans `EventOccurrenceOutlookSync.outlook_event_id` pour éviter de re-résoudre à chaque appel.
 
 L'id Graph retourné est stocké dans `BlockOutlookSync.outlook_event_id` (une ligne par `(block, destinataire)`), pas sur `ScheduledBlock` lui-même.
+
+## Historique d'activité (implémenté — session du 2026-09-29)
+
+Demande directe en deux volets : (1) un historique **par projet**, accessible au chef de projet, couvrant toute action touchant une entité du projet ; (2) un historique **global exportable**, scopé selon le rang de l'utilisateur (soi-même/ses projets dirigés, son groupe, ou toute l'organisation pour un admin). Étend le mécanisme d'audit existant (`AuditLogEntry`, jusque-là un diff de champ générique utilisé uniquement dans le détail d'une tâche/d'un incident) plutôt que d'en créer un second.
+
+### Modèle — dénormalisation pour l'optimisation
+
+`AuditLogEntry` (`apps/common/models.py`) gagne trois colonnes, **résolues et écrites par l'appelant au moment de la création de la ligne**, jamais recalculées à la lecture depuis `content_object` :
+
+- `organisation` (FK, obligatoire) — déduite de `actor.organisation` si non fournie explicitement ; doit être fournie explicitement quand `actor=None` (action système, ex. incident créé par le compte de service ticketing).
+- `project` (FK, nullable) — présente pour toute entité rattachée à un projet.
+- `team` (FK, nullable) — présente pour toute entité rattachée à un groupe sans projet (ex. un incident encore en boîte de réception).
+- Trois index composés (`project`+`created_at`, `team`+`created_at`, `organisation`+`created_at`), plus l'index déjà existant sur `actor`+`created_at`.
+
+C'est ce qui rend "l'historique d'un projet" et les exports scopés (organisation/groupe/soi) des **requêtes indexées simples** plutôt qu'un recoupement de plusieurs types d'entités à chaque consultation (Task, Incident, ProjectMembership, BudgetLine... auraient sinon dû être requêtées séparément puis fusionnées côté application à chaque affichage) — c'est le point d'optimisation explicitement demandé.
+
+`actor` devient nullable (une action système doit pouvoir être journalisée). `verb` (nouveau, défaut `"field_changed"`) distingue un diff de champ classique d'un événement discret (`created`, `commented`, `member_added`, `member_removed`, `removed`, `sent`, `archived`...) — pour ces derniers, `field_name` reste vide et `new_value` porte une description lisible ("Tâche créée : « ... »").
+
+### Deux fonctions dans `apps/common/audit.py`
+
+- `record_changes(instance, *, actor, project=None, team=None, organisation=None)` — signature étendue de la fonction déjà existante (rétrocompatible : les appels qui ne passent pas `project`/`team` continuent de fonctionner à l'identique, seul `organisation` se déduit automatiquement de l'acteur).
+- `record_event(instance, *, actor, verb, description, project=None, team=None, organisation=None)` — nouvelle, pour les événements discrets (création, commentaire, ajout/retrait de membre, ligne de budget...).
+- `get_project_audit_log(project)` / `get_audit_log(instance)` — requêtes de base, sans contrôle de permission (fait par l'appelant).
+
+**La logique d'accès scopé (`get_project_history`/`get_scoped_history`) vit dans `apps/projects/services.py`, pas dans `apps.common`** — `apps/common` ne doit aucune dépendance vers les autres apps (CLAUDE.md), et cette logique a besoin de `Team`/`ProjectMembership`/`is_organisation_admin`.
+
+### Portée instrumentée dans cette passe
+
+Toute action a été journalisée sur les entités les plus clairement rattachées à un projet — pas exhaustif au sens littéral, deux catégories volontairement laissées de côté (voir "Limites assumées" plus bas) :
+
+| App | Événements journalisés |
+|---|---|
+| `tasks` | Création, tous les diffs de champ déjà existants (statut, assignation, renommage...), commentaires |
+| `incidents` | Création, tous les diffs de champ déjà existants, rattachement à un projet/groupe (contexte = la **destination**, pas l'origine — sinon la transition n'apparaîtrait jamais dans l'historique du projet qui vient d'hériter de l'incident), commentaires |
+| `projects` | Création/clôture/réouverture/conversion en collaboratif d'un projet, création de version, ajout/retrait/changement de rôle d'un membre |
+| `budgeting` | Ajout/retrait d'une ligne de budget |
+| `communication` | Création/archivage d'un canal Teams, envoi d'une communication |
+| `documentation` | Création d'une page ou d'une fiche (pas les éditions de contenu — voir limites) |
+| `planning` | Création/modification d'une entrée de planning **projet** (`ProjectPlanningEntry`) uniquement — le calendrier personnel (`CalendarEvent`/`ScheduledBlock`) reste hors périmètre, voir limites |
+
+### API
+
+| Méthode / chemin | Effet |
+|---|---|
+| `GET /api/v1/projects/{id}/history/` | Historique complet du projet — réservé au chef de projet (`get_project_history`, 403 sinon). Nouveau flag `permissions.can_view_history`. |
+| `GET /api/v1/projects/history/export/` | Export CSV de l'historique **scopé** à l'utilisateur courant (`get_scoped_history`) — aucun paramètre, la portée dépend uniquement de son rang. |
+
+### Logique d'accès à l'export global (`get_scoped_history`)
+
+Priorité descendante — un admin d'organisation qui est aussi chef de projet ou admin de groupe voit tout via la première branche :
+
+1. **Admin d'organisation ou de plateforme** (`is_organisation_admin`) : tout l'historique de l'organisation.
+2. **Administrateur d'un groupe** (créateur du groupe, ou promu `role="administrateur"` — même définition que `apps.accounts.services._is_team_manager`, la portée organisation/plateforme du cas 1 étant déjà couverte) : l'historique des projets rattachés à ce groupe (`Project.team`) **et** des incidents de ce groupe, y compris ceux encore en boîte de réception (`team` dénormalisé directement sur la ligne, pas seulement accessible via `project`).
+3. **Tout le monde d'autre** : ses propres actions (`actor=soi`), plus l'historique complet des projets dont il est chef de projet.
+
+### Frontend
+
+- Nouvel onglet **Historique** du hub projet (`frontend/src/features/projects/HistoryTab.tsx`), visible uniquement si `permissions.can_view_history` — liste chronologique (type d'entité, action, description, auteur, date).
+- Export global : bouton "Exporter mon historique" dans la carte de compte (`UserMenu.tsx`, toujours visible, accessible à tout utilisateur authentifié — la portée de ce qu'il contient dépend de son rang côté serveur, pas d'un choix côté écran). Téléchargement direct du CSV via `downloadHistoryExport()` (`api/client.ts`) — un `fetch` authentifié suivi d'un blob, pas un simple lien `<a href>` (qui n'enverrait pas le header `Authorization`).
+- `frontend/src/lib/auditFieldLabels.ts` étoffé : `auditVerbLabel`/`auditEntityLabel` en plus de `auditFieldLabel` déjà existant, mêmes conventions (fallback sur la valeur brute si absente du dictionnaire).
+
+### Limites assumées, pas cadrées avec l'utilisateur dans cette passe
+
+- **Éditions de texte libre non journalisées** (bloc-notes de projet, cahier des charges, contenu d'une page/fiche de documentation) — seule la **création** de ces objets l'est. Journaliser chaque sauvegarde d'un champ texte libre editable en continu produirait des diffs volumineux et bruyants (le texte entier avant/après) pour un intérêt limité — écarté par cohérence avec la préoccupation d'optimisation soulevée par l'utilisateur, pas explicitement tranché avec lui.
+- **Calendrier personnel hors périmètre** (`CalendarEvent`, `ScheduledBlock`, horaires de travail, partage de calendrier) — ce sont des données personnelles, pas des "entités qui touchent au projet" au sens de la demande, même quand un créneau est posé sur une tâche/un incident.
+- **Profils de droits, clés API, connexion O365, couleurs de marque** : actions d'administration d'organisation, pas rattachées à un projet — capturables plus tard sous `team=None, project=None` si le besoin se confirme (déjà supporté par le modèle), pas fait dans cette passe.

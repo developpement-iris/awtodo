@@ -6,7 +6,7 @@ from django.db.models.functions import TruncWeek
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
-from apps.common.audit import record_changes
+from apps.common.audit import record_changes, record_event
 from apps.common.choices import PRIORITY_CHOICES
 from apps.common.permissions import check_permission
 from apps.projects.models import ProjectMembership
@@ -428,6 +428,7 @@ def create_task(
     # reconditionner ici.
     if task.assignee_id:
         task_assigned.send(sender=Task, task=task, actor=actor)
+    record_event(task, actor=actor, verb="created", description=f"Tâche créée : « {task.title} »", project=project)
     return task
 
 
@@ -436,7 +437,7 @@ def rename_task(*, actor, task, title):
     if not title or not title.strip():
         raise InvalidTransitionError("Le titre ne peut pas être vide.")
 
-    with record_changes(task, actor=actor):
+    with record_changes(task, actor=actor, project=task.project):
         task.title = title.strip()
         task.save()
     return task
@@ -448,7 +449,7 @@ def update_task_description(*, actor, task, description):
     # seulement l'assigné — cohérent avec le reste du cycle de vie.
     _ensure_can_rename(actor, task)
 
-    with record_changes(task, actor=actor):
+    with record_changes(task, actor=actor, project=task.project):
         task.description = description.strip()
         task.save()
     return task
@@ -481,7 +482,7 @@ def update_task_deadline(*, actor, task, deadline):
             raise InvalidTransitionError("Date d'échéance invalide (format AAAA-MM-JJ attendu).")
         deadline = parsed
 
-    with record_changes(task, actor=actor):
+    with record_changes(task, actor=actor, project=task.project):
         task.deadline = deadline
         task.save()
     return task
@@ -500,7 +501,7 @@ def update_task_estimated_hours(*, actor, task, estimated_hours):
         # comparaison faite juste après l'appel sans recharger depuis la DB.
         estimated_hours = Decimal(str(estimated_hours))
 
-    with record_changes(task, actor=actor):
+    with record_changes(task, actor=actor, project=task.project):
         task.estimated_hours = estimated_hours
         task.save()
     return task
@@ -509,7 +510,7 @@ def update_task_estimated_hours(*, actor, task, estimated_hours):
 def validate_task(*, actor, task, assignee=None):
     _ensure_can_validate(actor, task)
 
-    with record_changes(task, actor=actor):
+    with record_changes(task, actor=actor, project=task.project):
         task.status = "assignee" if assignee else "disponible"
         task.assignee = assignee
         task.save()
@@ -523,7 +524,7 @@ def reject_task(*, actor, task, rejection_reason):
     if not rejection_reason:
         raise InvalidTransitionError("Un motif de rejet est obligatoire.")
 
-    with record_changes(task, actor=actor):
+    with record_changes(task, actor=actor, project=task.project):
         task.status = "rejetee"
         task.rejection_reason = rejection_reason
         task.save()
@@ -535,7 +536,7 @@ def cancel_task(*, actor, task, cancellation_reason):
     if not cancellation_reason:
         raise InvalidTransitionError("Un motif d'annulation est obligatoire.")
 
-    with record_changes(task, actor=actor):
+    with record_changes(task, actor=actor, project=task.project):
         task.status = "annulee"
         task.cancellation_reason = cancellation_reason
         task.save()
@@ -545,7 +546,7 @@ def cancel_task(*, actor, task, cancellation_reason):
 def claim_task(*, actor, task):
     _ensure_can_claim(actor, task)
 
-    with record_changes(task, actor=actor):
+    with record_changes(task, actor=actor, project=task.project):
         task.status = "assignee"
         task.assignee = actor
         task.save()
@@ -559,7 +560,7 @@ def assign_task(*, actor, task, assignee):
     if not _is_member(assignee, task.project):
         raise InvalidTransitionError("L'assigné doit être membre du projet.")
 
-    with record_changes(task, actor=actor):
+    with record_changes(task, actor=actor, project=task.project):
         task.status = "assignee"
         task.assignee = assignee
         task.save()
@@ -570,7 +571,7 @@ def assign_task(*, actor, task, assignee):
 def start_task(*, actor, task):
     _ensure_can_start(actor, task)
 
-    with record_changes(task, actor=actor):
+    with record_changes(task, actor=actor, project=task.project):
         task.status = "en_cours"
         task.save()
     return task
@@ -588,7 +589,7 @@ def complete_task(*, actor, task, time_spent):
     if time_spent <= 0:
         raise InvalidTransitionError("Le temps passé doit être un nombre positif.")
 
-    with record_changes(task, actor=actor):
+    with record_changes(task, actor=actor, project=task.project):
         task.status = "archivee"
         task.time_spent = time_spent
         task.save()
@@ -603,4 +604,5 @@ def add_comment(*, actor, task, content):
 
     comment = TaskComment.objects.create(task=task, author=actor, content=content.strip())
     task_commented.send(sender=Task, task=task, comment=comment, actor=actor)
+    record_event(task, actor=actor, verb="commented", description="Commentaire ajouté", project=task.project)
     return comment

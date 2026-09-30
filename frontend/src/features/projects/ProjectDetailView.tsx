@@ -12,6 +12,7 @@ import { TasksTab } from "../tasks/TasksTab";
 import type { Project } from "../../types/watodo";
 import { BudgetingTab } from "./BudgetingTab";
 import { DocumentationTab } from "./DocumentationTab";
+import { HistoryTab } from "./HistoryTab";
 import { NotesTab } from "./NotesTab";
 import { ProjectPlanningTab } from "../planning/ProjectPlanningTab";
 import { ProjectAdminTab } from "./ProjectAdminTab";
@@ -29,6 +30,7 @@ type Tab =
   | "communication"
   | "stats"
   | "budgeting"
+  | "history"
   | "administration";
 
 const TABS: { id: Tab; label: string }[] = [
@@ -41,6 +43,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "communication", label: "Communication" },
   { id: "stats", label: "Statistiques" },
   { id: "budgeting", label: "Budgétisation" },
+  { id: "history", label: "Historique" },
   { id: "administration", label: "Administration" },
 ];
 
@@ -63,12 +66,16 @@ export function ProjectDetailView({ project: initialProject, onBack }: ProjectDe
     "communication",
     "stats",
     "budgeting",
+    "history",
     "administration",
   ];
   const visibleTabs = TABS.filter((item) => {
     // L'onglet Documentation est en plus réservé au chef de projet (rédaction
     // + gestion du lien public) — voir CLAUDE.md > Roadmap (session 2026-09-03).
     if (item.id === "documentation" && !project.permissions.can_edit_documentation) return false;
+    // Historique réservé au chef de projet (session du 2026-09-29) — demande
+    // explicite, contrairement aux autres onglets "contributeur" ci-dessus.
+    if (item.id === "history" && !project.permissions.can_view_history) return false;
     if (!project.permissions.can_contribute && contributorOnlyTabs.includes(item.id)) return false;
     return true;
   });
@@ -186,6 +193,7 @@ export function ProjectDetailView({ project: initialProject, onBack }: ProjectDe
           {tab === "communication" && <CommunicationTab project={project} />}
           {tab === "stats" && <StatsTab project={project} />}
           {tab === "budgeting" && <BudgetingTab project={project} />}
+          {tab === "history" && <HistoryTab project={project} />}
           {tab === "administration" && <ProjectAdminTab project={project} onUpdated={setProject} />}
         </div>
       </div>

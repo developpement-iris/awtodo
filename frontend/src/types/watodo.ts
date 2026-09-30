@@ -157,6 +157,9 @@ export interface ProjectPermissions {
   can_manage_project_planning: boolean;
   can_manage_project_communication: boolean;
   can_send_project_communication: boolean;
+  // Historique d'activité (session du 2026-09-29) — réservé au chef de
+  // projet, pas les membres/lecteurs.
+  can_view_history: boolean;
 }
 
 // --- Communication de projet (onglet hub) --------------------------------
@@ -439,11 +442,21 @@ export interface TaskComment {
 
 export interface AuditLogEntry {
   id: string;
-  actor: User;
+  actor: User | null;
+  verb: string;
   field_name: string;
   old_value: string;
   new_value: string;
   created_at: string;
+}
+
+// Vue enrichie de l'historique d'un projet (session du 2026-09-29) — voir
+// docs/modeles-et-api.md > "Historique d'activité".
+export interface ProjectHistoryEntry extends AuditLogEntry {
+  entity_type: string;
+  project: string | null;
+  project_name: string | null;
+  team_name: string | null;
 }
 
 export interface TaskDetail extends Task {

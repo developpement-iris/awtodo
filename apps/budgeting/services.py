@@ -1,5 +1,6 @@
 from decimal import Decimal, InvalidOperation
 
+from apps.common.audit import record_event
 from apps.common.permissions import check_permission
 from apps.projects.models import ProjectMembership
 from apps.projects.services import is_project_manager, is_project_member
@@ -90,7 +91,7 @@ def add_budget_line(*, actor, project, category, label, quantity, unit_price):
         raise BudgetValidationError("La quantité doit être un nombre entier positif (pas de décimales).")
     quantity = int(quantity)
 
-    return BudgetLine.objects.create(
+    line = BudgetLine.objects.create(
         project=project,
         category=category,
         label=label.strip(),
@@ -98,12 +99,23 @@ def add_budget_line(*, actor, project, category, label, quantity, unit_price):
         unit_price=unit_price,
         created_by=actor,
     )
+    record_event(
+        line,
+        actor=actor,
+        verb="created",
+        description=f"Ligne de budget ajoutée : « {line.label} » ({line.get_category_display()})",
+        project=project,
+    )
+    return line
 
 
 def remove_budget_line(*, actor, line):
     _ensure_can_manage_budget(actor, line.project)
     line.status = "removed"
     line.save(update_fields=["status"])
+    record_event(
+        line, actor=actor, verb="removed", description=f"Ligne de budget retirée : « {line.label} »", project=line.project
+    )
     return line
 
 

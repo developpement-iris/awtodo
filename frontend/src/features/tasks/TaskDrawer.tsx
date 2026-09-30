@@ -262,7 +262,7 @@ export function TaskDrawer({
                     {entry.old_value || "—"} → {entry.new_value || "—"}
                   </span>
                   <span className="task-drawer__audit-meta">
-                    {displayName(entry.actor)} ·{" "}
+                    {entry.actor ? displayName(entry.actor) : "Système"} ·{" "}
                     <time dateTime={entry.created_at} title={new Date(entry.created_at).toLocaleString("fr-FR")}>
                       {new Date(entry.created_at).toLocaleDateString("fr-FR")}
                     </time>

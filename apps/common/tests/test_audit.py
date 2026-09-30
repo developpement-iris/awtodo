@@ -14,6 +14,7 @@ class AuditLogEntryModelTests(TestCase):
         entry = AuditLogEntry.objects.create(
             content_object=target,
             actor=actor,
+            organisation=actor.organisation,
             field_name="first_name",
             old_value="",
             new_value="Bob",

@@ -1,10 +1,14 @@
+import csv
+
 from django.db.models import Count, Prefetch, Q
+from django.http import HttpResponse
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.accounts.models import TeamMembership
 from apps.accounts.services import AccountPermissionError, AccountValidationError, create_invitation
+from apps.common.serializers import ProjectHistoryEntrySerializer
 from apps.common.views import ListOnlyFilterMixin
 
 from .filters import ProjectFilterSet
@@ -34,6 +38,8 @@ from .services import (
     convert_to_collaborative as convert_project_to_collaborative,
     create_project,
     create_project_version,
+    get_project_history,
+    get_scoped_history,
     get_spec_sections,
     prefetched_project_roles,
     remove_project_member,
@@ -296,3 +302,45 @@ class ProjectViewSet(
             return Response({"detail": str(exc)}, status=400)
 
         return Response(self.get_serializer(project).data)
+
+    @action(detail=True, methods=["get"])
+    def history(self, request, pk=None):
+        """Historique d'activité du projet (session du 2026-09-29) — réservé
+        au chef de projet, voir `get_project_history`."""
+        project = self.get_object()
+        try:
+            entries = get_project_history(actor=request.user, project=project)
+        except ProjectPermissionError as exc:
+            return Response({"detail": str(exc)}, status=403)
+        return Response(ProjectHistoryEntrySerializer(entries, many=True).data)
+
+    @action(detail=False, methods=["get"], url_path="history/export")
+    def history_export(self, request):
+        """Export CSV de l'historique global, scopé selon le rang de
+        l'utilisateur courant — voir `get_scoped_history` pour la logique
+        d'accès (admin d'organisation : tout ; admin de groupe : ses
+        projets/incidents de groupe ; sinon : ses propres actions + ses
+        projets dirigés)."""
+        entries = get_scoped_history(actor=request.user)
+
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="historique.csv"'
+        writer = csv.writer(response)
+        writer.writerow(
+            ["Date", "Acteur", "Type d'entité", "Projet", "Groupe", "Action", "Champ", "Ancienne valeur", "Nouvelle valeur"]
+        )
+        for entry in entries.iterator():
+            writer.writerow(
+                [
+                    entry.created_at.isoformat(),
+                    entry.actor.username if entry.actor else "(système)",
+                    entry.content_type.model,
+                    entry.project.name if entry.project else "",
+                    entry.team.name if entry.team else "",
+                    entry.verb,
+                    entry.field_name,
+                    entry.old_value,
+                    entry.new_value,
+                ]
+            )
+        return response

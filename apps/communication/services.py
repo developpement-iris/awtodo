@@ -1,6 +1,7 @@
 from django.db import transaction
 
 from apps.accounts.services import has_capability, is_organisation_admin
+from apps.common.audit import record_event
 from apps.incidents.models import Incident
 from apps.projects.services import is_project_contributor, is_project_manager
 from apps.tasks.models import Task
@@ -94,7 +95,7 @@ def create_channel(
         payload_template = validate_payload_template(payload_template)
     except PayloadTemplateError as exc:
         raise CommunicationValidationError(str(exc)) from exc
-    return CommunicationChannel.objects.create(
+    channel = CommunicationChannel.objects.create(
         project=project,
         label=label,
         teams_channel_id=teams_channel_id,
@@ -103,6 +104,10 @@ def create_channel(
         payload_template=payload_template,
         notify_incident_created=notify_incident_created,
     )
+    record_event(
+        channel, actor=actor, verb="created", description=f"Canal « {channel.label} » ajouté", project=project
+    )
+    return channel
 
 
 def update_channel(*, actor, channel, **fields):
@@ -134,6 +139,9 @@ def archive_channel(*, actor, channel):
     _ensure_can_manage_project_communication(actor, channel.project)
     channel.status = "archived"
     channel.save(update_fields=["status", "updated_at"])
+    record_event(
+        channel, actor=actor, verb="archived", description=f"Canal « {channel.label} » archivé", project=channel.project
+    )
     return channel
 
 
@@ -194,6 +202,13 @@ def compose_message(*, actor, project, subject, body, channel_ids, task_id=None,
         )
         CommunicationDelivery.objects.bulk_create(
             [CommunicationDelivery(message=message, channel=channel) for channel in channels]
+        )
+        record_event(
+            message,
+            actor=actor,
+            verb="sent",
+            description=f"Communication envoyée : « {message.subject} » ({len(channels)} canal/canaux)",
+            project=project,
         )
 
     def _dispatch():

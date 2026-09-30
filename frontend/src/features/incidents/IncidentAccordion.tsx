@@ -242,7 +242,10 @@ export function IncidentAccordion({
                     {entry.old_value || "—"} → {entry.new_value || "—"}
                   </span>
                   <span className="incident-accordion__audit-meta">
-                    {`${entry.actor.first_name} ${entry.actor.last_name}`.trim() || entry.actor.username} ·{" "}
+                    {entry.actor
+                      ? `${entry.actor.first_name} ${entry.actor.last_name}`.trim() || entry.actor.username
+                      : "Système"}{" "}
+                    ·{" "}
                     <time dateTime={entry.created_at} title={new Date(entry.created_at).toLocaleString("fr-FR")}>
                       {new Date(entry.created_at).toLocaleDateString("fr-FR")}
                     </time>

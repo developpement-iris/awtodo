@@ -1,7 +1,8 @@
-import { ChevronDown, KeyRound, LogIn, LogOut, ShieldCheck } from "lucide-react";
+import { ChevronDown, Download, KeyRound, LogIn, LogOut, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { changePassword, updateNotificationPreferences } from "../api/client";
+import { changePassword, downloadHistoryExport, updateNotificationPreferences } from "../api/client";
 import { useCurrentUser } from "../context/CurrentUserContext";
+import { useToast } from "../context/ToastContext";
 import { Checkbox } from "./Checkbox";
 import "./UserMenu.css";
 
@@ -28,6 +29,7 @@ interface UserMenuProps {
 // connectée, plutôt qu'un bouton engrenage séparé dans la topbar.
 export function UserMenu({ onLoginClick }: UserMenuProps) {
   const { currentUser, isAuthenticated, logout, refreshCurrentUser } = useCurrentUser();
+  const { showToast } = useToast();
   const [open, setOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -38,6 +40,7 @@ export function UserMenu({ onLoginClick }: UserMenuProps) {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
   const [prefSubmitting, setPrefSubmitting] = useState(false);
+  const [exportingHistory, setExportingHistory] = useState(false);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -86,6 +89,17 @@ export function UserMenu({ onLoginClick }: UserMenuProps) {
       await refreshCurrentUser();
     } finally {
       setPrefSubmitting(false);
+    }
+  }
+
+  async function handleExportHistory() {
+    setExportingHistory(true);
+    try {
+      await downloadHistoryExport();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "L'export a échoué.");
+    } finally {
+      setExportingHistory(false);
     }
   }
 
@@ -200,6 +214,21 @@ export function UserMenu({ onLoginClick }: UserMenuProps) {
                 </button>
               </form>
             )}
+          </div>
+
+          <div className="account-card__section">
+            <button
+              type="button"
+              className="account-card__disclosure"
+              onClick={() => void handleExportHistory()}
+              disabled={exportingHistory}
+            >
+              <Download size={14} strokeWidth={1.75} aria-hidden="true" />
+              {exportingHistory ? "Export en cours…" : "Exporter mon historique"}
+            </button>
+            <span className="account-card__hint">
+              Vos actions, et celles des projets/groupes que vous administrez — selon vos droits.
+            </span>
           </div>
 
           <button

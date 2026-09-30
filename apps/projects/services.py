@@ -1,9 +1,13 @@
 import contextvars
 from contextlib import contextmanager
 
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.accounts.models import TeamMembership, User
+from apps.accounts.services import is_organisation_admin
+from apps.common.audit import get_project_audit_log, record_changes, record_event
+from apps.common.models import AuditLogEntry
 from apps.common.permissions import check_permission
 
 from .models import Project, ProjectMembership, ProjectVersion, SpecSection
@@ -308,6 +312,9 @@ def get_project_permissions(user, project):
         "can_manage_project_planning": can_manage_project_planning(user, project),
         "can_manage_project_communication": can_manage_project_communication(user, project),
         "can_send_project_communication": can_send_project_communication(user, project),
+        # Historique d'activité (session du 2026-09-29) — réservé au chef de
+        # projet, comme demandé explicitement (pas les membres/lecteurs).
+        "can_view_history": is_project_manager(user, project),
     }
 
 
@@ -315,6 +322,7 @@ def close_project(*, actor, project):
     _ensure_can_close(actor, project)
     project.status = "cloture"
     project.save(update_fields=["status"])
+    record_event(project, actor=actor, verb="field_changed", description="Projet clôturé", project=project)
     return project
 
 
@@ -322,6 +330,7 @@ def reopen_project(*, actor, project):
     _ensure_can_reopen(actor, project)
     project.status = "actif"
     project.save(update_fields=["status"])
+    record_event(project, actor=actor, verb="field_changed", description="Projet réouvert", project=project)
     return project
 
 
@@ -340,7 +349,11 @@ def create_project_version(*, actor, project, label):
         raise ProjectValidationError("Le libellé de la version est obligatoire.")
 
     ProjectVersion.objects.filter(project=project, is_current=True).update(is_current=False)
-    return ProjectVersion.objects.create(project=project, label=label.strip(), is_current=True, created_by=actor)
+    version = ProjectVersion.objects.create(project=project, label=label.strip(), is_current=True, created_by=actor)
+    record_event(
+        version, actor=actor, verb="created", description=f"Version « {version.label} » créée", project=project
+    )
+    return version
 
 
 def create_project(
@@ -406,6 +419,9 @@ def create_project(
     # `get_current_version`) — pas seulement les projets nés avant ce chantier
     # (backfillés par migration), aussi ceux créés à partir de maintenant.
     ProjectVersion.objects.create(project=project, label="v1", is_current=True, created_by=actor)
+    record_event(
+        project, actor=actor, verb="created", description=f"Projet créé : « {project.name} »", project=project
+    )
     return project
 
 
@@ -469,7 +485,15 @@ def add_project_member(*, actor, project, user=None, email=None, role="membre"):
             "Cette personne est déjà membre du projet — modifiez son rôle plutôt que de l'ajouter à nouveau."
         )
 
-    return ProjectMembership.objects.create(project=project, user=user, role=role)
+    membership = ProjectMembership.objects.create(project=project, user=user, role=role)
+    record_event(
+        membership,
+        actor=actor,
+        verb="member_added",
+        description=f"{user.username} ajouté au projet ({dict(ProjectMembership.ROLE_CHOICES).get(role, role)})",
+        project=project,
+    )
+    return membership
 
 
 def change_project_member_role(*, actor, membership, role):
@@ -487,8 +511,9 @@ def change_project_member_role(*, actor, membership, role):
         # même valeur — seule une promotion/rétrogradation est concernée.
         _ensure_role_allowed_for_project_type(membership.project, role)
 
-    membership.role = role
-    membership.save(update_fields=["role"])
+    with record_changes(membership, actor=actor, project=membership.project):
+        membership.role = role
+        membership.save(update_fields=["role"])
     return membership
 
 
@@ -499,6 +524,13 @@ def remove_project_member(*, actor, membership):
 
     membership.status = "removed"
     membership.save(update_fields=["status"])
+    record_event(
+        membership,
+        actor=actor,
+        verb="member_removed",
+        description=f"{membership.user.username} retiré du projet",
+        project=membership.project,
+    )
     return membership
 
 
@@ -521,6 +553,9 @@ def convert_to_collaborative(*, actor, project, team):
     project.project_type = "collaboratif"
     project.team = team
     project.save(update_fields=["project_type", "team"])
+    record_event(
+        project, actor=actor, verb="field_changed", description="Converti en projet collaboratif", project=project
+    )
     return project
 
 
@@ -576,3 +611,71 @@ def update_spec_section(*, actor, project, section_key, is_active=None, content=
         section.content = content
     section.save()
     return _spec_section_payload(section_key, section)
+
+
+# --- Historique d'activité (session du 2026-09-29) ------------------------
+# Voir docs/modeles-et-api.md > "Historique d'activité" pour le détail du
+# modèle de scoping. Vit ici (pas dans apps.common, qui ne doit dépendre
+# d'aucune autre app) parce que la logique d'accès a besoin de `Team`/
+# `ProjectMembership`/`is_organisation_admin`.
+
+
+def get_project_history(*, actor, project):
+    """Historique complet d'un projet — réservé au chef de projet, comme
+    demandé explicitement (pas les membres/lecteurs, contrairement aux
+    autres onglets "contributeur"). Requête de base dans
+    `apps.common.audit.get_project_audit_log` (indexée sur `project`,
+    aucun recoupement de plusieurs types d'entités à la lecture)."""
+    _require_manager(actor, project)
+    return get_project_audit_log(project).order_by("-created_at")
+
+
+def _teams_managed_by(actor):
+    """Groupes de l'organisation de `actor` qu'il administre — créateur,
+    ou promu `role="administrateur"` sur ce groupe précis (même définition
+    que `apps.accounts.services._is_team_manager`, portée organisation/
+    plateforme exclue ici : ce cas passe par la branche admin d'organisation
+    de `get_scoped_history`, pas la peine de la dupliquer)."""
+    ids = set(
+        TeamMembership.objects.filter(
+            user=actor, status="active", role="administrateur", team__organisation=actor.organisation
+        ).values_list("team_id", flat=True)
+    )
+    ids.update(actor.created_teams.filter(organisation=actor.organisation).values_list("id", flat=True))
+    return ids
+
+
+def get_scoped_history(*, actor):
+    """Historique global exportable, scopé selon le rang de `actor` (session
+    du 2026-09-29, remontée directe — voir CLAUDE.md > "Roadmap macro") :
+
+    - **Admin d'organisation ou de plateforme** : tout l'historique de
+      l'organisation.
+    - **Administrateur d'un groupe** (sans être admin d'organisation) :
+      l'historique des projets rattachés à ce groupe (`Project.team`) et des
+      incidents de ce groupe (`team` est dénormalisé directement sur la
+      ligne d'audit — couvre aussi les incidents de la boîte de réception,
+      jamais rattachés à un projet).
+    - **Tout le monde d'autre** : ses propres actions, plus l'historique
+      complet des projets dont il est chef de projet.
+
+    Priorité descendante — un admin d'organisation qui est aussi chef de
+    projet ou admin de groupe voit tout via la première branche, les autres
+    ne s'appliquent pas en plus."""
+    base = AuditLogEntry.objects.filter(organisation=actor.organisation)
+
+    if is_organisation_admin(actor, actor.organisation):
+        scoped = base
+    else:
+        managed_team_ids = _teams_managed_by(actor)
+        if managed_team_ids:
+            scoped = base.filter(Q(team_id__in=managed_team_ids) | Q(project__team_id__in=managed_team_ids))
+        else:
+            managed_project_ids = set(
+                ProjectMembership.objects.filter(
+                    user=actor, status="active", role="chef_de_projet"
+                ).values_list("project_id", flat=True)
+            )
+            scoped = base.filter(Q(actor=actor) | Q(project_id__in=managed_project_ids))
+
+    return scoped.select_related("actor", "project", "team").order_by("-created_at")

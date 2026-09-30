@@ -2,7 +2,7 @@ from decimal import Decimal, InvalidOperation
 
 from apps.accounts.models import Team
 from apps.accounts.services import can_manage_team, is_active_team_member
-from apps.common.audit import record_changes
+from apps.common.audit import record_changes, record_event
 from apps.common.permissions import check_permission
 from apps.projects.services import is_project_contributor, is_project_manager
 
@@ -273,6 +273,15 @@ def create_incident(
         status="signale",
     )
     incident_created.send(sender=Incident, incident=incident, actor=actor)
+    record_event(
+        incident,
+        actor=actor,
+        verb="created",
+        description=f"Incident signalé : « {incident.title} »",
+        project=project,
+        team=team,
+        organisation=(project.organisation if project else team.organisation),
+    )
     return incident
 
 
@@ -284,7 +293,12 @@ def assign_incident_to_project(*, actor, incident, project):
     if not _is_member_via_project(actor, project):
         raise IncidentPermissionError("Vous devez être membre du projet de destination pour y rattacher cet incident.")
 
-    with record_changes(incident, actor=actor):
+    # Contexte de journalisation = la **destination** (nouveau projet), pas
+    # l'ancien état — sinon cette transition n'apparaîtrait jamais dans
+    # l'historique du projet qui vient d'hériter de l'incident (les
+    # arguments de `record_changes` sont évalués avant le bloc, donc avant
+    # la réaffectation ci-dessous).
+    with record_changes(incident, actor=actor, project=project, team=None):
         incident.project = project
         incident.team = None
         incident.save(update_fields=["project", "team"])
@@ -303,7 +317,9 @@ def reassign_incident_team(*, actor, incident, team):
     if not _is_member_via_team(actor, team):
         raise IncidentPermissionError("Vous devez être membre du groupe de destination pour y déplacer cet incident.")
 
-    with record_changes(incident, actor=actor):
+    # Même raison que `assign_incident_to_project` ci-dessus : contexte =
+    # le groupe de destination, pas l'ancien.
+    with record_changes(incident, actor=actor, project=None, team=team):
         incident.team = team
         incident.save(update_fields=["team"])
     return incident
@@ -312,7 +328,7 @@ def reassign_incident_team(*, actor, incident, team):
 def claim_incident(*, actor, incident):
     _ensure_can_claim(actor, incident)
 
-    with record_changes(incident, actor=actor):
+    with record_changes(incident, actor=actor, project=incident.project, team=incident.team):
         incident.assigned_to = actor
         incident.save(update_fields=["assigned_to"])
     return incident
@@ -321,7 +337,7 @@ def claim_incident(*, actor, incident):
 def update_incident_priority(*, actor, incident, priority):
     _ensure_can_change_priority(actor, incident)
 
-    with record_changes(incident, actor=actor):
+    with record_changes(incident, actor=actor, project=incident.project, team=incident.team):
         incident.priority = priority
         incident.save(update_fields=["priority"])
     return incident
@@ -330,7 +346,7 @@ def update_incident_priority(*, actor, incident, priority):
 def start_incident(*, actor, incident):
     _ensure_can_start(actor, incident)
 
-    with record_changes(incident, actor=actor):
+    with record_changes(incident, actor=actor, project=incident.project, team=incident.team):
         incident.status = "en_cours"
         incident.save()
     return incident
@@ -354,7 +370,7 @@ def resolve_incident(*, actor, incident, resolution_comment, time_spent):
     if time_spent <= 0:
         raise IncidentValidationError("Le temps passé doit être un nombre positif.")
 
-    with record_changes(incident, actor=actor):
+    with record_changes(incident, actor=actor, project=incident.project, team=incident.team):
         incident.status = "resolu"
         incident.resolution_comment = resolution_comment.strip()
         incident.time_spent = time_spent
@@ -368,7 +384,7 @@ def cancel_incident(*, actor, incident, cancellation_reason):
     if not cancellation_reason or not cancellation_reason.strip():
         raise IncidentValidationError("Un motif d'annulation est obligatoire.")
 
-    with record_changes(incident, actor=actor):
+    with record_changes(incident, actor=actor, project=incident.project, team=incident.team):
         incident.status = "annule"
         incident.cancellation_reason = cancellation_reason.strip()
         incident.save()
@@ -378,7 +394,7 @@ def cancel_incident(*, actor, incident, cancellation_reason):
 def archive_incident(*, actor, incident):
     _ensure_can_archive(actor, incident)
 
-    with record_changes(incident, actor=actor):
+    with record_changes(incident, actor=actor, project=incident.project, team=incident.team):
         incident.status = "archive"
         incident.save()
     return incident
@@ -387,7 +403,7 @@ def archive_incident(*, actor, incident):
 def update_incident_description(*, actor, incident, description):
     _ensure_can_edit_description(actor, incident)
 
-    with record_changes(incident, actor=actor):
+    with record_changes(incident, actor=actor, project=incident.project, team=incident.team):
         incident.description = description.strip()
         incident.save()
     return incident
@@ -400,4 +416,12 @@ def add_comment(*, actor, incident, content):
 
     comment = IncidentComment.objects.create(incident=incident, author=actor, content=content.strip())
     incident_commented.send(sender=Incident, incident=incident, comment=comment, actor=actor)
+    record_event(
+        incident,
+        actor=actor,
+        verb="commented",
+        description="Commentaire ajouté",
+        project=incident.project,
+        team=incident.team,
+    )
     return comment

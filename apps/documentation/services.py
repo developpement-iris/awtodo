@@ -3,6 +3,7 @@ import secrets
 
 from django.utils.text import slugify
 
+from apps.common.audit import record_event
 from apps.projects.models import SpecSection
 from apps.projects.services import is_project_manager, is_project_member
 
@@ -160,10 +161,14 @@ def create_page(*, actor, project, title, parent_id=None, content=""):
         DocPage.all_objects.filter(space=space, parent=parent)
         .order_by("-order").values_list("order", flat=True).first()
     )
-    return DocPage.objects.create(
+    page = DocPage.objects.create(
         space=space, parent=parent, title=title.strip(),
         slug=_unique_slug(space, title), content=content or "", order=(max_order or 0) + 1,
     )
+    record_event(
+        page, actor=actor, verb="created", description=f"Page de documentation créée : « {page.title} »", project=project
+    )
+    return page
 
 
 def update_page(*, actor, project, page_id, title=None, content=None, parent_id=_UNSET, order=None):
@@ -244,11 +249,15 @@ def create_entry(*, actor, project, kind, title, description="", source="manuell
         DocEntry.all_objects.filter(space=space, kind=kind).order_by("-order")
         .values_list("order", flat=True).first()
     )
-    return DocEntry.objects.create(
+    entry = DocEntry.objects.create(
         space=space, kind=kind, title=title.strip()[:200], description=description or "",
         source=source, source_task=source_task, source_incident=source_incident, version=version,
         order=(max_order or 0) + 1,
     )
+    record_event(
+        entry, actor=actor, verb="created", description=f"Fiche de documentation créée : « {entry.title} »", project=project
+    )
+    return entry
 
 
 def update_entry(*, actor, project, entry_id, title=None, description=None, order=None, version=_UNSET):

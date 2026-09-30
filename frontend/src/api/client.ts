@@ -35,6 +35,7 @@ import type {
   PermissionProfile,
   Project,
   ProjectMembership,
+  ProjectHistoryEntry,
   ProjectUserStats,
   ProjectVersion,
   PublicDocs,
@@ -651,6 +652,32 @@ export function reopenProject(projectId: string): Promise<Project> {
 
 export function getProjectVersions(projectId: string): Promise<ProjectVersion[]> {
   return getJson<ProjectVersion[]>(`/projects/${projectId}/versions/`);
+}
+
+// --- Historique d'activité (session du 2026-09-29) ------------------------
+// Voir docs/modeles-et-api.md > "Historique d'activité".
+
+export function getProjectHistory(projectId: string): Promise<ProjectHistoryEntry[]> {
+  return getJson<ProjectHistoryEntry[]>(`/projects/${projectId}/history/`);
+}
+
+// Téléchargement direct (pas `getJson`/blob JSON) : l'export est du CSV, et
+// l'endpoint exige le token d'auth déjà géré par `authHeaders()` — un simple
+// lien `<a href>` vers l'URL de l'API n'enverrait pas ce header.
+export async function downloadHistoryExport(): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/projects/history/export/`, { headers: authHeaders() });
+  if (!response.ok) {
+    throw new Error(`Échec de l'export de l'historique (${response.status})`);
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "historique.csv";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 export function createProjectVersion(projectId: string, label: string): Promise<ProjectVersion> {
