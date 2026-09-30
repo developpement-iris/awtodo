@@ -291,3 +291,15 @@
     grid-template-columns: 140px 1fr;
   }
 }
+
+@media (max-width: 720px) {
+  .roadmap__card {
+    padding: var(--space-4);
+  }
+
+  /* Cible tactile un peu plus généreuse pour la liste "sans échéance"
+     (identique visuellement, juste plus de respiration verticale). */
+  .roadmap__no-deadline-item {
+    padding: var(--space-3);
+  }
+}

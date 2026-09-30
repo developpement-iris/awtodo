@@ -6,6 +6,7 @@
   align-items: center;
   justify-content: center;
   z-index: 50;
+  padding: var(--space-4);
 }
 
 .resolve-incident-dialog {
@@ -90,4 +91,16 @@
 
 .resolve-incident-dialog__confirm:not(:disabled):hover {
   opacity: 0.85;
+}
+
+@media (max-width: 480px) {
+  .resolve-incident-dialog__actions {
+    flex-direction: column-reverse;
+  }
+
+  .resolve-incident-dialog__cancel,
+  .resolve-incident-dialog__confirm {
+    width: 100%;
+    text-align: center;
+  }
 }

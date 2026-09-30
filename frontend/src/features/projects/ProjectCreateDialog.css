@@ -169,3 +169,15 @@
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 480px) {
+  .project-create-dialog__actions {
+    flex-direction: column-reverse;
+  }
+
+  .project-create-dialog__cancel,
+  .project-create-dialog__confirm {
+    width: 100%;
+    text-align: center;
+  }
+}

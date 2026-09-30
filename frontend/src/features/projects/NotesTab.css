@@ -1,9 +1,23 @@
 .notes-tab__header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
   margin-bottom: var(--space-4);
+}
+
+@media (max-width: 480px) {
+  .notes-tab__actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .notes-tab__cancel,
+  .notes-tab__save {
+    width: 100%;
+    text-align: center;
+  }
 }
 
 .notes-tab__updated {

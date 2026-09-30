@@ -134,3 +134,15 @@
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 480px) {
+  .incident-create-dialog__actions {
+    flex-direction: column-reverse;
+  }
+
+  .incident-create-dialog__cancel,
+  .incident-create-dialog__confirm {
+    width: 100%;
+    text-align: center;
+  }
+}

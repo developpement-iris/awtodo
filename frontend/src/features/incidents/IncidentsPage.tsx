@@ -144,17 +144,19 @@ function IncidentRow({
   return (
     <>
       <tr id={`incident-row-${incident.id}`} className="incidents-page__row--clickable" onClick={onToggle}>
-        <td>{incident.title}</td>
+        <td className="incidents-page__title-cell">{incident.title}</td>
         {visibleColumns.has("ref") && (
-          <td>
+          <td data-label="Réf.">
             {incident.external_reference_id && (
               <span className="incidents-page__ref">{incident.external_reference_id}</span>
             )}
           </td>
         )}
-        {visibleColumns.has("owner") && ownerLabel !== undefined && <td>{ownerLabel}</td>}
+        {visibleColumns.has("owner") && ownerLabel !== undefined && (
+          <td data-label="Projet / Groupe">{ownerLabel}</td>
+        )}
         {visibleColumns.has("status") && (
-          <td>
+          <td data-label="Statut">
             <StatusBadge
               label={incident.status_display}
               tone={incidentStatusTone(incident.status)}
@@ -163,12 +165,12 @@ function IncidentRow({
           </td>
         )}
         {visibleColumns.has("priority") && (
-          <td>
+          <td data-label="Priorité">
             <StatusBadge label={incident.priority_display} tone={priorityTone(incident.priority)} />
           </td>
         )}
         {visibleColumns.has("delay") && (
-          <td>
+          <td data-label="Délai">
             <time
               className="incidents-page__delay"
               dateTime={incident.created_at}
@@ -178,8 +180,10 @@ function IncidentRow({
             </time>
           </td>
         )}
-        {visibleColumns.has("author") && <td>{incident.author_name || "—"}</td>}
-        {visibleColumns.has("time_spent") && <td>{incident.time_spent ? `${incident.time_spent} h` : "—"}</td>}
+        {visibleColumns.has("author") && <td data-label="Auteur">{incident.author_name || "—"}</td>}
+        {visibleColumns.has("time_spent") && (
+          <td data-label="Temps passé">{incident.time_spent ? `${incident.time_spent} h` : "—"}</td>
+        )}
         <td className="incidents-page__actions">
           {incident.permissions.can_start && (
             <button

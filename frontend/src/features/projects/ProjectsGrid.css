@@ -223,3 +223,17 @@
 .project-expanded__access:hover {
   opacity: 0.85;
 }
+
+@media (max-width: 480px) {
+  .project-card {
+    padding: var(--space-4);
+  }
+
+  .project-expanded {
+    padding: var(--space-5);
+  }
+
+  .project-expanded__name {
+    font-size: 19px;
+  }
+}

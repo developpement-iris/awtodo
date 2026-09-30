@@ -82,3 +82,14 @@
 .task-card__reject:hover {
   color: var(--tone-error-text);
 }
+
+/* Le bouton n'apparaît qu'au survol (`.task-card:hover`) — sur un appareil
+   tactile, qui ne déclenche jamais `:hover`, il resterait invisible et donc
+   inatteignable en permanence. Toujours visible quand l'appareil n'a pas de
+   pointeur fin (voir impeccable > adapt : « ne pas dépendre du hover pour
+   une fonctionnalité »). */
+@media (hover: none) {
+  .task-card__reject {
+    opacity: 1;
+  }
+}

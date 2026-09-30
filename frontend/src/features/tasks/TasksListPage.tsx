@@ -500,7 +500,7 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
                           : undefined
                       }
                     >
-                      <td>
+                      <td className="tasks-list-page__title-cell">
                         <InlineEditableText
                           value={task.title}
                           onSave={(title) => handleRename(task, title)}
@@ -509,39 +509,47 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
                         />
                       </td>
                       {visibleColumns.has("ref") && (
-                        <td>
+                        <td data-label="Réf.">
                           {task.external_reference_id && (
                             <span className="tasks-list-page__ref">{task.external_reference_id}</span>
                           )}
                         </td>
                       )}
                       {visibleColumns.has("type") && (
-                        <td>
+                        <td data-label="Type">
                           <TypeBadge type={task.task_type} label={task.task_type_display} />
                         </td>
                       )}
                       {visibleColumns.has("status") && (
-                        <td>
+                        <td data-label="Statut">
                           <StatusBadge label={task.status_display} tone={statusTone(task.status)} icon={taskStatusIcon(task.status)} />
                         </td>
                       )}
                       {visibleColumns.has("priority") && (
-                        <td>
+                        <td data-label="Priorité">
                           <StatusBadge label={task.priority_display} tone={priorityTone(task.priority)} />
                         </td>
                       )}
                       {visibleColumns.has("assignee") && (
-                        <td>
+                        <td data-label="Assigné à">
                           {task.assignee
                             ? displayName(task.assignee)
                             : <span className="tasks-list-page__empty-cell">Non assignée</span>}
                         </td>
                       )}
-                      {visibleColumns.has("project") && <td>{projectNameById.get(task.project) ?? "—"}</td>}
-                      {visibleColumns.has("deadline") && <td>{formatDeadline(task.deadline)}</td>}
-                      {visibleColumns.has("estimated_hours") && <td>{formatHours(task.estimated_hours)}</td>}
-                      {visibleColumns.has("time_spent") && <td>{formatHours(task.time_spent)}</td>}
-                      {visibleColumns.has("version") && <td>{task.version_label || "—"}</td>}
+                      {visibleColumns.has("project") && (
+                        <td data-label="Projet">{projectNameById.get(task.project) ?? "—"}</td>
+                      )}
+                      {visibleColumns.has("deadline") && (
+                        <td data-label="Échéance">{formatDeadline(task.deadline)}</td>
+                      )}
+                      {visibleColumns.has("estimated_hours") && (
+                        <td data-label="Temps estimé">{formatHours(task.estimated_hours)}</td>
+                      )}
+                      {visibleColumns.has("time_spent") && (
+                        <td data-label="Temps passé">{formatHours(task.time_spent)}</td>
+                      )}
+                      {visibleColumns.has("version") && <td data-label="Version">{task.version_label || "—"}</td>}
                     </tr>
                     {mode === "mine" && expandedTaskId === task.id && (
                       <tr className="tasks-list-page__accordion-row">

@@ -90,6 +90,24 @@
   .task-accordion__grid {
     grid-template-columns: 1fr;
   }
+
+  .task-accordion__inner {
+    padding: var(--space-4);
+  }
+
+  /* Boutons d'action un peu plus hauts au doigt qu'à la souris. */
+  .task-accordion__action {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .task-accordion__assign {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .task-accordion__assign-submit {
+    align-self: flex-start;
+  }
 }
 
 .task-accordion__section {
