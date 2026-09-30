@@ -74,3 +74,17 @@
 .global-stats-page__num--total {
   font-weight: 700;
 }
+
+@media (max-width: 720px) {
+  /* `__cards` (auto-fill minmax(200px,1fr)) et `__widgets` (flex-wrap) se
+     réorganisent déjà d'eux-mêmes sur un téléphone — resserrer juste
+     l'espacement et le tableau, même traitement que StatsTab.css. */
+  .global-stats-page__cards {
+    gap: var(--space-3);
+  }
+
+  .global-stats-page__table th,
+  .global-stats-page__table td {
+    padding: var(--space-2) var(--space-3);
+  }
+}

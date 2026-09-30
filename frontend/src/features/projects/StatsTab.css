@@ -106,3 +106,20 @@
   font-weight: 700;
   flex: none;
 }
+
+@media (max-width: 720px) {
+  /* Les cards KPI (auto-fill minmax(200px,1fr)) passent naturellement à une
+     colonne sur un viewport de téléphone (~360-400px, une seule colonne de
+     200px+gap y tient) — pas besoin de forcer 1fr ici, juste resserrer
+     l'espacement. Les widgets (`stats-tab__widgets`, flex-wrap sur
+     `flex: … 1 380px` dans chaque composant) s'empilent déjà de la même
+     façon, inchangés ici (hors périmètre : composants `components/*Widget*`). */
+  .stats-tab__cards {
+    gap: var(--space-3);
+  }
+
+  .stats-tab__table th,
+  .stats-tab__table td {
+    padding: var(--space-2) var(--space-3);
+  }
+}

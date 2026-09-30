@@ -65,6 +65,18 @@
   }
 }
 
+@media (max-width: 720px) {
+  .planning-page__toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .planning-page__actions .planning-btn,
+  .planning-page__view-toggle {
+    flex: 1;
+  }
+}
+
 /* --- Boutons ---------------------------------------------------------- */
 
 .planning-btn {
@@ -543,6 +555,55 @@
   background: color-mix(in srgb, var(--item-color) 12%, transparent);
 }
 
+/* --- Vue Semaine sur mobile : un jour visible à la fois --------------
+   Une grille horaire classique (8 colonnes : gouttière + 7 jours) ne tient
+   pas sur un téléphone — soit les colonnes deviennent illisibles, soit tout
+   déborde sans repère. Plutôt que de réécrire WeekGrid/PlanningPage en vue
+   "Jour" séparée (état de navigation dupliqué, nouveau composant), la grille
+   existante est réutilisée telle quelle : chaque colonne de jour est
+   élargie à ~90% du viewport et le conteneur défile horizontalement avec
+   un snap par jour (`scroll-snap-type`) — l'utilisateur swipe d'un jour à
+   l'autre, la gouttière des heures reste fixe (`position: sticky`) comme
+   repère pendant le défilement. Le titre de la semaine en haut de page
+   continue d'indiquer la plage complète ; naviguer d'une semaine à l'autre
+   reste les boutons Précédent/Suivant existants. */
+@media (max-width: 720px) {
+  .planning-page__calendar {
+    scroll-snap-type: x mandatory;
+  }
+
+  .week-grid {
+    min-width: 0;
+  }
+
+  .week-grid__header,
+  .week-grid__allday,
+  .week-grid__body {
+    grid-template-columns: 44px repeat(7, minmax(88vw, 1fr));
+  }
+
+  .week-grid__gutter {
+    position: sticky;
+    left: 0;
+    z-index: 4;
+    background: var(--color-surface);
+  }
+
+  .week-grid__day-head,
+  .week-grid__allday-cell,
+  .week-grid__col {
+    scroll-snap-align: start;
+  }
+
+  .week-grid__day-head {
+    font-size: 0.82rem;
+  }
+
+  .week-grid__hour-label {
+    font-size: 0.66rem;
+  }
+}
+
 /* --- Grille mois -------------------------------------------------- */
 
 .month-grid {
@@ -629,6 +690,43 @@
   color: var(--color-text-muted);
   cursor: pointer;
   text-align: left;
+}
+
+/* Vue Mois sur mobile : contrairement à la grille horaire (illisible en
+   deçà de sa largeur réelle), un mini-calendrier mensuel reste utile même
+   très compact — son rôle ici est surtout de choisir un jour pour basculer
+   en vue Semaine (`onDayClick`). Plutôt qu'un défilement horizontal, les 7
+   colonnes se compriment pour tenir sur l'écran (pas de `min-width`), avec
+   des cellules et une typographie réduites ; les puces d'événements
+   gardent leur troncature (`text-overflow: ellipsis`) déjà en place. */
+@media (max-width: 720px) {
+  .month-grid {
+    min-width: 0;
+  }
+
+  .month-grid__cell {
+    min-height: 56px;
+    padding: 1px;
+  }
+
+  .month-grid__head {
+    padding: var(--space-1);
+    font-size: 0.66rem;
+  }
+
+  .month-grid__daynum {
+    font-size: 0.72rem;
+  }
+
+  .week-grid__chip,
+  .month-grid__chip {
+    font-size: 0.6rem;
+    padding: 0 2px;
+  }
+
+  .month-grid__chip-time {
+    display: none;
+  }
 }
 
 /* --- Dialogs ---------------------------------------------------- */
@@ -1057,6 +1155,35 @@
 
 .share-panel__manage-toggle--inline {
   flex: none;
+}
+
+@media (max-width: 720px) {
+  .planning-dialog__header,
+  .planning-dialog__body {
+    padding: var(--space-3);
+  }
+
+  .planning-dialog__error {
+    margin: var(--space-3) var(--space-3) 0;
+  }
+
+  /* Deux champs côte à côte (ex. début/fin) tiennent mal sur un téléphone
+     — le Combobox garde sa ligne propre (`--combobox`), pas concerné. */
+  .planning-field-row:not(.planning-field-row--combobox) {
+    flex-direction: column;
+  }
+
+  .planning-hours-day {
+    flex-wrap: wrap;
+  }
+
+  .planning-hours-day__label {
+    min-width: 100%;
+  }
+
+  .share-panel__list li {
+    flex-wrap: wrap;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

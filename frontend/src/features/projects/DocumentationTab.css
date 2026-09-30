@@ -438,6 +438,39 @@
 
   .doc-tab__nav {
     flex-direction: row;
-    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 720px) {
+  /* Onglets (Pages/Fonctionnalités/Résolution d'incidents/Contributeurs) en
+     scroll horizontal plutôt qu'un retour à la ligne — même pattern que
+     `BinderTabs`/`SectionSidebar` déjà en place ailleurs dans l'app. */
+  .doc-tab__nav {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .doc-tab__nav-item {
+    flex: none;
+  }
+
+  .doc-tab__card {
+    padding: var(--space-4);
+  }
+
+  .doc-tab__editor-actions {
+    width: 100%;
+  }
+
+  .doc-tab__editor-actions .doc-tab__ghost-btn,
+  .doc-tab__editor-actions .doc-tab__primary-btn {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .doc-tab__link-row {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
