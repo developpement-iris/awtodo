@@ -226,3 +226,41 @@
 .budgeting-tab__message--error {
   color: var(--tone-error-text);
 }
+
+@media (max-width: 720px) {
+  /* Les cards (overview/section) sont déjà `flex-wrap` avec des bases 320px
+     — elles s'empilent naturellement. Reste à traiter : le donut + sa
+     légende côte à côte (`__donut-row`), pas assez de place sur un
+     téléphone pour les deux ; le graphique passe au-dessus, la légende en
+     dessous en pleine largeur. */
+  .budgeting-tab__donut-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3);
+  }
+
+  .budgeting-tab__legend {
+    flex: 1 1 auto;
+  }
+
+  .budgeting-tab__split-card,
+  .budgeting-tab__donut-card,
+  .budgeting-tab__table-card {
+    padding: var(--space-4);
+  }
+
+  .budgeting-tab__table th,
+  .budgeting-tab__table td {
+    padding: var(--space-2);
+    font-size: 12.5px;
+  }
+
+  /* La ligne d'ajout (libellé + quantité + coût + bouton) est une rangée du
+     tableau, donc déjà couverte par le scroll horizontal de
+     `.budgeting-tab__table-card` — un `<input type=number>` garde ici une
+     largeur minimale pour rester utilisable au doigt plutôt que de se
+     compresser à rien. */
+  .budgeting-tab__add-row input {
+    min-width: 64px;
+  }
+}

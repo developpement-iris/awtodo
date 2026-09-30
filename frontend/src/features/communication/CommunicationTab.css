@@ -360,10 +360,30 @@
   .communication-tab__template-row {
     grid-template-columns: 1fr;
   }
-}
 
-@media (max-width: 720px) {
   .communication-tab__form-row {
     flex-direction: column;
+  }
+
+  /* En-tête de section (titre + éventuel bouton d'action) et en-tête/pied de
+     message (sujet/statut, expéditeur/date) sont des rangées
+     `justify-content: space-between` sans `flex-wrap` — un sujet long ou un
+     libellé de statut poussent hors cadre sur un téléphone étroit. */
+  .communication-tab__section-header,
+  .communication-tab__message-header,
+  .communication-tab__message-meta {
+    flex-wrap: wrap;
+  }
+
+  .communication-tab__section {
+    padding: var(--space-3);
+  }
+
+  .communication-tab__form-footer {
+    justify-content: stretch;
+  }
+
+  .communication-tab__form-footer .communication-tab__btn {
+    flex: 1;
   }
 }
