@@ -342,6 +342,8 @@ Constats faits en cours de session, pas encore traités — à reprendre quand �
 
 - **Passe de relecture wording/textuel (remonté le 2026-09-29).** Claude Code a tendance à ajouter de petits descriptifs explicatifs (hints, sous-titres, phrases d'aide sous un champ/une capacité) un peu partout dans l'UI au fil des sessions — pas forcément tous utiles, à repasser en revue pour couper ce qui n'apporte rien. Pas de portée précisée (quels écrans, quel niveau de sobriété visé) — à cadrer avec l'utilisateur avant de s'y mettre, plutôt qu'une passe non guidée qui risquerait de couper des précisions qui, elles, sont utiles.
 
+- **Refonte de l'écran Projets — cards trop génériques (remonté le 2026-09-30).** `ProjectsGrid` (cards identiques : nom, badges, description, groupe, progression) devient difficile à parcourir rapidement une fois la liste de projets accumulée — pas assez de repères visuels pour reconnaître un projet au coup d'œil. Besoin exprimé, pas encore cadré : (1) **épingler** des projets (favoris, en haut/mis en avant) ; (2) **personnaliser** l'apparence d'un projet (couleur ? icône/emoji ? pas précisé) pour le distinguer visuellement des autres. Portée exacte (qui peut épingler — par utilisateur ou par projet ; stockage — préférence locale type `planning_color`/`useColumnPreferences` ou champ backend partagé ; refonte de la card elle-même ou juste ajout d'affordances) à clarifier avec l'utilisateur avant d'implémenter.
+
 ## Comment utiliser ce fichier
 
 - Ce fichier est la source de vérité sur les **décisions déjà tranchées**. Ne pas les remettre en question sans validation explicite.
