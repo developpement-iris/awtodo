@@ -163,9 +163,9 @@ export function InvitationsSection({ currentUser }: InvitationsSectionProps) {
           <tbody>
             {invitations.map((invitation) => (
               <tr key={invitation.id}>
-                <td>{invitation.email}</td>
-                <td>{teams.find((team) => team.id === invitation.team)?.name ?? "—"}</td>
-                <td>
+                <td data-label="Email">{invitation.email}</td>
+                <td data-label="Groupe">{teams.find((team) => team.id === invitation.team)?.name ?? "—"}</td>
+                <td data-label="Statut">
                   <StatusBadge label={invitation.status_display} tone={invitationTone(invitation.status)} />
                 </td>
                 <td className="invitations-section__actions">

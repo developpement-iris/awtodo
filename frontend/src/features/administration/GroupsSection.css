@@ -182,3 +182,37 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* La grille (`auto-fill, minmax(260px, 1fr)`) retombe déjà naturellement à
+   une colonne sur mobile — reste la mécanique interne d'une carte : la
+   ligne "nom + rôle + retirer" (jusqu'à ~180px de contrôles) et la ligne
+   "ajouter un membre" (combobox + bouton) qui débordent d'une carte de
+   ~280px de large une fois le padding retiré. */
+@media (max-width: 720px) {
+  .groups-section__members li {
+    flex-wrap: wrap;
+  }
+
+  .groups-section__member-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .groups-section__member-actions .combobox {
+    width: auto;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .groups-section__add {
+    flex-wrap: wrap;
+  }
+
+  .groups-section__add .combobox {
+    flex-basis: 100%;
+  }
+
+  .groups-section__add button {
+    flex: 1;
+  }
+}

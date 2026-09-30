@@ -101,3 +101,62 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Table (4 colonnes, actions à droite) → cartes empilées sous 720px, même
+   patron que MembersSection.css (data-label posé en TSX). Le formulaire
+   d'invitation au-dessus s'empile déjà via son propre flex-wrap. */
+@media (max-width: 720px) {
+  .invitations-section__table,
+  .invitations-section__table thead,
+  .invitations-section__table tbody,
+  .invitations-section__table tr,
+  .invitations-section__table td {
+    display: block;
+    width: 100%;
+  }
+
+  .invitations-section__table thead {
+    display: none;
+  }
+
+  .invitations-section__table {
+    border-top: none;
+  }
+
+  .invitations-section__table tr {
+    margin-bottom: var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-4);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-resting);
+  }
+
+  .invitations-section__table td {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: var(--space-2) 0;
+    border-bottom: 1px dashed var(--color-border);
+  }
+
+  .invitations-section__table td:last-child {
+    border-bottom: none;
+  }
+
+  .invitations-section__table td[data-label]::before {
+    content: attr(data-label);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted);
+  }
+
+  .invitations-section__table td.invitations-section__actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    text-align: left;
+  }
+}

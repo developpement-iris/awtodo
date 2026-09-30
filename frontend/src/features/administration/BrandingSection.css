@@ -106,3 +106,26 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* En dessous de 720px, le swatch + libellé + bouton "Par défaut" ne
+   tiennent plus sur une ligne (le libellé porte aussi un sous-texte
+   d'aide) — la ligne passe en colonne, le bouton repasse pleine largeur
+   sous le texte plutôt que de s'écraser contre le bord. */
+@media (max-width: 720px) {
+  .branding-section__row {
+    flex-wrap: wrap;
+  }
+
+  .branding-section__row-label {
+    flex-basis: 100%;
+    order: 1;
+  }
+
+  .branding-section__color-label {
+    order: 0;
+  }
+
+  .branding-section__btn {
+    order: 2;
+  }
+}

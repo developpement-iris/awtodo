@@ -131,3 +131,71 @@
 .members-section__access-action:not(:disabled):hover {
   opacity: 0.8;
 }
+
+/* En dessous de 720px, la table (4 colonnes, dont un Combobox de rôle) ne
+   tient plus sur la largeur — chaque ligne devient une carte empilée,
+   chaque cellule un couple libellé/valeur (`data-label` posé en TSX,
+   affiché via ::before) plutôt qu'une colonne. */
+@media (max-width: 720px) {
+  .members-section__toolbar {
+    flex-wrap: wrap;
+  }
+
+  .members-section__search {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .members-section__table,
+  .members-section__table thead,
+  .members-section__table tbody,
+  .members-section__table tr,
+  .members-section__table td {
+    display: block;
+    width: 100%;
+  }
+
+  .members-section__table thead {
+    display: none;
+  }
+
+  .members-section__table {
+    border-top: none;
+  }
+
+  .members-section__row {
+    margin-bottom: var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-4);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-resting);
+  }
+
+  .members-section__table td {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: var(--space-2) 0;
+    border-bottom: 1px dashed var(--color-border);
+  }
+
+  .members-section__table td:last-child {
+    border-bottom: none;
+  }
+
+  .members-section__table td[data-label]::before {
+    content: attr(data-label);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted);
+  }
+
+  .members-section__role-select,
+  .members-section__role-select .combobox {
+    width: 100%;
+  }
+}

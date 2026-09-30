@@ -62,8 +62,8 @@ export function OrganisationsSection() {
           <tbody>
             {organisations.map((org) => (
               <tr key={org.id}>
-                <td>{org.name}</td>
-                <td>{new Date(org.created_at).toLocaleDateString("fr-FR")}</td>
+                <td data-label="Organisation">{org.name}</td>
+                <td data-label="Créée le">{new Date(org.created_at).toLocaleDateString("fr-FR")}</td>
               </tr>
             ))}
           </tbody>

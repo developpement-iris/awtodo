@@ -113,13 +113,13 @@ export function MembersSection({ currentUser }: MembersSectionProps) {
           <tbody>
             {visibleUsers.map((user) => (
               <tr key={user.id} className="members-section__row" onClick={() => setOpenUser(user)}>
-                <td>
+                <td data-label="Utilisateur">
                   {`${user.first_name} ${user.last_name}`.trim() || user.username}
                   {user.is_platform_admin && (
                     <span className="members-section__platform-badge">Admin plateforme</span>
                   )}
                 </td>
-                <td>
+                <td data-label="Rôle dans l'organisation">
                   <span
                     className="members-section__role-select"
                     onClick={(event) => event.stopPropagation()}
@@ -133,7 +133,7 @@ export function MembersSection({ currentUser }: MembersSectionProps) {
                     />
                   </span>
                 </td>
-                <td>
+                <td data-label="Accès">
                   <span
                     className={`members-section__access-dot members-section__access-dot--${user.account_status}`}
                   />
