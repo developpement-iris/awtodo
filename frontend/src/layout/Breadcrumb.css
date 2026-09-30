@@ -28,6 +28,12 @@
   font-weight: 300;
 }
 
+@media (max-width: 720px) {
+  .breadcrumb {
+    padding: var(--space-2) var(--space-4);
+  }
+}
+
 .breadcrumb__item {
   display: inline-flex;
   align-items: center;

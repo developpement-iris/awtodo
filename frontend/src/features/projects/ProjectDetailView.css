@@ -134,3 +134,10 @@
   flex: 1;
   min-width: 0;
 }
+
+@media (max-width: 720px) {
+  .project-detail__body {
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+}

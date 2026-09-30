@@ -10,3 +10,9 @@
   padding: var(--space-6);
   overflow-x: auto;
 }
+
+@media (max-width: 720px) {
+  .app-shell__content {
+    padding: var(--space-4);
+  }
+}

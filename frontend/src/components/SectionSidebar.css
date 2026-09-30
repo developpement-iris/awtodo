@@ -62,3 +62,25 @@
   position: relative;
   z-index: 1;
 }
+
+/* En dessous de 720px, la colonne verticale (200px fixes, prélevés sur un
+   contenu déjà étroit) devient une bande horizontale défilante — même
+   convention que `BinderTabs` (navigation de premier niveau), pour une
+   affordance cohérente entre les deux niveaux de navigation. */
+@media (max-width: 720px) {
+  .section-sidebar {
+    width: 100%;
+    border-radius: var(--radius-sm);
+    padding: var(--space-2);
+    overflow-x: auto;
+  }
+
+  .section-sidebar__list {
+    flex-direction: row;
+  }
+
+  .section-sidebar__item {
+    width: auto;
+    white-space: nowrap;
+  }
+}

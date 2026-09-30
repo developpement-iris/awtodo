@@ -26,7 +26,7 @@
   position: absolute;
   top: calc(100% + var(--space-2));
   right: 0;
-  width: 320px;
+  width: min(320px, calc(100vw - 24px));
   max-height: 420px;
   overflow-y: auto;
   background: var(--color-surface);
