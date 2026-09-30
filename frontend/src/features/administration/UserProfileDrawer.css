@@ -134,3 +134,13 @@
   flex-wrap: wrap;
   gap: var(--space-1);
 }
+
+/* Panneau latéral fixe (420px depuis la droite) → plein écran sur mobile,
+   même convention que les autres drawers/dialogues déjà adaptés. */
+@media (max-width: 720px) {
+  .user-profile-drawer {
+    max-width: 100%;
+    border-left: none;
+    padding: var(--space-4);
+  }
+}

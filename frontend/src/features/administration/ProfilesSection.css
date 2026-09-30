@@ -230,3 +230,20 @@
   border-color: var(--color-accent);
   color: var(--color-accent-contrast);
 }
+
+/* La ligne d'assignation (combobox de recherche + deux boutons) déborde
+   d'une carte pleine largeur sur mobile — passe en colonne, combobox
+   pleine largeur en premier. */
+@media (max-width: 720px) {
+  .profiles-section__assign-row {
+    flex-wrap: wrap;
+  }
+
+  .profiles-section__assign-row .combobox {
+    flex-basis: 100%;
+  }
+
+  .profiles-section__assign-row .profiles-section__btn {
+    flex: 1;
+  }
+}

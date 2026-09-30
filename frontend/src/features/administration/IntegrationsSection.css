@@ -277,4 +277,22 @@
   .integrations-section__summary dl {
     grid-template-columns: 1fr;
   }
+
+  .integrations-section__actions {
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+
+  .integrations-section__key-row {
+    flex-wrap: wrap;
+  }
+
+  .integrations-section__key-row .status-badge {
+    order: 2;
+  }
+
+  .integrations-section__key-row > button {
+    order: 3;
+    flex: 1;
+  }
 }

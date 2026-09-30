@@ -111,3 +111,60 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Table à 2 colonnes seulement, mais même traitement carte que
+   MembersSection/InvitationsSection sous 720px pour rester cohérent et
+   éviter tout texte compressé sur un nom d'organisation long. */
+@media (max-width: 720px) {
+  .organisations-section__table,
+  .organisations-section__table thead,
+  .organisations-section__table tbody,
+  .organisations-section__table tr,
+  .organisations-section__table td {
+    display: block;
+    width: 100%;
+  }
+
+  .organisations-section__table thead {
+    display: none;
+  }
+
+  .organisations-section__table {
+    border-top: none;
+  }
+
+  .organisations-section__table tr {
+    margin-bottom: var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-4);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-resting);
+  }
+
+  .organisations-section__table td {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: var(--space-2) 0;
+    border-bottom: 1px dashed var(--color-border);
+  }
+
+  .organisations-section__table td:last-child {
+    border-bottom: none;
+  }
+
+  .organisations-section__table td[data-label]::before {
+    content: attr(data-label);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted);
+  }
+
+  .organisations-section__form {
+    max-width: 100%;
+  }
+}
