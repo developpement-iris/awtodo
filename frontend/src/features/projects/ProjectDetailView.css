@@ -141,3 +141,17 @@
     gap: var(--space-3);
   }
 }
+
+@media (max-width: 480px) {
+  .project-detail__title {
+    font-size: 21px;
+  }
+
+  /* Le badge de statut + les boutons de cycle de vie passent sur leur propre
+     ligne pleine largeur plutôt que de se tasser à côté d'un titre déjà
+     réduit. */
+  .project-detail__header-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}

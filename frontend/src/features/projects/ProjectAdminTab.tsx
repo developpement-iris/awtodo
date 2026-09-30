@@ -191,7 +191,7 @@ export function ProjectAdminTab({ project, onUpdated }: ProjectAdminTabProps) {
             const name = `${membership.user.first_name} ${membership.user.last_name}`.trim() || membership.user.username;
             return (
             <tr key={membership.id}>
-              <td>
+              <td className="project-admin-tab__member-cell">
                 <div className="project-admin-tab__member">
                   <span className="project-admin-tab__avatar">
                     {initials(name)}
@@ -211,7 +211,7 @@ export function ProjectAdminTab({ project, onUpdated }: ProjectAdminTabProps) {
                   </div>
                 </div>
               </td>
-              <td>
+              <td data-label="Rôle">
                 {/* Sur un projet individuel, le chef de projet (le créateur)
                     ne peut pas être rétrogradé en lecteur depuis ce sélecteur
                     — `roleOptions` ne proposerait alors que "lecteur", hors

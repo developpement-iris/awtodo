@@ -6,6 +6,10 @@
   align-items: center;
   justify-content: center;
   z-index: 50;
+  /* Sans ce padding, le dialog (width:100% de son max-width) touche les
+     bords de l'écran sur mobile — aucun media query nécessaire, la carte
+     rétrécit déjà d'elle-même via max-width. */
+  padding: var(--space-4);
 }
 
 .complete-dialog {
@@ -81,4 +85,19 @@
 
 .complete-dialog__confirm:not(:disabled):hover {
   opacity: 0.85;
+}
+
+/* Boutons empilés pleine largeur en dessous de 480px — plus faciles à
+   atteindre au pouce qu'une paire de boutons compacts côte à côte, action
+   principale (confirmer) en premier. */
+@media (max-width: 480px) {
+  .complete-dialog__actions {
+    flex-direction: column-reverse;
+  }
+
+  .complete-dialog__cancel,
+  .complete-dialog__confirm {
+    width: 100%;
+    text-align: center;
+  }
 }

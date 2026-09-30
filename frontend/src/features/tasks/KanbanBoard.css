@@ -1,5 +1,7 @@
 .kanban-board__toolbar {
   display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
   margin-bottom: var(--space-4);
 }
 
@@ -12,16 +14,45 @@
   margin-bottom: var(--space-4);
 }
 
+/* Nombre de colonnes piloté par la variable `--kanban-columns` (posée en
+   inline par KanbanBoard.tsx) plutôt qu'un `gridTemplateColumns` inline
+   direct — sinon aucune règle de cette feuille de style, y compris les
+   @media ci-dessous, ne pourrait jamais reprendre la main sur la mise en
+   page (un style inline prime toujours sur une règle de feuille externe). */
 .kanban-board__columns {
   display: grid;
-  grid-template-columns: repeat(5, minmax(220px, 1fr));
+  grid-template-columns: repeat(var(--kanban-columns, 5), minmax(220px, 1fr));
   gap: var(--space-4);
   overflow-x: auto;
 }
 
+/*
+  Sous 900px : plus de place pour des colonnes côte à côte (même à 220px de
+  large chacune) — colonnes empilées verticalement plutôt qu'un scroll
+  horizontal, pour rester lisible/scannable au pouce (on lit une colonne à la
+  fois, pas de va-et-vient horizontal). L'en-tête de chaque colonne reste
+  collé en haut de son propre bloc pendant le défilement (`position: sticky`)
+  pour garder le statut/le compte visible même sur une colonne longue.
+*/
 @media (max-width: 900px) {
   .kanban-board__columns {
     grid-template-columns: 1fr;
+    gap: var(--space-3);
+  }
+
+  .kanban-column__header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    /* Même couleur que le fond de la colonne (`.kanban-column`) : pas de
+       coin carré ou de démarcation à masquer, le sticky se fond dedans. */
+    background: var(--color-surface);
+  }
+}
+
+@media (max-width: 720px) {
+  .kanban-column {
+    padding: var(--space-2);
   }
 }
 

@@ -145,3 +145,16 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+@media (max-width: 480px) {
+  .spec-tab__block-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .spec-tab__block-cancel,
+  .spec-tab__block-save {
+    width: 100%;
+    text-align: center;
+  }
+}

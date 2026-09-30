@@ -297,7 +297,14 @@ export function KanbanBoard({ project, versionId }: KanbanBoardProps) {
           <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
             <div
               className="kanban-board__columns"
-              style={{ gridTemplateColumns: `repeat(${visibleColumns.length}, minmax(220px, 1fr))` }}
+              // Nombre de colonnes exposé comme variable CSS plutôt qu'en
+              // `gridTemplateColumns` direct : une propriété posée en style
+              // inline prime toujours sur une règle de feuille de style, y
+              // compris à l'intérieur d'un @media — l'ancienne écriture
+              // rendait donc l'empilement mobile (KanbanBoard.css) inopérant
+              // quelle que soit la largeur d'écran. Passer par une variable
+              // laisse le media query reprendre la main sous 900px.
+              style={{ "--kanban-columns": visibleColumns.length } as React.CSSProperties}
             >
               {visibleColumns.map((status) => (
                 <KanbanColumn

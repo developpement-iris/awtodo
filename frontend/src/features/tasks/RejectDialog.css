@@ -6,6 +6,7 @@
   align-items: center;
   justify-content: center;
   z-index: 50;
+  padding: var(--space-4);
 }
 
 .reject-dialog {
@@ -81,4 +82,16 @@
 
 .reject-dialog__confirm:not(:disabled):hover {
   opacity: 0.85;
+}
+
+@media (max-width: 480px) {
+  .reject-dialog__actions {
+    flex-direction: column-reverse;
+  }
+
+  .reject-dialog__cancel,
+  .reject-dialog__confirm {
+    width: 100%;
+    text-align: center;
+  }
 }
