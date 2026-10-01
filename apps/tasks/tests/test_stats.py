@@ -234,6 +234,80 @@ class GlobalTaskStatsServiceTests(TestCase):
         self.assertIn("completion_trend", stats)
 
 
+class DashboardTaskInsightsFieldsTests(TestCase):
+    """Nouveaux champs de `_task_insights` ajoutés pour le Dashboard
+    personnalisable (session du 2026-10-01) — voir apps.dashboards.catalog."""
+
+    def setUp(self):
+        self.project = Project.objects.create(name="Projet Dashboard Insights")
+        self.version = ProjectVersion.objects.create(project=self.project, label="v1", is_current=True)
+        self.manager = User.objects.create_user(username="dash-insights-manager")
+        self.member = User.objects.create_user(username="dash-insights-member")
+        ProjectMembership.objects.create(project=self.project, user=self.manager, role="chef_de_projet")
+        ProjectMembership.objects.create(project=self.project, user=self.member, role="membre")
+
+    def test_empty_project_insights_do_not_crash_on_division(self):
+        insights = services.get_project_task_insights(actor=self.manager, project=self.project)
+        self.assertIsNone(insights["cancellation_rate"])
+        self.assertEqual(insights["backlog_age_buckets"], {"0_7j": 0, "8_14j": 0, "plus_14j": 0})
+        self.assertEqual(insights["active_tasks_by_assignee"], {})
+        self.assertEqual(sum(insights["type_breakdown"].values()), 0)
+
+    def test_cancellation_rate_counts_rejected_and_cancelled(self):
+        Task.objects.create(
+            project=self.project, version=self.version, title="Rejetée", task_type="correction", status="rejetee"
+        )
+        Task.objects.create(
+            project=self.project, version=self.version, title="Annulée", task_type="correction", status="annulee"
+        )
+        Task.objects.create(
+            project=self.project, version=self.version, title="Dispo", task_type="correction", status="disponible"
+        )
+
+        insights = services.get_project_task_insights(actor=self.manager, project=self.project)
+        self.assertEqual(insights["cancellation_rate"], round(2 / 3, 3))
+
+    def test_backlog_age_buckets_split_by_creation_date(self):
+        recent = Task.objects.create(
+            project=self.project, version=self.version, title="Récente", task_type="ajout", status="disponible"
+        )
+        mid = Task.objects.create(
+            project=self.project, version=self.version, title="Moyenne", task_type="ajout", status="disponible"
+        )
+        old = Task.objects.create(
+            project=self.project, version=self.version, title="Vieille", task_type="ajout", status="disponible"
+        )
+        Task.all_objects.filter(pk=recent.pk).update(created_at=timezone.now())
+        Task.all_objects.filter(pk=mid.pk).update(created_at=timezone.now() - timedelta(days=10))
+        Task.all_objects.filter(pk=old.pk).update(created_at=timezone.now() - timedelta(days=20))
+
+        insights = services.get_project_task_insights(actor=self.manager, project=self.project)
+        self.assertEqual(insights["backlog_age_buckets"], {"0_7j": 1, "8_14j": 1, "plus_14j": 1})
+
+    def test_active_tasks_by_assignee_excludes_terminal_statuses(self):
+        Task.objects.create(
+            project=self.project, version=self.version, title="Active", task_type="ajout",
+            status="en_cours", assignee=self.member,
+        )
+        Task.objects.create(
+            project=self.project, version=self.version, title="Terminée", task_type="ajout",
+            status="archivee", assignee=self.member, time_spent="1.0",
+        )
+
+        insights = services.get_project_task_insights(actor=self.manager, project=self.project)
+        self.assertEqual(insights["active_tasks_by_assignee"], {self.member.username: 1})
+
+    def test_type_breakdown_counts_all_statuses(self):
+        Task.objects.create(project=self.project, version=self.version, title="C", task_type="correction", status="disponible")
+        Task.objects.create(project=self.project, version=self.version, title="A", task_type="ajout", status="en_cours")
+        Task.objects.create(project=self.project, version=self.version, title="E", task_type="evolution", status="archivee", time_spent="1.0")
+
+        insights = services.get_project_task_insights(actor=self.manager, project=self.project)
+        self.assertEqual(
+            insights["type_breakdown"], {"correction": 1, "ajout": 1, "evolution": 1, "test": 0}
+        )
+
+
 @override_settings(
     DEBUG=True,
     REST_FRAMEWORK={

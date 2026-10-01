@@ -5,7 +5,7 @@ from django.utils.text import slugify
 
 from apps.common.audit import record_event
 from apps.projects.models import SpecSection
-from apps.projects.services import is_project_manager, is_project_member
+from apps.projects.services import contributor_projects, is_project_manager, is_project_member
 
 from .models import DocEntry, DocPage, DocSpace, PendingDocEntry
 
@@ -589,3 +589,19 @@ def get_documentation_bundle(*, actor, project, request=None):
         "pending_features": [_pending_dict(p) for p in pendings if p.kind == "fonctionnalite"],
         "pending_resolutions": [_pending_dict(p) for p in pendings if p.kind == "resolution"],
     }
+
+
+def get_pending_doc_count(*, actor, project=None):
+    """Dette documentaire — taille de la file "à documenter", widget par
+    défaut du Dashboard (session du 2026-10-01, voir apps.dashboards.catalog).
+    `project=None` = portée globale, scopée à `contributor_projects` comme les
+    autres stats globales (un lecteur n'y entre pas)."""
+    if project is not None:
+        _require_member(actor, project)
+        return PendingDocEntry.objects.filter(status="en_attente", space__project=project).count()
+
+    if actor is None or not getattr(actor, "is_authenticated", False):
+        raise DocsPermissionError("Utilisateur non identifié.")
+    return PendingDocEntry.objects.filter(
+        status="en_attente", space__project__in=contributor_projects(actor)
+    ).count()

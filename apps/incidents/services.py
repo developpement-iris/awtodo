@@ -3,8 +3,9 @@ from decimal import Decimal, InvalidOperation
 from apps.accounts.models import Team
 from apps.accounts.services import can_manage_team, is_active_team_member
 from apps.common.audit import record_changes, record_event
+from apps.common.choices import PRIORITY_CHOICES
 from apps.common.permissions import check_permission
-from apps.projects.services import is_project_contributor, is_project_manager
+from apps.projects.services import contributor_projects, is_project_contributor, is_project_manager
 
 from .models import Incident, IncidentComment
 from .signals import incident_commented, incident_created, incident_resolved
@@ -425,3 +426,61 @@ def add_comment(*, actor, incident, content):
         team=incident.team,
     )
     return comment
+
+
+# --- Statistiques (session du 2026-10-01, module Dashboard) ---------------
+# Jusqu'ici cette app n'avait aucune fonction d'agrégation — contrairement à
+# `apps.tasks.services._task_insights`. Même doctrine : `Incident.all_objects`
+# (pas `.active()`, qui exclurait justement "résolu"/"annulé" dont ces calculs
+# ont besoin), garde de permission en première ligne.
+
+
+def _incident_insights(incidents_qs):
+    """MTTR + répartitions — alimente à la fois l'onglet Statistiques d'un
+    projet et le widget par défaut `incident_mttr`/`incident_status_breakdown`
+    du Dashboard (voir apps.dashboards.catalog)."""
+    resolved = incidents_qs.filter(status="resolu")
+    resolution_times = [t for t in resolved.values_list("time_spent", flat=True) if t is not None]
+    mttr_hours = (
+        round(float(sum(resolution_times) / len(resolution_times)), 1) if resolution_times else None
+    )
+
+    total = incidents_qs.count()
+    cancelled = incidents_qs.filter(status="annule").count()
+
+    return {
+        "mttr_hours": mttr_hours,
+        "status_breakdown": {choice: incidents_qs.filter(status=choice).count() for choice, _ in Incident.STATUS_CHOICES},
+        "priority_breakdown": {choice: incidents_qs.filter(priority=choice).count() for choice, _ in PRIORITY_CHOICES},
+        "open_count": incidents_qs.filter(status__in=Incident.ACTIVE_STATUSES).count(),
+        "resolved_count": resolved.count(),
+        "cancellation_rate": round(cancelled / total, 3) if total else None,
+    }
+
+
+def get_project_incident_insights(*, actor, project):
+    """Onglet Statistiques d'un projet — même visibilité que
+    `apps.tasks.services.get_project_task_insights` (tout membre du projet,
+    pas réservé au chef de projet)."""
+    _require_actor(actor)
+    if not _is_member_via_project(actor, project):
+        raise IncidentPermissionError("Seul un membre du projet peut consulter ces statistiques.")
+    return _incident_insights(Incident.all_objects.filter(project=project))
+
+
+def get_global_incident_stats(*, actor):
+    """Écran Statistiques globales — même portée que
+    `apps.tasks.services.get_global_task_stats` (`contributor_projects`, un
+    lecteur n'y entre pas). Les incidents de boîte de réception (`team`, pas
+    de `project`) sont hors scope ici, comme pour les tâches qui n'ont pas
+    d'équivalent "non-affecté"."""
+    _require_actor(actor)
+    projects = contributor_projects(actor)
+    return _incident_insights(Incident.all_objects.filter(project__in=projects))
+
+
+def get_incident_insights_for_projects(project_ids):
+    """Équivalent `apps.tasks.services.get_task_insights_for_projects` — voir
+    ce commentaire pour le raisonnement (widgets "groupe" du Dashboard à
+    portée globale, scopés par l'appelant, pas de garde ici)."""
+    return _incident_insights(Incident.all_objects.filter(project_id__in=project_ids))

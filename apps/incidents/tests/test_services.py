@@ -14,11 +14,13 @@ from apps.incidents.services import (
     cancel_incident,
     claim_incident,
     create_incident,
+    get_global_incident_stats,
+    get_project_incident_insights,
     reassign_incident_team,
     resolve_incident,
     start_incident,
-    update_incident_description,
     update_incident_priority,
+    update_incident_description,
 )
 
 
@@ -444,3 +446,78 @@ class UpdateIncidentPriorityTests(IncidentServicesTestCase):
 
         with self.assertRaises(IncidentPermissionError):
             update_incident_priority(actor=other_member, incident=incident, priority="critique")
+
+
+class IncidentInsightsServiceTests(TestCase):
+    """Nouvelles fonctions de stats (session du 2026-10-01, module
+    Dashboard) — cette app n'avait jusque-là aucune agrégation."""
+
+    def setUp(self):
+        self.team = Team.objects.create(name="Équipe Insights")
+        self.manager = User.objects.create_user(username="insights-inc-manager")
+        self.member = User.objects.create_user(username="insights-inc-member")
+        self.outsider = User.objects.create_user(username="insights-inc-outsider")
+        TeamMembership.objects.create(team=self.team, user=self.manager)
+        TeamMembership.objects.create(team=self.team, user=self.member)
+        self.project = Project.objects.create(
+            name="Projet Insights Incidents", project_type="collaboratif", team=self.team
+        )
+        ProjectMembership.objects.create(project=self.project, user=self.manager, role="chef_de_projet")
+        ProjectMembership.objects.create(project=self.project, user=self.member, role="membre")
+
+    def test_empty_project_has_no_mttr_and_no_division_crash(self):
+        insights = get_project_incident_insights(actor=self.manager, project=self.project)
+        self.assertIsNone(insights["mttr_hours"])
+        self.assertIsNone(insights["cancellation_rate"])
+        self.assertEqual(insights["open_count"], 0)
+
+    def test_mttr_averages_time_spent_on_resolved_only(self):
+        a = create_incident(actor=self.manager, project=self.project, title="A")
+        start_incident(actor=self.manager, incident=a)
+        resolve_incident(actor=self.manager, incident=a, resolution_comment="fait", time_spent="2.0")
+
+        b = create_incident(actor=self.manager, project=self.project, title="B")
+        start_incident(actor=self.manager, incident=b)
+        resolve_incident(actor=self.manager, incident=b, resolution_comment="fait", time_spent="4.0")
+
+        # Toujours signalé, ne doit pas entrer dans le calcul du MTTR.
+        create_incident(actor=self.manager, project=self.project, title="C")
+
+        insights = get_project_incident_insights(actor=self.manager, project=self.project)
+        self.assertEqual(insights["mttr_hours"], 3.0)
+        self.assertEqual(insights["resolved_count"], 2)
+        # "résolu" fait partie de `Incident.ACTIVE_STATUSES` (pas encore
+        # archivé/annulé) — les 2 résolus + le signalé comptent comme
+        # "ouverts" au sens de ce champ.
+        self.assertEqual(insights["open_count"], 3)
+
+    def test_cancellation_rate(self):
+        cancelled = create_incident(actor=self.manager, project=self.project, title="Annulé")
+        cancel_incident(actor=self.manager, incident=cancelled, cancellation_reason="doublon")
+        create_incident(actor=self.manager, project=self.project, title="Toujours ouvert")
+
+        insights = get_project_incident_insights(actor=self.manager, project=self.project)
+        self.assertAlmostEqual(insights["cancellation_rate"], 0.5)
+
+    def test_plain_member_can_view_project_insights(self):
+        insights = get_project_incident_insights(actor=self.member, project=self.project)
+        self.assertIn("mttr_hours", insights)
+
+    def test_outsider_cannot_view_project_insights(self):
+        with self.assertRaises(IncidentPermissionError):
+            get_project_incident_insights(actor=self.outsider, project=self.project)
+
+    def test_global_stats_scoped_to_contributor_projects(self):
+        create_incident(actor=self.manager, project=self.project, title="Dans le scope")
+
+        other_team = Team.objects.create(name="Autre équipe insights")
+        other_manager = User.objects.create_user(username="insights-inc-other-manager")
+        TeamMembership.objects.create(team=other_team, user=other_manager)
+        other_project = Project.objects.create(
+            name="Autre projet insights", project_type="collaboratif", team=other_team
+        )
+        ProjectMembership.objects.create(project=other_project, user=other_manager, role="chef_de_projet")
+        create_incident(actor=other_manager, project=other_project, title="Hors scope")
+
+        stats = get_global_incident_stats(actor=self.manager)
+        self.assertEqual(stats["open_count"], 1)

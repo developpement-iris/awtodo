@@ -1,6 +1,13 @@
 .global-stats-page {
   display: flex;
   flex-direction: column;
+  gap: var(--space-4);
+}
+
+.global-stats-page__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: var(--space-3);
 }
 
@@ -9,25 +16,26 @@
   font-weight: 600;
   font-size: 16px;
   color: var(--color-text);
-  margin: var(--space-3) 0 var(--space-1);
 }
 
-.global-stats-page__section-title:first-child {
-  margin-top: 0;
+.global-stats-page__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  flex: none;
+  transition: opacity var(--transition-fast);
 }
 
-.global-stats-page__cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: var(--space-4);
-  margin-bottom: var(--space-4);
-}
-
-.global-stats-page__widgets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4);
-  margin-bottom: var(--space-2);
+.global-stats-page__toggle:hover {
+  opacity: 0.9;
 }
 
 .global-stats-page__message {
@@ -39,52 +47,8 @@
   color: var(--tone-error-text);
 }
 
-.global-stats-page__table-wrapper {
-  overflow-x: auto;
-}
-
-.global-stats-page__table {
-  width: 100%;
-  border-collapse: collapse;
-  border-top: 1px solid var(--color-border);
-}
-
-.global-stats-page__table th {
-  text-align: left;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--color-text-muted);
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.global-stats-page__table td {
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--color-border);
-  font-size: 14px;
-}
-
-.global-stats-page__num {
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-
-.global-stats-page__num--total {
-  font-weight: 700;
-}
-
 @media (max-width: 720px) {
-  /* `__cards` (auto-fill minmax(200px,1fr)) et `__widgets` (flex-wrap) se
-     réorganisent déjà d'eux-mêmes sur un téléphone — resserrer juste
-     l'espacement et le tableau, même traitement que StatsTab.css. */
-  .global-stats-page__cards {
-    gap: var(--space-3);
-  }
-
-  .global-stats-page__table th,
-  .global-stats-page__table td {
-    padding: var(--space-2) var(--space-3);
+  .global-stats-page__toolbar {
+    flex-wrap: wrap;
   }
 }

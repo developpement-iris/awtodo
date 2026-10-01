@@ -1026,3 +1026,53 @@ Priorité descendante — un admin d'organisation qui est aussi chef de projet o
 - **Éditions de texte libre non journalisées** (bloc-notes de projet, cahier des charges, contenu d'une page/fiche de documentation) — seule la **création** de ces objets l'est. Journaliser chaque sauvegarde d'un champ texte libre editable en continu produirait des diffs volumineux et bruyants (le texte entier avant/après) pour un intérêt limité — écarté par cohérence avec la préoccupation d'optimisation soulevée par l'utilisateur, pas explicitement tranché avec lui.
 - **Calendrier personnel hors périmètre** (`CalendarEvent`, `ScheduledBlock`, horaires de travail, partage de calendrier) — ce sont des données personnelles, pas des "entités qui touchent au projet" au sens de la demande, même quand un créneau est posé sur une tâche/un incident.
 - **Profils de droits, clés API, connexion O365, couleurs de marque** : actions d'administration d'organisation, pas rattachées à un projet — capturables plus tard sous `team=None, project=None` si le besoin se confirme (déjà supporté par le modèle), pas fait dans cette passe.
+
+## Statistiques/Dashboard personnalisable (implémenté — session du 2026-10-01)
+
+**Statut : implémenté.** Remplace les anciens écrans Statistiques figés (onglet projet + écran global, sessions du 05/08/2026 et suivantes) par deux **canevas vierges** où chaque utilisateur compose son propre tableau de bord — widgets ajoutés/retirés/redimensionnés/réordonnés librement, disposition **propre à chaque utilisateur** (pas partagée par projet, pour suivre la personne d'un poste à l'autre — persistée côté backend, pas en `localStorage` comme `useColumnPreferences`).
+
+### Modèle (`apps/dashboards`, nouvelle app — dépend de `common`/`projects`/`tasks`/`incidents`/`budgeting`/`documentation`)
+
+Un seul modèle `DashboardWidget` (pas deux modèles jumeaux "défaut"/"personnalisé" — la position de grille/la portée/la visibilité sont des attributs communs, deux modèles obligeraient une requête UNION pour charger tout un dashboard). Champs clés : `owner`, `scope` (`projet`/`global`), `project` (nullable si `scope=global`), `widget_type` (`defaut`/`personnalise`), `metric_key`, `config` (JSON, widgets personnalisés), `visibility` (`individuel`/`groupe`), `x`/`y`/`w`/`h` (grille `react-grid-layout`, unités colonnes/lignes), `status` (`active`/`removed`, règle "aucune suppression physique").
+
+### Deux types de widgets
+
+1. **Par défaut** : catalogue de métriques déjà calculables (`apps/dashboards/catalog.py::DEFAULT_METRICS`), piochées sans configuration. Réutilise les fonctions de stats existantes (`_task_insights`, `get_project_user_stats`, `get_budget_summary_for_manager`...) et ajoute 7 nouveaux calculs qui n'existaient pas encore :
+   - **Incidents** (`apps/incidents/services.py` — app qui n'avait **aucune** fonction de stats jusque-là) : `get_project_incident_insights`/`get_global_incident_stats` (MTTR, répartition statut/priorité, taux d'annulation).
+   - **Tâches** (`apps/tasks/services.py::_task_insights`, étendue) : `cancellation_rate`, `backlog_age_buckets` (0-7j/8-14j/+14j), `active_tasks_by_assignee` (charge actuelle, pas seulement historique), `type_breakdown`.
+   - **Documentation** (`apps/documentation/services.py::get_pending_doc_count`) : taille de la file "à documenter".
+   - **Activité récente** : réutilise `apps.projects.services.get_project_history`/`get_scoped_history` (historique d'activité, session du 2026-09-29), tronqué aux 20 dernières entrées.
+2. **Personnalisés** : constructeur générique **X/Y à choix contraints** — source (`tasks`/`incidents`/`budget`), agrégation (`count`/`sum`/`avg`), champ, regroupement (semaine/statut/priorité/type/assigné/catégorie). **Jamais de formule libre ni d'`eval`/templating côté serveur** — même doctrine de sécurité que `apps.communication.payload.AVAILABLE_FIELDS` : dictionnaires fixes (`_SOURCE_BASE_QS`/`_GROUP_BY_FIELD_PER_SOURCE`/`_AGG_FUNCS`) indexés par une valeur déjà validée contre le catalogue, jamais un `getattr` construit depuis une chaîne utilisateur brute. `validate_custom_config` revalide à la création **et** à chaque recalcul (le catalogue a pu changer entre-temps — un widget devenu invalide est marqué `restricted`, pas une 500). Point technique : `BudgetLine.amount` est une **propriété Python** (`quantity × unit_price`), pas un champ DB — le moteur l'annote via `ExpressionWrapper` avant d'agréger, jamais une référence directe.
+
+### Visibilité "individuel" vs "groupe"
+
+Certaines métriques/certains regroupements révèlent des données sur **d'autres personnes** (ex. répartition de charge par assigné, table par membre) — taguées `groupe`, réservées :
+- **Portée projet** : chef de projet uniquement (`is_project_manager`).
+- **Portée globale** : pas de "chef de projet" unique à cette échelle — un acteur peut poser un widget "groupe" global s'il dirige au moins un projet ou est admin d'organisation/plateforme, mais les données sont **automatiquement filtrées** aux seuls projets qu'il dirige réellement (`_group_scope_project_ids`, aligné sur `get_budget_summary_for_manager` — **pas d'extension aux admins de groupe**, décision explicite, contrairement à la cascade plus large de `get_scoped_history`).
+- **Défense en profondeur** : la visibilité est revérifiée à chaque calcul (pas seulement à la création) — un widget "groupe" dont le propriétaire a perdu son rôle de chef de projet depuis devient `{"restricted": true}` au lieu de planter le reste du dashboard.
+- **Garde-fou anti-contournement** : un widget personnalisé avec `group_by="assigné"` est **toujours** forcé en `groupe`, quelle que soit la visibilité demandée à la création — sinon un simple membre pourrait déclarer son propre widget "individuel" tout en affichant la répartition de charge de toute l'équipe.
+
+### Endpoints (`/api/v1/dashboards/`)
+
+| Méthode | Chemin | Rôle |
+|---|---|---|
+| `GET`/`POST` | `/projects/{id}/` | Dashboard complet du projet (disposition + données calculées, un seul appel) / création de widget |
+| `GET`/`POST` | `/global/` | Idem, portée globale |
+| `PATCH`/`DELETE` | `/widgets/{id}/` | Position (debounced côté frontend) / retrait (`status=removed`) — `owner=request.user` dans le queryset, 404 sur le widget d'un autre utilisateur, pas 403 |
+| `GET` | `/catalog/?scope=...&project_id=...` | Catalogue filtré selon les droits de l'acteur sur cette portée |
+
+**Optimisation N+1** : `get_dashboard` enveloppe le calcul de tous les widgets dans `prefetched_project_roles` (cache déjà existant, `apps.projects.services`) et précalcule `_group_scope_project_ids` **une seule fois** pour tout le dashboard (pas une fois par widget "groupe") — un dashboard à N widgets "groupe" ne coûte pas N vérifications de permission.
+
+### Frontend (`frontend/src/features/dashboards/`)
+
+- `DashboardGrid.tsx` : wrapper **`react-grid-layout`** (première dépendance de "moteur de grille" du projet — écart assumé avec la convention "tout fait main", confirmé par l'utilisateur ; `@dnd-kit/core` déjà présent ne couvre que le drag simple, pas le redimensionnement/réordonnancement libre). `onLayoutChange` **debounced (~500ms)** — la lib appelle ce callback à chaque pixel de glisser, jamais un PATCH par appel.
+- `WidgetRenderer.tsx` : rendu générique piloté par `render_hint`, réutilise **tel quel** `StatCard`/`DonutChart`/`BarChart`/`AreaChart` (aucune nouvelle lib de graphique) — généralise le seam déjà présent dans les anciens widgets fixes (`PriorityBreakdownWidget` etc., **supprimés** dans cette passe, plus aucun appelant).
+- `AddWidgetPanel.tsx` : bibliothèque de widgets par défaut + constructeur personnalisé en cascade (Combobox source → champ → agrégation → regroupement), même gabarit que l'éditeur de gabarit de payload Teams (`CommunicationTab.tsx`).
+- Catalogue chargé depuis `GET /dashboards/catalog/` (pas dupliqué en dur côté frontend) — a une dimension de permission (métriques "groupe" filtrées selon l'acteur) qu'un fichier TS statique ne peut pas exprimer sans dupliquer la logique serveur.
+- `StatsTab.tsx`/`GlobalStatsPage.tsx` : réduits à un wrapper fin (toolbar + `DashboardGrid` + `AddWidgetPanel`).
+
+### Limites assumées
+
+- Constructeur personnalisé à un seul niveau d'agrégation (pas de moyenne-de-sommes-par-groupe) — suffisant pour construire librement n'importe quelle métrique "X par Y" demandée, pas pour des ratios à deux niveaux.
+- Pas de validation de taille de grille (un widget peut être redimensionné à une taille illisible) — non demandé, pas bloquant pour une v1 personnelle.
+- Vérification UI réelle non faite en environnement de développement (pas d'accès navigateur) — `tsc`/`build`/`lint` et les tests backend (820 tests, tous verts) couvrent la logique, pas le rendu visuel.

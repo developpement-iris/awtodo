@@ -1,0 +1,27 @@
+.dashboard-grid {
+  width: 100%;
+}
+
+.dashboard-grid__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: 13px;
+  text-align: center;
+  padding: var(--space-6);
+}
+
+/* Styles react-grid-layout surchargés pour coller aux tokens du projet
+   plutôt que l'apparence par défaut de la librairie. */
+.react-grid-item.react-grid-placeholder {
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent) !important;
+  border-radius: var(--radius-md);
+}
+
+.react-grid-item > .react-resizable-handle::after {
+  border-color: var(--color-border) !important;
+}

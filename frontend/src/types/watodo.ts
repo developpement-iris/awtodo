@@ -574,6 +574,110 @@ export interface BudgetSummaryRow {
   capex_total: string;
 }
 
+// Dashboard personnalisable (session du 2026-10-01) — remplace les anciens
+// écrans Statistiques figés. Voir docs/modeles-et-api.md >
+// "Statistiques/Dashboard personnalisable" et apps/dashboards/catalog.py
+// (source de vérité du catalogue, ce fichier n'en garde qu'une copie des
+// formes de réponse, pas les règles de permission).
+export type DashboardScope = "projet" | "global";
+export type DashboardWidgetType = "defaut" | "personnalise";
+export type DashboardVisibility = "individuel" | "groupe";
+export type DashboardRenderHint = "stat_card" | "donut" | "bar" | "area" | "table" | "feed";
+export type DashboardAggregation = "count" | "sum" | "avg";
+
+export interface CustomWidgetConfig {
+  source: string;
+  aggregation: DashboardAggregation;
+  field: string | null;
+  group_by: string;
+}
+
+// Les trois formes possibles de `data`, distinguées par `type` — contrat
+// unique qu'un widget soit "par défaut" ou "personnalisé" (voir
+// apps.dashboards.services._normalize_default_data/compute_custom_widget).
+export interface DashboardScalarData {
+  type: "scalar";
+  value: number;
+  restricted?: undefined;
+}
+export interface DashboardSeriesData {
+  type: "series";
+  data: { label: string; value: number }[];
+  restricted?: undefined;
+}
+export interface DashboardTableData {
+  type: "table";
+  rows: Record<string, string | number>[];
+  restricted?: undefined;
+}
+export interface DashboardFeedData {
+  type: "feed";
+  items: { created_at: string; actor: string; verb: string; description: string }[];
+  restricted?: undefined;
+}
+export interface DashboardRestrictedData {
+  restricted: true;
+  reason?: string;
+}
+export type DashboardWidgetData =
+  | DashboardScalarData
+  | DashboardSeriesData
+  | DashboardTableData
+  | DashboardFeedData
+  | DashboardRestrictedData;
+
+export interface DashboardWidgetDTO {
+  id: string;
+  widget_type: DashboardWidgetType;
+  metric_key: string;
+  config: CustomWidgetConfig | null;
+  visibility: DashboardVisibility;
+  title: string;
+  render_hint: DashboardRenderHint;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  data: DashboardWidgetData;
+}
+
+export interface DashboardResponse {
+  widgets: DashboardWidgetDTO[];
+}
+
+export interface DashboardWidgetCreatePayload {
+  widget_type: DashboardWidgetType;
+  metric_key?: string;
+  config?: CustomWidgetConfig | Record<string, never>;
+  visibility?: DashboardVisibility;
+  title?: string;
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
+  [key: string]: unknown;
+}
+
+export interface DashboardDefaultMetricInfo {
+  label: string;
+  visibility: DashboardVisibility;
+  render_hint: DashboardRenderHint;
+}
+
+export interface DashboardCustomSourceInfo {
+  label: string;
+  scope: DashboardScope[];
+  aggregatable_fields: Record<string, string>;
+  group_by: Record<string, string>;
+}
+
+export interface DashboardCatalog {
+  default_metrics: Record<string, DashboardDefaultMetricInfo>;
+  custom_sources: Record<string, DashboardCustomSourceInfo>;
+  aggregations: Record<DashboardAggregation, string>;
+  can_add_group_widgets: boolean;
+}
+
 export interface Notification {
   id: string;
   verb: "task_assigned" | "task_commented" | "incident_commented" | "event_invited";

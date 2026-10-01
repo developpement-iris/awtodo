@@ -1,15 +1,41 @@
-.stats-tab__cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+.stats-tab {
+  display: flex;
+  flex-direction: column;
   gap: var(--space-4);
-  margin-bottom: var(--space-4);
 }
 
-.stats-tab__widgets {
+.stats-tab__toolbar {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4);
-  margin-bottom: var(--space-6);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.stats-tab__title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--color-text);
+}
+
+.stats-tab__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  flex: none;
+  transition: opacity var(--transition-fast);
+}
+
+.stats-tab__toggle:hover {
+  opacity: 0.9;
 }
 
 .stats-tab__message {
@@ -21,105 +47,8 @@
   color: var(--tone-error-text);
 }
 
-.stats-tab__section-title {
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 15px;
-  color: var(--color-text);
-  margin-bottom: var(--space-3);
-}
-
-.stats-tab__table-wrapper {
-  overflow-x: auto;
-}
-
-.stats-tab__table {
-  width: 100%;
-  border-collapse: collapse;
-  border-top: 1px solid var(--color-border);
-}
-
-.stats-tab__table th {
-  text-align: left;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--color-text-muted);
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--color-border);
-  white-space: nowrap;
-}
-
-.stats-tab__table td {
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--color-border);
-  vertical-align: middle;
-  font-size: 14px;
-  transition: background-color var(--transition-fast);
-}
-
-.stats-tab__table tbody tr:hover td {
-  background: var(--tone-neutral-bg);
-}
-
-.stats-tab__num {
-  font-variant-numeric: tabular-nums;
-  color: var(--color-text);
-}
-
-.stats-tab__sort {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  background: none;
-  border: none;
-  padding: 0;
-  font: inherit;
-  text-transform: inherit;
-  letter-spacing: inherit;
-  color: inherit;
-  cursor: pointer;
-}
-
-.stats-tab__sort:hover {
-  color: var(--color-accent);
-}
-
-.stats-tab__user {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-weight: 500;
-}
-
-.stats-tab__avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: var(--task-status-inprogress-bg);
-  color: var(--task-status-inprogress-text);
-  font-size: 11px;
-  font-weight: 700;
-  flex: none;
-}
-
 @media (max-width: 720px) {
-  /* Les cards KPI (auto-fill minmax(200px,1fr)) passent naturellement à une
-     colonne sur un viewport de téléphone (~360-400px, une seule colonne de
-     200px+gap y tient) — pas besoin de forcer 1fr ici, juste resserrer
-     l'espacement. Les widgets (`stats-tab__widgets`, flex-wrap sur
-     `flex: … 1 380px` dans chaque composant) s'empilent déjà de la même
-     façon, inchangés ici (hors périmètre : composants `components/*Widget*`). */
-  .stats-tab__cards {
-    gap: var(--space-3);
-  }
-
-  .stats-tab__table th,
-  .stats-tab__table td {
-    padding: var(--space-2) var(--space-3);
+  .stats-tab__toolbar {
+    flex-wrap: wrap;
   }
 }

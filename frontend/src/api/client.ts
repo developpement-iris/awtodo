@@ -11,6 +11,11 @@ import type {
   CommunicationChannel,
   CommunicationMessage,
   CommunicationPayloadTemplate,
+  DashboardCatalog,
+  DashboardResponse,
+  DashboardScope,
+  DashboardWidgetCreatePayload,
+  DashboardWidgetDTO,
   O365Connection,
   ProjectPlanningBundle,
   ProjectPlanningOccurrence,
@@ -720,6 +725,44 @@ export function removeBudgetLine(lineId: string): Promise<BudgetLine> {
 
 export function getBudgetSummary(): Promise<BudgetSummaryRow[]> {
   return getJson<BudgetSummaryRow[]>("/budgeting/summary/");
+}
+
+// Dashboard personnalisable (session du 2026-10-01) — remplace les anciens
+// écrans Statistiques figés, voir docs/modeles-et-api.md >
+// "Statistiques/Dashboard personnalisable".
+export function getProjectDashboard(projectId: string): Promise<DashboardResponse> {
+  return getJson<DashboardResponse>(`/dashboards/projects/${projectId}/`);
+}
+
+export function getGlobalDashboard(): Promise<DashboardResponse> {
+  return getJson<DashboardResponse>("/dashboards/global/");
+}
+
+export function getDashboardCatalog(scope: DashboardScope, projectId?: string): Promise<DashboardCatalog> {
+  const query = scope === "projet" ? buildQuery({ scope, project_id: projectId }) : buildQuery({ scope });
+  return getJson<DashboardCatalog>(`/dashboards/catalog/${query}`);
+}
+
+export function createProjectDashboardWidget(
+  projectId: string,
+  payload: DashboardWidgetCreatePayload,
+): Promise<DashboardWidgetDTO> {
+  return postJson<DashboardWidgetDTO>(`/dashboards/projects/${projectId}/`, payload);
+}
+
+export function createGlobalDashboardWidget(payload: DashboardWidgetCreatePayload): Promise<DashboardWidgetDTO> {
+  return postJson<DashboardWidgetDTO>("/dashboards/global/", payload);
+}
+
+export function updateDashboardWidgetPosition(
+  widgetId: string,
+  position: { x: number; y: number; w: number; h: number },
+): Promise<{ id: string; x: number; y: number; w: number; h: number }> {
+  return patchJson(`/dashboards/widgets/${widgetId}/`, position);
+}
+
+export function removeDashboardWidget(widgetId: string): Promise<void> {
+  return deleteJson<void>(`/dashboards/widgets/${widgetId}/`);
 }
 
 // --- Documentation de projet ---------------------------------------------

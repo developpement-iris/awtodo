@@ -298,6 +298,36 @@ def _task_insights(tasks_qs):
     tasks_over_estimate = done_with_estimate.filter(time_spent__gt=F("estimated_hours")).count()
     tasks_under_estimate = done_with_estimate.count() - tasks_over_estimate
 
+    # --- Ajouts session du 2026-10-01 (module Dashboard) -------------------
+    total_count = tasks_qs.count()
+    cancelled_or_rejected = tasks_qs.filter(status__in=("rejetee", "annulee")).count()
+    cancellation_rate = round(cancelled_or_rejected / total_count, 3) if total_count else None
+
+    # Âge du backlog : tâches encore actives, par ancienneté depuis la
+    # création — buckets fixes, pas paramétrables par widget en v1 (pas
+    # demandé).
+    active_qs = tasks_qs.filter(status__in=Task.ACTIVE_STATUSES)
+    now = timezone.now()
+    backlog_age_buckets = {
+        "0_7j": active_qs.filter(created_at__gte=now - timedelta(days=7)).count(),
+        "8_14j": active_qs.filter(
+            created_at__lt=now - timedelta(days=7), created_at__gte=now - timedelta(days=14)
+        ).count(),
+        "plus_14j": active_qs.filter(created_at__lt=now - timedelta(days=14)).count(),
+    }
+
+    # Charge actuelle par personne : tâches ACTIVES (pas seulement terminées,
+    # contrairement à `get_project_user_stats`) — "qui est surchargé en ce
+    # moment", pas un historique.
+    active_tasks_by_assignee = dict(
+        active_qs.exclude(assignee__isnull=True)
+        .values("assignee__username")
+        .annotate(count=Count("id"))
+        .values_list("assignee__username", "count")
+    )
+
+    type_breakdown = {choice: tasks_qs.filter(task_type=choice).count() for choice, _ in Task.TASK_TYPE_CHOICES}
+
     return {
         "hours_total": hours_total,
         "avg_lead_time_days": avg_lead_time_days,
@@ -309,6 +339,10 @@ def _task_insights(tasks_qs):
         "estimated_hours_total": estimated_hours_total,
         "tasks_over_estimate": tasks_over_estimate,
         "tasks_under_estimate": tasks_under_estimate,
+        "cancellation_rate": cancellation_rate,
+        "backlog_age_buckets": backlog_age_buckets,
+        "active_tasks_by_assignee": active_tasks_by_assignee,
+        "type_breakdown": type_breakdown,
     }
 
 
@@ -340,6 +374,17 @@ def get_global_task_stats(*, actor):
         "tasks_in_progress": tasks_qs.filter(status="en_cours").count(),
         **_task_insights(tasks_qs),
     }
+
+
+def get_task_insights_for_projects(project_ids):
+    """Cœur de `_task_insights` directement paramétré par un ensemble de
+    projets explicite — utilisé par `apps.dashboards` pour les widgets
+    "groupe" à portée globale, scopés aux projets effectivement gérés par
+    l'acteur (pas une délégation à `get_global_task_stats`, qui est codée en
+    dur sur `contributor_projects(actor)`). Pas de garde de permission ici :
+    l'appelant (`apps.dashboards.services`) a déjà résolu `project_ids` selon
+    les droits de l'acteur avant d'appeler cette fonction."""
+    return _task_insights(Task.all_objects.filter(project_id__in=project_ids))
 
 
 def get_task_permissions(user, task):
