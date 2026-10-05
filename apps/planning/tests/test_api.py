@@ -388,6 +388,24 @@ class PlanningApiTests(APITestCase):
         # Le membre voit aussi l'entrée dans son calendrier personnel.
         self.assertEqual(len(self._calendar(self.member).data["project_entries"]), 1)
 
+    def test_project_entry_accepts_multiple_assignees(self):
+        other_member = User.objects.create(username="mbr2", email="mbr2@x.io")
+        ProjectMembership.objects.create(project=self.project, user=other_member, role="membre")
+        self._as(self.mgr)
+        r = self.client.post(
+            f"/api/v1/planning/projects/{self.project.id}/entries/",
+            {
+                "title": "Revue",
+                "start": "2026-06-15T09:00:00+02:00",
+                "end": "2026-06-15T10:00:00+02:00",
+                "assignees": [str(self.member.id), str(other_member.id)],
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        assignee_ids = {u["id"] for u in r.data["assignees"]}
+        self.assertEqual(assignee_ids, {str(self.member.id), str(other_member.id)})
+
     def test_member_cannot_create_project_entry(self):
         self._as(self.member)
         r = self.client.post(

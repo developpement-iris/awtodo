@@ -805,7 +805,9 @@ export interface ProjectPlanningOccurrence {
   status: "confirme" | "annule";
   project_id: string;
   project_name: string;
-  assignee: CalendarUser | null;
+  // Plusieurs assignés possibles (session du 2026-10-05) — remplace
+  // l'ancien `assignee` unique.
+  assignees: CalendarUser[];
   recurrence_rule: string;
   is_recurring: boolean;
   permissions: { can_manage: boolean };

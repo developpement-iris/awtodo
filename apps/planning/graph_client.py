@@ -213,6 +213,34 @@ def _block_payload(block):
     }
 
 
+def _project_entry_payload(entry):
+    """Comme `_event_payload`, sans `location` (le modèle `ProjectPlanningEntry`
+    n'en a pas)."""
+    payload = {
+        "subject": entry.title,
+        "body": {"contentType": "text", "content": entry.description or ""},
+        "start": {"dateTime": entry.start.isoformat(), "timeZone": "Europe/Paris"},
+        "end": {"dateTime": entry.end.isoformat(), "timeZone": "Europe/Paris"},
+        "isAllDay": entry.all_day,
+    }
+    if entry.recurrence_rule:
+        recurrence = build_graph_recurrence(entry)
+        if recurrence:
+            payload["recurrence"] = recurrence
+    return payload
+
+
+def create_graph_project_entry_event(connection, upn, entry):
+    """Crée la copie Outlook d'une `ProjectPlanningEntry` pour un assigné
+    donné (voir `apps.planning.tasks.sync_project_entry_assignee_to_outlook`),
+    renvoie son id Graph."""
+    return _post_event(connection, upn, _project_entry_payload(entry))
+
+
+def update_graph_project_entry_event(connection, upn, outlook_event_id, entry):
+    _patch_event(connection, upn, outlook_event_id, _project_entry_payload(entry))
+
+
 def create_graph_block_event(connection, upn, block):
     """Crée le créneau côté Outlook (pour un destinataire donné — voir
     `apps.planning.tasks.sync_scheduled_block_to_outlook`), renvoie son id

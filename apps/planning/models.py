@@ -283,12 +283,14 @@ class ProjectPlanningEntry(UUIDModel, TimeStampedModel, StatusLifecycleModel, Re
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
     kind = models.CharField(max_length=20, choices=KIND_CHOICES, default="autre")
-    assignee = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="project_planning_entries",
+    # Plusieurs assignés possibles (session du 2026-10-05, remonté
+    # directement : "il faut pouvoir le mettre à plusieurs personnes") — un
+    # simple M2M, pas de table de jonction avec statut/réponse comme
+    # `EventParticipant` (pas de notion d'accepter/refuser une entrée de
+    # planning projet, à la différence d'une invitation à un événement
+    # personnel).
+    assignees = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, blank=True, related_name="project_planning_entries"
     )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="confirme")
 
@@ -299,6 +301,41 @@ class ProjectPlanningEntry(UUIDModel, TimeStampedModel, StatusLifecycleModel, Re
 
     def __str__(self):
         return f"{self.project.name} — {self.title}"
+
+
+class ProjectPlanningEntryOutlookSync(UUIDModel, TimeStampedModel):
+    """Copie Outlook d'une `ProjectPlanningEntry` sur le calendrier d'un
+    assigné — session du 2026-10-05, même principe que
+    `EventParticipantOutlookSync` (un id Graph par (entrée, destinataire),
+    jamais un champ scalaire unique : une entrée de planning projet peut
+    avoir plusieurs assignés, chacun avec sa propre copie côté Outlook).
+
+    L'entrée de planning elle-même n'a pas de "propriétaire" au sens d'un
+    `CalendarEvent.owner` — elle appartient au projet, pas à une personne —
+    donc pas de copie "organisateur" séparée comme pour un événement
+    personnel : seuls les assignés reçoivent une copie Outlook.
+
+    Toujours soumise à l'opt-in individuel du destinataire
+    (`outlook_calendar_sync_enabled`) — être assigné à une entrée ne
+    contourne pas ce contrôle personnel, cohérent avec le reste de la
+    synchro. Jamais supprimée physiquement — `outlook_event_id` est vidé si
+    l'assigné est retiré de l'entrée ou si l'entrée est annulée."""
+
+    entry = models.ForeignKey(
+        ProjectPlanningEntry, on_delete=models.CASCADE, related_name="assignee_outlook_syncs"
+    )
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    outlook_event_id = models.CharField(max_length=200, blank=True, default="")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["entry", "user"], name="projectplanningentryoutlooksync_unique_entry_user"
+            ),
+        ]
+
+    def __str__(self):
+        return f"Synchro Outlook — {self.entry} → {self.user}"
 
 
 class CalendarShare(UUIDModel, TimeStampedModel, StatusLifecycleModel):

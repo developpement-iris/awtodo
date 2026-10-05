@@ -34,6 +34,10 @@ from .signals import (
     calendar_event_updated,
     event_participant_invited,
     event_participant_removed,
+    project_planning_entry_assignee_added,
+    project_planning_entry_assignee_removed,
+    project_planning_entry_cancelled,
+    project_planning_entry_updated,
     scheduled_block_cancelled,
     scheduled_block_created,
     scheduled_block_updated,
@@ -327,7 +331,7 @@ def _project_entry_occurrence_dict(occ, *, actor):
         "status": entry.status,
         "project_id": str(entry.project_id),
         "project_name": entry.project.name,
-        "assignee": _user_dict(entry.assignee) if entry.assignee_id else None,
+        "assignees": [_user_dict(user) for user in entry.assignees.all()],
         "recurrence_rule": entry.recurrence_rule,
         "is_recurring": bool(entry.recurrence_rule),
         "permissions": {"can_manage": is_project_manager(actor, entry.project)},
@@ -375,7 +379,9 @@ def get_calendar(*, actor, window_start, window_end, owner_ids=None, project_ids
         wanted = {str(pid) for pid in project_ids}
         member_project_ids = [pid for pid in member_project_ids if str(pid) in wanted]
     entries = list(
-        ProjectPlanningEntry.objects.filter(project_id__in=member_project_ids).select_related("project", "assignee")
+        ProjectPlanningEntry.objects.filter(project_id__in=member_project_ids)
+        .select_related("project")
+        .prefetch_related("assignees")
     )
     entry_occs = expand_occurrences(entries, window_start, window_end)
 
@@ -767,13 +773,21 @@ def list_project_entries(*, actor, project, window_start, window_end):
     _ensure_can_view_project_planning(actor, project)
     _validate_window(window_start, window_end)
     entries = list(
-        ProjectPlanningEntry.objects.filter(project=project).select_related("project", "assignee")
+        ProjectPlanningEntry.objects.filter(project=project)
+        .select_related("project")
+        .prefetch_related("assignees")
     )
     occs = expand_occurrences(entries, window_start, window_end)
     return {
         "can_manage": is_project_manager(actor, project),
         "entries": [_project_entry_occurrence_dict(occ, actor=actor) for occ in occs],
     }
+
+
+def _ensure_assignees_are_members(project, users):
+    for user in users:
+        if not is_project_member(user, project):
+            raise PlanningValidationError("Chaque personne assignée doit être membre du projet.")
 
 
 def create_project_entry(
@@ -786,7 +800,7 @@ def create_project_entry(
     kind="autre",
     all_day=False,
     description="",
-    assignee=None,
+    assignees=None,
     recurrence_rule="",
 ):
     _ensure_can_manage_project_planning(actor, project)
@@ -795,8 +809,8 @@ def create_project_entry(
     _validate_window(start, end)
     if kind not in dict(ProjectPlanningEntry.KIND_CHOICES):
         raise PlanningValidationError("Type d'entrée invalide.")
-    if assignee is not None and not is_project_member(assignee, project):
-        raise PlanningValidationError("La personne assignée doit être membre du projet.")
+    assignees = assignees or []
+    _ensure_assignees_are_members(project, assignees)
     rule = _validate_recurrence_rule(recurrence_rule, start)
     entry = ProjectPlanningEntry.objects.create(
         project=project,
@@ -804,11 +818,17 @@ def create_project_entry(
         description=description or "",
         kind=kind,
         all_day=all_day,
-        assignee=assignee,
         start=start,
         end=end,
         recurrence_rule=rule,
     )
+    # Un ajout à la fois (pas `.set()`) : chaque assigné émet
+    # individuellement `project_planning_entry_assignee_added`, même principe
+    # que `create_event`/`add_participant` pour un événement personnel — une
+    # synchro Outlook par destinataire, pas un fan-out générique.
+    for user in assignees:
+        entry.assignees.add(user)
+        project_planning_entry_assignee_added.send(sender=ProjectPlanningEntry, entry=entry, user=user, actor=actor)
     record_event(
         entry, actor=actor, verb="created", description=f"Entrée de planning créée : « {entry.title} »", project=project
     )
@@ -823,7 +843,7 @@ def update_project_entry(
     description=_UNSET,
     kind=_UNSET,
     all_day=_UNSET,
-    assignee=_UNSET,
+    assignees=_UNSET,
     start=_UNSET,
     end=_UNSET,
     recurrence_rule=_UNSET,
@@ -845,10 +865,6 @@ def update_project_entry(
             entry.kind = kind
         if all_day is not _UNSET:
             entry.all_day = all_day
-        if assignee is not _UNSET:
-            if assignee is not None and not is_project_member(assignee, entry.project):
-                raise PlanningValidationError("La personne assignée doit être membre du projet.")
-            entry.assignee = assignee
         if start is not _UNSET:
             entry.start = start
         if end is not _UNSET:
@@ -856,6 +872,34 @@ def update_project_entry(
         if recurrence_rule is not _UNSET:
             entry.recurrence_rule = _validate_recurrence_rule(recurrence_rule, new_start)
         entry.save()
+
+    # Hors du bloc `record_changes` : un M2M n'est pas un champ suivi par son
+    # diff (voir apps.common.audit.record_changes, limité à
+    # `instance._meta.fields`) — géré séparément ici, avec un signal par
+    # assigné ajouté/retiré pour que la synchro Outlook cible le bon
+    # destinataire (pas un fan-out générique qui resynchroniserait tout le
+    # monde à chaque changement).
+    if assignees is not _UNSET:
+        _ensure_assignees_are_members(entry.project, assignees)
+        previous_ids = set(entry.assignees.values_list("id", flat=True))
+        new_ids = {user.id for user in assignees}
+        added = [user for user in assignees if user.id not in previous_ids]
+        removed_ids = previous_ids - new_ids
+        entry.assignees.set(assignees)
+        for user in added:
+            project_planning_entry_assignee_added.send(
+                sender=ProjectPlanningEntry, entry=entry, user=user, actor=actor
+            )
+        for user_id in removed_ids:
+            project_planning_entry_assignee_removed.send(
+                sender=ProjectPlanningEntry, entry=entry, user_id=user_id, actor=actor
+            )
+
+    # Changement de contenu (titre/horaire/description/...) : répercuté sur
+    # la copie Outlook de chaque assigné *déjà* sur l'entrée (le jeu
+    # d'assignés lui-même ne change pas ici, voir ci-dessus) — même
+    # principe que `calendar_event_updated`/`sync_event_to_all_participants_outlook`.
+    project_planning_entry_updated.send(sender=ProjectPlanningEntry, entry=entry, actor=actor)
     return entry
 
 
@@ -863,6 +907,7 @@ def cancel_project_entry(*, actor, entry):
     _ensure_can_manage_project_planning(actor, entry.project)
     entry.status = "annule"
     entry.save(update_fields=["status", "updated_at"])
+    project_planning_entry_cancelled.send(sender=ProjectPlanningEntry, entry=entry, actor=actor)
     return entry
 
 

@@ -841,6 +841,28 @@
   margin-top: 2px;
 }
 
+/* Plusieurs assignés possibles sur une entrée de planning projet (session
+   du 2026-10-05) — même gabarit que la liste de membres à cocher de
+   ProjectCreateDialog.css. */
+.planning-field__member-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 140px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+}
+
+.planning-field__member-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 13px;
+  color: var(--color-text);
+}
+
 .planning-field-label {
   font-size: 0.82rem;
   color: var(--color-text-muted);

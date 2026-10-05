@@ -10,10 +10,12 @@ from .graph_client import (
     build_graph_recurrence,
     create_graph_block_event,
     create_graph_event,
+    create_graph_project_entry_event,
     delete_graph_event,
     delete_graph_occurrence,
     update_graph_block_event,
     update_graph_event,
+    update_graph_project_entry_event,
     upsert_graph_occurrence,
 )
 from .models import (
@@ -22,6 +24,8 @@ from .models import (
     EventOccurrenceOutlookSync,
     EventParticipant,
     EventParticipantOutlookSync,
+    ProjectPlanningEntry,
+    ProjectPlanningEntryOutlookSync,
     ScheduledBlock,
 )
 
@@ -337,6 +341,82 @@ def sync_scheduled_block_to_outlook(block_id, action):
 
 
 @shared_task
+def sync_project_entry_assignee_to_outlook(entry_id, user_id, action):
+    """Reflète la copie **d'un assigné** à une `ProjectPlanningEntry` côté
+    Outlook (session du 2026-10-05 : les entrées créées sur le planning
+    d'un projet apparaissent déjà sur le planning personnel de chaque membre
+    du projet — en lecture seule, voir `get_calendar` — mais jusqu'ici
+    jamais synchronisées sur Outlook, contrairement aux autres types
+    d'événements). Seuls les assignés explicitement cochés reçoivent une
+    copie, pas tout le projet (décision actée avec l'utilisateur, même
+    principe que `EventParticipant` : personne ne reçoit rien sur son
+    Outlook sans y être explicitement associé).
+
+    Un id Graph par (entrée, assigné), stocké dans
+    `ProjectPlanningEntryOutlookSync` — une entrée de planning projet n'a
+    pas de "copie organisateur" séparée (elle appartient au projet, pas à
+    une personne), à la différence d'un `CalendarEvent`. N'échoue jamais
+    bruyamment (voir `sync_calendar_event_to_outlook`)."""
+    try:
+        entry = ProjectPlanningEntry.all_objects.select_related("project").get(id=entry_id)
+    except ProjectPlanningEntry.DoesNotExist:
+        return
+    try:
+        recipient = User.objects.select_related("organisation").get(id=user_id)
+    except User.DoesNotExist:
+        return
+
+    if not recipient.outlook_calendar_sync_enabled:
+        return
+    if entry.recurrence_rule and build_graph_recurrence(entry) is None:
+        return
+
+    connection = _get_ready_connection(recipient.organisation)
+    if connection is None:
+        return
+
+    upn = recipient.email
+    if not upn:
+        return
+
+    sync_row, _ = ProjectPlanningEntryOutlookSync.objects.get_or_create(entry=entry, user=recipient)
+
+    try:
+        if action == "cancelled":
+            if sync_row.outlook_event_id:
+                delete_graph_event(connection, upn, sync_row.outlook_event_id)
+                ProjectPlanningEntryOutlookSync.objects.filter(id=sync_row.id).update(outlook_event_id="")
+        elif sync_row.outlook_event_id:
+            update_graph_project_entry_event(connection, upn, sync_row.outlook_event_id, entry)
+        else:
+            outlook_id = create_graph_project_entry_event(connection, upn, entry)
+            ProjectPlanningEntryOutlookSync.objects.filter(id=sync_row.id).update(outlook_event_id=outlook_id)
+    except GraphSyncError:
+        logger.exception(
+            "Synchronisation Outlook échouée pour l'entrée de planning %s → assigné %s (action=%s).",
+            entry_id,
+            user_id,
+            action,
+        )
+
+
+@shared_task
+def sync_project_entry_to_all_assignees_outlook(entry_id, action):
+    """Fait suivre un changement de contenu (renommage, déplacement,
+    annulation) vers la copie Outlook de chaque assigné **actuel** — le jeu
+    d'assignés ne change pas ici (voir `sync_project_entry_assignee_to_outlook`
+    pour l'ajout/retrait d'une personne précise). Même principe que
+    `sync_event_to_all_participants_outlook`."""
+    try:
+        entry = ProjectPlanningEntry.all_objects.only("id").get(id=entry_id)
+    except ProjectPlanningEntry.DoesNotExist:
+        return
+    assignee_ids = entry.assignees.values_list("id", flat=True)
+    for user_id in assignee_ids:
+        sync_project_entry_assignee_to_outlook(str(entry_id), str(user_id), action)
+
+
+@shared_task
 def backfill_user_outlook_sync(user_id):
     """Rattrape ce qui existait déjà **avant** l'activation de la synchro —
     les signaux ne se redéclenchent pas tout seuls pour l'historique.
@@ -344,12 +424,13 @@ def backfill_user_outlook_sync(user_id):
     de False à True (voir `apps.accounts.services.update_planning_preferences`
     et `apps.planning.signals`), jamais à chaque sauvegarde de préférence.
 
-    Trois volets : (1) les événements personnels de l'utilisateur (sa
+    Quatre volets : (1) les événements personnels de l'utilisateur (sa
     propre copie, + fan-out vers les participants déjà invités le cas
     échéant) ; (2) les événements auxquels il est déjà invité en tant que
     participant (sa propre copie côté participant) ; (3) ses créneaux de
-    tâche/incident. Chaque appel réutilise la tâche unitaire correspondante,
-    mêmes garde-fous, mêmes erreurs avalées."""
+    tâche/incident ; (4) les entrées de planning projet où il est déjà
+    assigné (session du 2026-10-05). Chaque appel réutilise la tâche
+    unitaire correspondante, mêmes garde-fous, mêmes erreurs avalées."""
     own_event_ids = CalendarEvent.objects.filter(owner_id=user_id, outlook_event_id="").values_list(
         "id", flat=True
     )
@@ -364,3 +445,7 @@ def backfill_user_outlook_sync(user_id):
     block_ids = ScheduledBlock.objects.filter(owner_id=user_id, outlook_event_id="").values_list("id", flat=True)
     for block_id in block_ids:
         sync_scheduled_block_to_outlook(str(block_id), "created")
+
+    assigned_entry_ids = ProjectPlanningEntry.objects.filter(assignees__id=user_id).values_list("id", flat=True)
+    for entry_id in assigned_entry_ids:
+        sync_project_entry_assignee_to_outlook(str(entry_id), str(user_id), "created")

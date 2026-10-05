@@ -37,6 +37,20 @@ scheduled_block_created = django.dispatch.Signal()
 scheduled_block_updated = django.dispatch.Signal()
 scheduled_block_cancelled = django.dispatch.Signal()
 
+# Synchronisation Outlook des entrées de planning projet (session du
+# 2026-10-05). Une `ProjectPlanningEntry` n'a pas de "propriétaire" unique
+# (elle appartient au projet) — contrairement à un `CalendarEvent`, il n'y a
+# donc pas de signal "created" séparé : chaque assigné déclenche sa propre
+# copie Outlook via `project_planning_entry_assignee_added`, y compris ceux
+# ajoutés dès la création de l'entrée (voir `create_project_entry`).
+# kwargs : entry, user, actor (pour added/removed) ; entry, actor (pour
+# updated/cancelled, qui font suivre un changement de contenu vers tous les
+# assignés déjà en place, sans changer qui est assigné).
+project_planning_entry_assignee_added = django.dispatch.Signal()
+project_planning_entry_assignee_removed = django.dispatch.Signal()
+project_planning_entry_updated = django.dispatch.Signal()
+project_planning_entry_cancelled = django.dispatch.Signal()
+
 
 def _enqueue_outlook_sync(event, action):
     """Planifie la tâche Celery après le commit de la transaction en cours —
@@ -154,6 +168,46 @@ def sync_block_updated_to_outlook(sender, block, actor=None, **kwargs):
 @receiver(scheduled_block_cancelled)
 def sync_block_cancelled_to_outlook(sender, block, actor=None, **kwargs):
     _enqueue_block_outlook_sync(block, "cancelled")
+
+
+def _enqueue_project_entry_assignee_outlook_sync(entry, user_id, action):
+    def _dispatch():
+        from .tasks import sync_project_entry_assignee_to_outlook
+
+        sync_project_entry_assignee_to_outlook.delay(str(entry.id), str(user_id), action)
+
+    transaction.on_commit(_dispatch)
+
+
+def _enqueue_project_entry_to_all_assignees_outlook_sync(entry, action):
+    def _dispatch():
+        from .tasks import sync_project_entry_to_all_assignees_outlook
+
+        sync_project_entry_to_all_assignees_outlook.delay(str(entry.id), action)
+
+    transaction.on_commit(_dispatch)
+
+
+@receiver(project_planning_entry_assignee_added)
+def sync_new_project_entry_assignee_to_outlook(sender, entry, user, actor=None, **kwargs):
+    _enqueue_project_entry_assignee_outlook_sync(entry, user.id, "created")
+
+
+@receiver(project_planning_entry_assignee_removed)
+def sync_removed_project_entry_assignee_to_outlook(sender, entry, user_id, actor=None, **kwargs):
+    # Retiré de l'entrée Awtodo → sa copie Outlook personnelle est
+    # supprimée (pas celle des autres assignés restants).
+    _enqueue_project_entry_assignee_outlook_sync(entry, user_id, "cancelled")
+
+
+@receiver(project_planning_entry_updated)
+def sync_project_entry_updated_to_outlook(sender, entry, actor=None, **kwargs):
+    _enqueue_project_entry_to_all_assignees_outlook_sync(entry, "updated")
+
+
+@receiver(project_planning_entry_cancelled)
+def sync_project_entry_cancelled_to_outlook(sender, entry, actor=None, **kwargs):
+    _enqueue_project_entry_to_all_assignees_outlook_sync(entry, "cancelled")
 
 
 @receiver(outlook_calendar_sync_enabled_activated)

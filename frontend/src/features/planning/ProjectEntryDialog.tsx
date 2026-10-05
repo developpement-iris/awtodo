@@ -52,12 +52,18 @@ export function ProjectEntryDialog({
   );
   const [end, setEnd] = useState(isoToLocalInput(entry?.end ?? initialEnd ?? new Date().toISOString()));
   const [allDay, setAllDay] = useState(entry?.all_day ?? false);
-  const [assignee, setAssignee] = useState(entry?.assignee?.id ?? "");
+  const [assigneeIds, setAssigneeIds] = useState<string[]>(entry?.assignees.map((u) => u.id) ?? []);
   const [recurrence, setRecurrence] = useState<RecurrenceForm>(
     entry ? parseRrule(entry.recurrence_rule) : EMPTY_RECURRENCE,
   );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  function toggleAssignee(userId: string) {
+    setAssigneeIds((current) =>
+      current.includes(userId) ? current.filter((id) => id !== userId) : [...current, userId],
+    );
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -73,7 +79,7 @@ export function ProjectEntryDialog({
       start: localInputToIso(start),
       end: localInputToIso(end),
       all_day: allDay,
-      assignee: assignee || null,
+      assignees: assigneeIds,
       recurrence_rule: buildRrule(recurrence),
     };
     setBusy(true);
@@ -124,30 +130,33 @@ export function ProjectEntryDialog({
             <input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus required />
           </label>
 
-          <div className="planning-field-row">
-            <label className="planning-field">
-              <span>Type</span>
-              <Combobox
-                options={KIND_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-                value={kind}
-                onChange={(v) => setKind(v as ProjectPlanningKind)}
-                clearable={false}
-              />
-            </label>
+          <label className="planning-field">
+            <span>Type</span>
+            <Combobox
+              options={KIND_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+              value={kind}
+              onChange={(v) => setKind(v as ProjectPlanningKind)}
+              clearable={false}
+            />
+          </label>
+
+          {members.length > 0 && (
             <label className="planning-field">
               <span>Assigné à</span>
-              <Combobox
-                options={[
-                  { value: "", label: "Personne" },
-                  ...members.map((u) => ({ value: u.id, label: displayName(u) })),
-                ]}
-                value={assignee}
-                onChange={setAssignee}
-                placeholder="Personne"
-                searchPlaceholder="Rechercher un nom…"
-              />
+              <div className="planning-field__member-list">
+                {members.map((user) => (
+                  <label key={user.id} className="planning-field__member-item">
+                    <Checkbox
+                      checked={assigneeIds.includes(user.id)}
+                      onCheckedChange={() => toggleAssignee(user.id)}
+                      aria-label={displayName(user)}
+                    />
+                    {displayName(user)}
+                  </label>
+                ))}
+              </div>
             </label>
-          </div>
+          )}
 
           <div className="planning-field-row">
             <label className="planning-field">

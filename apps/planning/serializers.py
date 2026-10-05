@@ -94,8 +94,10 @@ class ProjectEntryCreateSerializer(serializers.Serializer):
     start = serializers.DateTimeField()
     end = serializers.DateTimeField()
     all_day = serializers.BooleanField(required=False, default=False)
-    assignee = serializers.PrimaryKeyRelatedField(
-        queryset=User.objects.all(), required=False, allow_null=True
+    # Plusieurs assignés possibles (session du 2026-10-05) — remplace
+    # l'ancien `assignee` unique.
+    assignees = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.all(), many=True, required=False, default=list
     )
     recurrence_rule = serializers.CharField(required=False, allow_blank=True, default="")
 
@@ -107,9 +109,7 @@ class ProjectEntryUpdateSerializer(_AtLeastOneFieldSerializer):
     start = serializers.DateTimeField(required=False)
     end = serializers.DateTimeField(required=False)
     all_day = serializers.BooleanField(required=False)
-    assignee = serializers.PrimaryKeyRelatedField(
-        queryset=User.objects.all(), required=False, allow_null=True
-    )
+    assignees = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), many=True, required=False)
     recurrence_rule = serializers.CharField(required=False, allow_blank=True)
 
 

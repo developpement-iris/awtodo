@@ -1008,7 +1008,9 @@ export interface ProjectEntryPayload {
   start?: string;
   end?: string;
   all_day?: boolean;
-  assignee?: string | null;
+  // Plusieurs assignés possibles (session du 2026-10-05) — remplace
+  // l'ancien `assignee` unique.
+  assignees?: string[];
   recurrence_rule?: string;
   [key: string]: unknown;
 }
