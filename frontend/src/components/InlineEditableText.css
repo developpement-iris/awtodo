@@ -16,6 +16,10 @@
   background: var(--tone-neutral-bg);
 }
 
+.inline-editable-text__trigger--empty {
+  color: var(--color-text-faint);
+}
+
 .inline-editable-text__input {
   width: 100%;
   font-family: inherit;

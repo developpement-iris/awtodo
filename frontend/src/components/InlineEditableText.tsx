@@ -7,9 +7,20 @@ interface InlineEditableTextProps {
   ariaLabel: string;
   disabled?: boolean;
   className?: string;
+  /** Affiché à la place d'une valeur vide — sans ça, le déclencheur est un
+   * `<span>` sans contenu, donc rien à cliquer visuellement (remonté
+   * directement : "c'est pas modifiable si le champ est vide"). */
+  placeholder?: string;
 }
 
-export function InlineEditableText({ value, onSave, ariaLabel, disabled = false, className }: InlineEditableTextProps) {
+export function InlineEditableText({
+  value,
+  onSave,
+  ariaLabel,
+  disabled = false,
+  className,
+  placeholder = "—",
+}: InlineEditableTextProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -74,7 +85,7 @@ export function InlineEditableText({ value, onSave, ariaLabel, disabled = false,
     <span
       role={disabled ? undefined : "button"}
       tabIndex={disabled ? undefined : 0}
-      className={`inline-editable-text__trigger${className ? ` ${className}` : ""}${disabled ? "" : " inline-editable-text__trigger--editable"}`}
+      className={`inline-editable-text__trigger${className ? ` ${className}` : ""}${disabled ? "" : " inline-editable-text__trigger--editable"}${value ? "" : " inline-editable-text__trigger--empty"}`}
       onClick={(event) => {
         if (disabled) return;
         event.stopPropagation();
@@ -93,7 +104,7 @@ export function InlineEditableText({ value, onSave, ariaLabel, disabled = false,
       }}
       aria-label={disabled ? undefined : `${ariaLabel} — cliquer pour modifier`}
     >
-      {value}
+      {value || placeholder}
     </span>
   );
 }
