@@ -9,6 +9,7 @@ import {
 } from "../../api/client";
 import { Checkbox } from "../../components/Checkbox";
 import { Combobox } from "../../components/Combobox";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Skeleton } from "../../components/Skeleton";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 import { useToast } from "../../context/ToastContext";
@@ -77,8 +78,12 @@ export function ProfilesSection() {
     }
   }
 
-  async function handleArchive(profile: PermissionProfile) {
-    if (!window.confirm(`Archiver le profil « ${profile.name} » ? Plus personne n'en héritera des capacités.`)) return;
+  const [archiveTarget, setArchiveTarget] = useState<PermissionProfile | null>(null);
+
+  async function confirmArchive() {
+    if (!archiveTarget) return;
+    const profile = archiveTarget;
+    setArchiveTarget(null);
     try {
       await archivePermissionProfile(profile.id);
       reload();
@@ -140,7 +145,7 @@ export function ProfilesSection() {
                 <button
                   type="button"
                   className="profiles-section__icon-btn"
-                  onClick={() => handleArchive(profile)}
+                  onClick={() => setArchiveTarget(profile)}
                   aria-label={`Archiver ${profile.name}`}
                 >
                   <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />
@@ -258,6 +263,17 @@ export function ProfilesSection() {
           </button>
         </div>
       </section>
+
+      {archiveTarget && (
+        <ConfirmDialog
+          title={`Archiver le profil « ${archiveTarget.name} » ?`}
+          message="Plus personne n'en héritera des capacités."
+          confirmLabel="Archiver"
+          danger
+          onCancel={() => setArchiveTarget(null)}
+          onConfirm={() => void confirmArchive()}
+        />
+      )}
     </div>
   );
 }

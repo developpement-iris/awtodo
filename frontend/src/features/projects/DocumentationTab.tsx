@@ -1,4 +1,4 @@
-import { Check, Copy, FileDown, ImagePlus, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
+import { Check, Copy, FileDown, Paperclip, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   archiveDocEntry,
@@ -25,7 +25,9 @@ import {
   updateDocSpaceAppearance,
 } from "../../api/client";
 import { Combobox } from "../../components/Combobox";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { MarkdownView } from "../../components/MarkdownView";
+import { PromptDialog } from "../../components/PromptDialog";
 import { SkeletonRows } from "../../components/Skeleton";
 import { useToast } from "../../context/ToastContext";
 import type {
@@ -65,14 +67,16 @@ function matches(query: string, ...fields: string[]): boolean {
   return fields.some((f) => normalize(f).includes(needle));
 }
 
-// Insère une image encodée en base64 directement dans le Markdown (session
-// du 2026-09-23) — aucun stockage fichier (S3/boto3) n'est disponible tant
-// que l'infra AWS n'est pas tranchée (voir CLAUDE.md > Stack technique),
-// solution retenue explicitement avec l'utilisateur en attendant. Limite de
-// taille pour ne pas faire exploser la page.
-const MAX_IMAGE_BYTES = 1_500_000;
+// Insère une image ou un PDF encodé en base64 directement dans le Markdown
+// (session du 2026-09-23, PDF ajouté le 2026-10-06 — "c'est léger, ça
+// pèsera pas beaucoup", vidéos différées jusqu'à l'infra AWS) — aucun
+// stockage fichier (S3/boto3) n'est disponible tant que l'infra AWS n'est
+// pas tranchée (voir CLAUDE.md > Stack technique), solution retenue
+// explicitement avec l'utilisateur en attendant. Limite de taille pour ne
+// pas faire exploser la page.
+const MAX_ATTACHMENT_BYTES = 1_500_000;
 
-function readImageAsDataUrl(file: File): Promise<string> {
+function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
@@ -278,21 +282,27 @@ function PagesView({ projectId, pages, section, busy, run }: PagesViewProps) {
   const { showToast: showImageToast } = useToast();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // `undefined` = fermé ; `null` = page racine ; un id = sous-page de cette page.
+  const [newPageParentId, setNewPageParentId] = useState<string | null | undefined>(undefined);
+  const [renameTarget, setRenameTarget] = useState<DocPage | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<DocPage | null>(null);
+
   useEffect(() => {
     setEditing(false);
     setDraft(selected?.content ?? "");
   }, [selected?.id, selected?.content]);
 
-  async function insertImage(file: File | undefined) {
+  async function insertAttachment(file: File | undefined) {
     if (!file) return;
-    if (file.size > MAX_IMAGE_BYTES) {
-      showImageToast("Image trop lourde (max ~1,5 Mo) — la doc n'a pas encore de stockage de fichiers dédié.");
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      showImageToast("Fichier trop lourd (max ~1,5 Mo) — la doc n'a pas encore de stockage de fichiers dédié.");
       return;
     }
     setImageBusy(true);
     try {
-      const dataUrl = await readImageAsDataUrl(file);
-      const markdown = `\n![${file.name}](${dataUrl})\n`;
+      const dataUrl = await readFileAsDataUrl(file);
+      const isPdf = file.type === "application/pdf";
+      const markdown = isPdf ? `\n[📄 ${file.name}](${dataUrl})\n` : `\n![${file.name}](${dataUrl})\n`;
       const el = textareaRef.current;
       if (el) {
         const pos = el.selectionStart ?? draft.length;
@@ -301,25 +311,10 @@ function PagesView({ projectId, pages, section, busy, run }: PagesViewProps) {
         setDraft(draft + markdown);
       }
     } catch {
-      showImageToast("Impossible de lire cette image.");
+      showImageToast("Impossible de lire ce fichier.");
     } finally {
       setImageBusy(false);
     }
-  }
-
-  async function newPage(parentId: string | null) {
-    const title = window.prompt(parentId ? "Titre de la sous-page" : "Titre de la page");
-    if (!title) return;
-    await run(
-      () => createDocPage(projectId, { title, parent_id: parentId, section }),
-      "Page créée.",
-    );
-  }
-
-  async function rename(page: DocPage) {
-    const title = window.prompt("Nouveau titre", page.title);
-    if (!title || title === page.title) return;
-    await run(() => updateDocPage(projectId, page.id, { title }), "Page renommée.");
   }
 
   return (
@@ -327,7 +322,7 @@ function PagesView({ projectId, pages, section, busy, run }: PagesViewProps) {
       <div className="doc-tab__list">
         <div className="doc-tab__list-head">
           <span>Pages</span>
-          <button type="button" className="doc-tab__icon-btn" onClick={() => newPage(null)} disabled={busy}>
+          <button type="button" className="doc-tab__icon-btn" onClick={() => setNewPageParentId(null)} disabled={busy}>
             <Plus size={14} strokeWidth={2} aria-hidden="true" />
           </button>
         </div>
@@ -373,14 +368,14 @@ function PagesView({ projectId, pages, section, busy, run }: PagesViewProps) {
                   <button
                     type="button"
                     className="doc-tab__ghost-btn"
-                    onClick={() => newPage(selected.id)}
+                    onClick={() => setNewPageParentId(selected.id)}
                     disabled={busy}
                   >
                     <Plus size={13} strokeWidth={2} aria-hidden="true" />
                     Sous-page
                   </button>
                 )}
-                <button type="button" className="doc-tab__ghost-btn" onClick={() => rename(selected)} disabled={busy}>
+                <button type="button" className="doc-tab__ghost-btn" onClick={() => setRenameTarget(selected)} disabled={busy}>
                   Renommer
                 </button>
                 <button
@@ -402,12 +397,7 @@ function PagesView({ projectId, pages, section, busy, run }: PagesViewProps) {
                 <button
                   type="button"
                   className="doc-tab__ghost-btn doc-tab__ghost-btn--danger"
-                  onClick={() => {
-                    if (window.confirm("Archiver cette page ?")) {
-                      void run(() => archiveDocPage(projectId, selected.id), "Page archivée.");
-                      setSelectedId(null);
-                    }
-                  }}
+                  onClick={() => setArchiveTarget(selected)}
                   disabled={busy}
                 >
                   <Trash2 size={13} strokeWidth={1.75} aria-hidden="true" />
@@ -418,15 +408,15 @@ function PagesView({ projectId, pages, section, busy, run }: PagesViewProps) {
             {editing ? (
               <div className="doc-tab__form">
                 <label className="doc-tab__ghost-btn doc-tab__image-btn">
-                  <ImagePlus size={13} strokeWidth={1.75} aria-hidden="true" />
-                  {imageBusy ? "Chargement…" : "Insérer une image"}
+                  <Paperclip size={13} strokeWidth={1.75} aria-hidden="true" />
+                  {imageBusy ? "Chargement…" : "Insérer une image ou un PDF"}
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/*,application/pdf"
                     hidden
                     disabled={busy || imageBusy}
                     onChange={(e) => {
-                      void insertImage(e.target.files?.[0]);
+                      void insertAttachment(e.target.files?.[0]);
                       e.target.value = "";
                     }}
                   />
@@ -478,6 +468,50 @@ function PagesView({ projectId, pages, section, busy, run }: PagesViewProps) {
           </>
         )}
       </div>
+
+      {newPageParentId !== undefined && (
+        <PromptDialog
+          title={newPageParentId ? "Nouvelle sous-page" : "Nouvelle page"}
+          label="Titre"
+          confirmLabel="Créer"
+          onCancel={() => setNewPageParentId(undefined)}
+          onConfirm={(title) => {
+            const parentId = newPageParentId;
+            setNewPageParentId(undefined);
+            void run(() => createDocPage(projectId, { title, parent_id: parentId, section }), "Page créée.");
+          }}
+        />
+      )}
+
+      {renameTarget && (
+        <PromptDialog
+          title="Renommer la page"
+          label="Titre"
+          initialValue={renameTarget.title}
+          confirmLabel="Renommer"
+          onCancel={() => setRenameTarget(null)}
+          onConfirm={(title) => {
+            const page = renameTarget;
+            setRenameTarget(null);
+            if (title !== page.title) void run(() => updateDocPage(projectId, page.id, { title }), "Page renommée.");
+          }}
+        />
+      )}
+
+      {archiveTarget && (
+        <ConfirmDialog
+          title="Archiver cette page ?"
+          confirmLabel="Archiver"
+          danger
+          onCancel={() => setArchiveTarget(null)}
+          onConfirm={() => {
+            const page = archiveTarget;
+            setArchiveTarget(null);
+            void run(() => archiveDocPage(projectId, page.id), "Page archivée.");
+            setSelectedId(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -498,6 +532,8 @@ function EntriesView({ projectId, kind, entries, versions, busy, run }: EntriesV
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [query, setQuery] = useState("");
+  const [newEntryOpen, setNewEntryOpen] = useState(false);
+  const [archiveTarget, setArchiveTarget] = useState<DocEntry | null>(null);
 
   const visible = useMemo(
     () => entries.filter((e) => matches(query, e.title, e.description)),
@@ -508,14 +544,6 @@ function EntriesView({ projectId, kind, entries, versions, busy, run }: EntriesV
     setEditingId(entry.id);
     setTitle(entry.title);
     setDescription(entry.description);
-  }
-
-  async function newEntry() {
-    const value = window.prompt(
-      kind === "fonctionnalite" ? "Titre de la fonctionnalité" : "Titre de la résolution",
-    );
-    if (!value) return;
-    await run(() => createDocEntry(projectId, { kind, title: value }), "Fiche créée.");
   }
 
   const versionOptions = [
@@ -543,7 +571,7 @@ function EntriesView({ projectId, kind, entries, versions, busy, run }: EntriesV
               Amorcer depuis le cahier des charges
             </button>
           )}
-          <button type="button" className="doc-tab__primary-btn" onClick={newEntry} disabled={busy}>
+          <button type="button" className="doc-tab__primary-btn" onClick={() => setNewEntryOpen(true)} disabled={busy}>
             <Plus size={13} strokeWidth={2} aria-hidden="true" />
             Nouvelle fiche
           </button>
@@ -647,10 +675,7 @@ function EntriesView({ projectId, kind, entries, versions, busy, run }: EntriesV
                 <button
                   type="button"
                   className="doc-tab__ghost-btn doc-tab__ghost-btn--danger"
-                  onClick={() => {
-                    if (window.confirm("Archiver cette fiche ?"))
-                      void run(() => archiveDocEntry(projectId, entry.id), "Fiche archivée.");
-                  }}
+                  onClick={() => setArchiveTarget(entry)}
                   disabled={busy}
                 >
                   <Trash2 size={13} strokeWidth={1.75} aria-hidden="true" />
@@ -660,6 +685,33 @@ function EntriesView({ projectId, kind, entries, versions, busy, run }: EntriesV
           )}
         </article>
       ))}
+
+      {newEntryOpen && (
+        <PromptDialog
+          title={kind === "fonctionnalite" ? "Nouvelle fonctionnalité" : "Nouvelle résolution"}
+          label="Titre"
+          confirmLabel="Créer"
+          onCancel={() => setNewEntryOpen(false)}
+          onConfirm={(value) => {
+            setNewEntryOpen(false);
+            void run(() => createDocEntry(projectId, { kind, title: value }), "Fiche créée.");
+          }}
+        />
+      )}
+
+      {archiveTarget && (
+        <ConfirmDialog
+          title="Archiver cette fiche ?"
+          confirmLabel="Archiver"
+          danger
+          onCancel={() => setArchiveTarget(null)}
+          onConfirm={() => {
+            const target = archiveTarget;
+            setArchiveTarget(null);
+            void run(() => archiveDocEntry(projectId, target.id), "Fiche archivée.");
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -675,6 +727,7 @@ function QueueView({ projectId, bundle, busy, run, onGoToEntries }: QueueViewPro
     { kind: "fonctionnalite", label: "Fonctionnalités livrées", items: bundle.pending_features },
     { kind: "resolution", label: "Incidents résolus", items: bundle.pending_resolutions },
   ];
+  const [ignoreTarget, setIgnoreTarget] = useState<DocumentationBundle["pending_features"][number] | null>(null);
 
   return (
     <div className="doc-tab__entries">
@@ -709,10 +762,7 @@ function QueueView({ projectId, bundle, busy, run, onGoToEntries }: QueueViewPro
                 <button
                   type="button"
                   className="doc-tab__ghost-btn"
-                  onClick={() => {
-                    if (window.confirm("Ignorer cette entrée ?"))
-                      void run(() => ignorePendingDocEntry(projectId, item.id), "Entrée ignorée.");
-                  }}
+                  onClick={() => setIgnoreTarget(item)}
                   disabled={busy}
                 >
                   Ignorer
@@ -722,6 +772,19 @@ function QueueView({ projectId, bundle, busy, run, onGoToEntries }: QueueViewPro
           ))}
         </section>
       ))}
+
+      {ignoreTarget && (
+        <ConfirmDialog
+          title="Ignorer cette entrée ?"
+          confirmLabel="Ignorer"
+          onCancel={() => setIgnoreTarget(null)}
+          onConfirm={() => {
+            const target = ignoreTarget;
+            setIgnoreTarget(null);
+            void run(() => ignorePendingDocEntry(projectId, target.id), "Entrée ignorée.");
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -732,6 +795,8 @@ function LinkView({ projectId, bundle, busy, run }: PanelProps) {
   const { showToast } = useToast();
   const [copied, setCopied] = useState(false);
   const [slug, setSlug] = useState(bundle.space.custom_slug);
+  const [rotateConfirmOpen, setRotateConfirmOpen] = useState(false);
+  const [revokeConfirmOpen, setRevokeConfirmOpen] = useState(false);
   const { public_url: url } = bundle.space;
 
   useEffect(() => {
@@ -791,10 +856,7 @@ function LinkView({ projectId, bundle, busy, run }: PanelProps) {
             <button
               type="button"
               className="doc-tab__ghost-btn"
-              onClick={() => {
-                if (window.confirm("Régénérer le lien ? L'ancien cessera de fonctionner."))
-                  void run(() => rotatePublicDocLink(projectId), "Nouveau lien généré.");
-              }}
+              onClick={() => setRotateConfirmOpen(true)}
               disabled={busy}
             >
               <RefreshCw size={13} strokeWidth={1.75} aria-hidden="true" />
@@ -803,15 +865,38 @@ function LinkView({ projectId, bundle, busy, run }: PanelProps) {
             <button
               type="button"
               className="doc-tab__ghost-btn doc-tab__ghost-btn--danger"
-              onClick={() => {
-                if (window.confirm("Révoquer le lien public ?"))
-                  void run(() => revokePublicDocLink(projectId), "Lien révoqué.");
-              }}
+              onClick={() => setRevokeConfirmOpen(true)}
               disabled={busy}
             >
               Révoquer
             </button>
           </div>
+
+          {rotateConfirmOpen && (
+            <ConfirmDialog
+              title="Régénérer le lien ?"
+              message="L'ancien lien cessera de fonctionner."
+              confirmLabel="Régénérer"
+              onCancel={() => setRotateConfirmOpen(false)}
+              onConfirm={() => {
+                setRotateConfirmOpen(false);
+                void run(() => rotatePublicDocLink(projectId), "Nouveau lien généré.");
+              }}
+            />
+          )}
+
+          {revokeConfirmOpen && (
+            <ConfirmDialog
+              title="Révoquer le lien public ?"
+              confirmLabel="Révoquer"
+              danger
+              onCancel={() => setRevokeConfirmOpen(false)}
+              onConfirm={() => {
+                setRevokeConfirmOpen(false);
+                void run(() => revokePublicDocLink(projectId), "Lien révoqué.");
+              }}
+            />
+          )}
         </>
       ) : (
         <>
@@ -846,6 +931,7 @@ function ContributorsView({ projectId, entry, busy, run }: ContributorsViewProps
   const isManual = !!entry?.contributor_rows;
   const [editing, setEditing] = useState(false);
   const [rows, setRows] = useState<ContributorRow[]>(entry?.contributor_rows ?? [{ name: "", role: "" }]);
+  const [regenerateConfirmOpen, setRegenerateConfirmOpen] = useState(false);
 
   function startEdit() {
     setRows(entry?.contributor_rows && entry.contributor_rows.length > 0 ? entry.contributor_rows : [{ name: "", role: "" }]);
@@ -864,11 +950,12 @@ function ContributorsView({ projectId, entry, busy, run }: ContributorsViewProps
     setRows((current) => current.filter((_, i) => i !== index));
   }
 
-  async function handleGenerate() {
-    if (isManual && !window.confirm("Régénérer écrasera la liste personnalisée actuelle. Continuer ?")) {
+  function handleGenerateClick() {
+    if (isManual) {
+      setRegenerateConfirmOpen(true);
       return;
     }
-    await run(() => generateContributorsEntry(projectId), entry ? "Fiche actualisée." : "Fiche générée.");
+    void run(() => generateContributorsEntry(projectId), entry ? "Fiche actualisée." : "Fiche générée.");
   }
 
   async function handleSave() {
@@ -890,12 +977,26 @@ function ContributorsView({ projectId, entry, busy, run }: ContributorsViewProps
               Personnaliser
             </button>
           )}
-          <button type="button" className="doc-tab__primary-btn" onClick={handleGenerate} disabled={busy}>
+          <button type="button" className="doc-tab__primary-btn" onClick={handleGenerateClick} disabled={busy}>
             <RefreshCw size={13} strokeWidth={1.75} aria-hidden="true" />
             {entry ? "Actualiser" : "Générer"}
           </button>
         </div>
       </div>
+
+      {regenerateConfirmOpen && (
+        <ConfirmDialog
+          title="Régénérer la fiche Contributeurs ?"
+          message="Écrasera la liste personnalisée actuelle."
+          confirmLabel="Régénérer"
+          danger
+          onCancel={() => setRegenerateConfirmOpen(false)}
+          onConfirm={() => {
+            setRegenerateConfirmOpen(false);
+            void run(() => generateContributorsEntry(projectId), "Fiche actualisée.");
+          }}
+        />
+      )}
       {!entry && !editing && (
         <p className="doc-tab__empty">
           Pas encore générée — liste les membres actifs du projet par rôle, à régénérer après tout

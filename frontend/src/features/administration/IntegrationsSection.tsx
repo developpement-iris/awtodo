@@ -2,6 +2,7 @@ import { Check, Copy, KeyRound, Plug } from "lucide-react";
 import { useEffect, useState } from "react";
 import { generateApiKey, getApiKeys, getO365Connection, revokeApiKey, updateO365Connection } from "../../api/client";
 import { Checkbox } from "../../components/Checkbox";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Skeleton } from "../../components/Skeleton";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useToast } from "../../context/ToastContext";
@@ -54,10 +55,12 @@ export function IntegrationsSection() {
     }
   }
 
-  async function handleRevokeKey(apiKey: ApiKey) {
-    if (!window.confirm(`Révoquer la clé « ${apiKey.name} » ? Tout système qui l'utilise perdra l'accès immédiatement.`)) {
-      return;
-    }
+  const [revokeTarget, setRevokeTarget] = useState<ApiKey | null>(null);
+
+  async function confirmRevokeKey() {
+    if (!revokeTarget) return;
+    const apiKey = revokeTarget;
+    setRevokeTarget(null);
     setKeyBusy(true);
     try {
       const revoked = await revokeApiKey(apiKey.id);
@@ -259,7 +262,7 @@ export function IntegrationsSection() {
                   <button
                     type="button"
                     className="integrations-section__btn"
-                    onClick={() => void handleRevokeKey(apiKey)}
+                    onClick={() => setRevokeTarget(apiKey)}
                     disabled={keyBusy}
                   >
                     Révoquer
@@ -329,6 +332,17 @@ export function IntegrationsSection() {
             </button>
           </div>
         </div>
+      )}
+
+      {revokeTarget && (
+        <ConfirmDialog
+          title={`Révoquer la clé « ${revokeTarget.name} » ?`}
+          message="Tout système qui l'utilise perdra l'accès immédiatement."
+          confirmLabel="Révoquer"
+          danger
+          onCancel={() => setRevokeTarget(null)}
+          onConfirm={() => void confirmRevokeKey()}
+        />
       )}
     </div>
   );
