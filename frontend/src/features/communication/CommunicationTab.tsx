@@ -46,6 +46,21 @@ const FIELD_OPTIONS = Object.entries(PAYLOAD_FIELD_CATALOG).flatMap(([namespace,
   fields.map((field) => ({ value: `${namespace}.${field}`, label: `${namespace} → ${field}` })),
 );
 
+// Miroir illustratif de `apps.communication.payload.DEFAULT_TEMPLATE` (valeurs
+// d'exemple, pas une donnée réelle) — affiché tel quel dans le panneau d'aide
+// pour configurer l'automation Power Automate sans avoir à décortiquer le
+// code backend. À garder synchronisé si le gabarit par défaut change.
+const DEFAULT_PAYLOAD_EXAMPLE = `{
+  "subject": "Nouvelle version déployée",
+  "body": "Le correctif XYZ est en production.",
+  "project": "Traitement ARC Auto",
+  "sender_name": "Ada Lovelace",
+  "trigger": "manuel",
+  "sent_at": "2026-10-06T14:32:00+02:00",
+  "channel_id": "19:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx@thread.tacv2",
+  "channel_name": "SI / Correctifs / MAJ"
+}`;
+
 function displayName(user: { first_name: string; last_name: string; username: string }): string {
   return `${user.first_name} ${user.last_name}`.trim() || user.username;
 }
@@ -228,6 +243,7 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
       {error && <p className="communication-tab__error">{error}</p>}
 
       {/* --- Canaux ---------------------------------------------------- */}
+      <div className="communication-tab__channels-row">
       <section className="communication-tab__section">
         <div className="communication-tab__section-header">
           <h3>
@@ -298,15 +314,20 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
               </label>
             </div>
             <label className="communication-tab__field">
-              <span>ID du canal Teams</span>
+              <span>ID du canal ou de la conversation Teams</span>
               <input
                 value={channelId}
                 onChange={(e) => setChannelId(e.target.value)}
                 placeholder="19:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx@thread.tacv2"
               />
+              <span className="communication-tab__field-hint">
+                Un canal d'équipe comme une conversation de groupe fonctionnent — l'identifiant est transmis tel
+                quel à votre flow. Pour le récupérer : dans Teams, « Obtenir le lien » sur le canal/la conversation
+                (clic droit), l'ID est le segment commençant par <code>19:</code> dans l'URL copiée.
+              </span>
             </label>
             <label className="communication-tab__field">
-              <span>URL du flux Power Automate</span>
+              <span>URL de l'automation</span>
               <input
                 type="url"
                 value={channelWebhook}
@@ -396,6 +417,29 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
           </div>
         )}
       </section>
+
+      {canManage && (
+        <aside className="communication-tab__payload-example">
+          <h4>Payload envoyé à l'automation</h4>
+          <p>
+            Sans personnalisation, chaque canal reçoit exactement ce JSON (valeurs d'exemple ci-dessous) — à
+            utiliser pour configurer l'action « Analyser JSON » de votre flow Power Automate, déclenché par
+            « Quand une requête HTTP est reçue ».
+          </p>
+          <pre>
+            <code>{DEFAULT_PAYLOAD_EXAMPLE}</code>
+          </pre>
+          <p>
+            <code>trigger</code> vaut <code>manuel</code> (envoi depuis cet onglet) ou{" "}
+            <code>incident_cree</code> (si la case « Notifier automatiquement... » est cochée ci-contre).
+          </p>
+          <p>
+            En personnalisant le gabarit ci-contre, vos propres clés remplacent entièrement ce payload — le
+            flow ne reçoit alors que ce que vous avez défini.
+          </p>
+        </aside>
+      )}
+      </div>
 
       {/* --- Rédaction + historique ------------------------------------ */}
       <section className="communication-tab__section">
