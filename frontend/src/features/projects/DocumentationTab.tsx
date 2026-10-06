@@ -19,6 +19,7 @@ import {
   setDocPublicSlug,
   unpublishDocEntry,
   unpublishDocPage,
+  updateContributorsEntry,
   updateDocEntry,
   updateDocPage,
   updateDocSpaceAppearance,
@@ -28,9 +29,11 @@ import { MarkdownView } from "../../components/MarkdownView";
 import { SkeletonRows } from "../../components/Skeleton";
 import { useToast } from "../../context/ToastContext";
 import type {
+  ContributorRow,
   DocEntry,
   DocEntryKind,
   DocPage,
+  DocPageSection,
   DocumentationBundle,
   Project,
   ProjectVersion,
@@ -38,7 +41,15 @@ import type {
 import { exportDocsToDocx } from "../docs/exportDocx";
 import "./DocumentationTab.css";
 
-type View = "pages" | "fonctionnalite" | "resolution" | "contributors" | "queue" | "link" | "appearance";
+type View =
+  | "pages"
+  | "support"
+  | "fonctionnalite"
+  | "resolution"
+  | "contributors"
+  | "queue"
+  | "link"
+  | "appearance";
 
 // Filtre texte insensible à la casse/accents — même principe simple que les
 // autres recherches côté front de l'app (pas d'endpoint dédié, le volume de
@@ -127,6 +138,7 @@ export function DocumentationTab({ project }: DocumentationTabProps) {
 
   const NAV: { id: View; label: string; badge?: number }[] = [
     { id: "pages", label: "Pages" },
+    { id: "support", label: "Support d'utilisation" },
     { id: "fonctionnalite", label: "Fonctionnalités" },
     { id: "resolution", label: "Résolution d'incidents" },
     { id: "contributors", label: "Contributeurs" },
@@ -179,7 +191,22 @@ export function DocumentationTab({ project }: DocumentationTabProps) {
 
         <div className="doc-tab__panel">
           {view === "pages" && (
-            <PagesView projectId={project.id} bundle={bundle} busy={busy} run={run} />
+            <PagesView
+              projectId={project.id}
+              pages={bundle.pages}
+              section="documentation"
+              busy={busy}
+              run={run}
+            />
+          )}
+          {view === "support" && (
+            <PagesView
+              projectId={project.id}
+              pages={bundle.support_pages}
+              section="support"
+              busy={busy}
+              run={run}
+            />
           )}
           {(view === "fonctionnalite" || view === "resolution") && (
             <EntriesView
@@ -224,8 +251,16 @@ interface PanelProps {
   run: (action: () => Promise<unknown>, successMessage?: string) => Promise<void>;
 }
 
-function PagesView({ projectId, bundle, busy, run }: PanelProps) {
-  const flat = useMemo(() => flattenPages(bundle.pages), [bundle.pages]);
+interface PagesViewProps {
+  projectId: string;
+  pages: DocPage[];
+  section: DocPageSection;
+  busy: boolean;
+  run: (action: () => Promise<unknown>, successMessage?: string) => Promise<void>;
+}
+
+function PagesView({ projectId, pages, section, busy, run }: PagesViewProps) {
+  const flat = useMemo(() => flattenPages(pages), [pages]);
   const [selectedId, setSelectedId] = useState<string | null>(flat[0]?.page.id ?? null);
   const selectedRow = flat.find((row) => row.page.id === selectedId) ?? null;
   const selected = selectedRow?.page ?? null;
@@ -275,7 +310,10 @@ function PagesView({ projectId, bundle, busy, run }: PanelProps) {
   async function newPage(parentId: string | null) {
     const title = window.prompt(parentId ? "Titre de la sous-page" : "Titre de la page");
     if (!title) return;
-    await run(() => createDocPage(projectId, { title, parent_id: parentId }), "Page créée.");
+    await run(
+      () => createDocPage(projectId, { title, parent_id: parentId, section }),
+      "Page créée.",
+    );
   }
 
   async function rename(page: DocPage) {
@@ -805,60 +843,139 @@ interface ContributorsViewProps {
 }
 
 function ContributorsView({ projectId, entry, busy, run }: ContributorsViewProps) {
+  const isManual = !!entry?.contributor_rows;
+  const [editing, setEditing] = useState(false);
+  const [rows, setRows] = useState<ContributorRow[]>(entry?.contributor_rows ?? [{ name: "", role: "" }]);
+
+  function startEdit() {
+    setRows(entry?.contributor_rows && entry.contributor_rows.length > 0 ? entry.contributor_rows : [{ name: "", role: "" }]);
+    setEditing(true);
+  }
+
+  function updateRow(index: number, field: keyof ContributorRow, value: string) {
+    setRows((current) => current.map((row, i) => (i === index ? { ...row, [field]: value } : row)));
+  }
+
+  function addRow() {
+    setRows((current) => [...current, { name: "", role: "" }]);
+  }
+
+  function removeRow(index: number) {
+    setRows((current) => current.filter((_, i) => i !== index));
+  }
+
+  async function handleGenerate() {
+    if (isManual && !window.confirm("Régénérer écrasera la liste personnalisée actuelle. Continuer ?")) {
+      return;
+    }
+    await run(() => generateContributorsEntry(projectId), entry ? "Fiche actualisée." : "Fiche générée.");
+  }
+
+  async function handleSave() {
+    const cleaned = rows.map((row) => ({ name: row.name.trim(), role: row.role.trim() })).filter((row) => row.name);
+    if (cleaned.length === 0) return;
+    await run(async () => {
+      await updateContributorsEntry(projectId, cleaned);
+      setEditing(false);
+    }, "Contributeurs enregistrés.");
+  }
+
   return (
     <div className="doc-tab__entries">
       <div className="doc-tab__list-head">
         <span>Contributeurs au projet</span>
-        <button
-          type="button"
-          className="doc-tab__primary-btn"
-          onClick={() =>
-            run(
-              () => generateContributorsEntry(projectId),
-              entry ? "Fiche actualisée." : "Fiche générée.",
-            )
-          }
-          disabled={busy}
-        >
-          <RefreshCw size={13} strokeWidth={1.75} aria-hidden="true" />
-          {entry ? "Actualiser" : "Générer"}
-        </button>
+        <div className="doc-tab__editor-actions">
+          {!editing && (
+            <button type="button" className="doc-tab__ghost-btn" onClick={startEdit} disabled={busy}>
+              Personnaliser
+            </button>
+          )}
+          <button type="button" className="doc-tab__primary-btn" onClick={handleGenerate} disabled={busy}>
+            <RefreshCw size={13} strokeWidth={1.75} aria-hidden="true" />
+            {entry ? "Actualiser" : "Générer"}
+          </button>
+        </div>
       </div>
-      {!entry && (
+      {!entry && !editing && (
         <p className="doc-tab__empty">
           Pas encore générée — liste les membres actifs du projet par rôle, à régénérer après tout
-          changement d'équipe.
+          changement d'équipe. Vous pouvez aussi personnaliser la liste à la main.
         </p>
       )}
-      {entry && (
-        <article className="doc-tab__card">
-          <div className="doc-tab__card-head">
-            <h4>{entry.title}</h4>
-            <StatusDot status={entry.status} />
-          </div>
-          <p className="doc-tab__timestamp">
-            Générée le {new Date(entry.updated_at).toLocaleString("fr-FR")}
-          </p>
-          <MarkdownView content={entry.description} />
-          <div className="doc-tab__editor-actions">
-            <button
-              type="button"
-              className="doc-tab__ghost-btn"
-              onClick={() =>
-                run(
-                  () =>
-                    entry.status === "publie"
-                      ? unpublishDocEntry(projectId, entry.id)
-                      : publishDocEntry(projectId, entry.id),
-                  entry.status === "publie" ? "Fiche dépubliée." : "Fiche publiée.",
-                )
-              }
-              disabled={busy}
-            >
-              {entry.status === "publie" ? "Dépublier" : "Publier"}
+
+      {editing ? (
+        <div className="doc-tab__form">
+          {rows.map((row, index) => (
+            <div key={index} className="doc-tab__link-row">
+              <input
+                className="doc-tab__input"
+                value={row.name}
+                onChange={(e) => updateRow(index, "name", e.target.value)}
+                placeholder="Nom"
+                disabled={busy}
+              />
+              <input
+                className="doc-tab__input"
+                value={row.role}
+                onChange={(e) => updateRow(index, "role", e.target.value)}
+                placeholder="Rôle"
+                disabled={busy}
+              />
+              <button
+                type="button"
+                className="doc-tab__icon-btn"
+                onClick={() => removeRow(index)}
+                disabled={busy}
+                aria-label="Retirer ce contributeur"
+              >
+                <Trash2 size={13} strokeWidth={1.75} aria-hidden="true" />
+              </button>
+            </div>
+          ))}
+          <button type="button" className="doc-tab__ghost-btn" onClick={addRow} disabled={busy}>
+            <Plus size={13} strokeWidth={2} aria-hidden="true" />
+            Ajouter un contributeur
+          </button>
+          <div className="doc-tab__form-actions">
+            <button type="button" className="doc-tab__ghost-btn" onClick={() => setEditing(false)} disabled={busy}>
+              Annuler
+            </button>
+            <button type="button" className="doc-tab__primary-btn" onClick={handleSave} disabled={busy}>
+              Enregistrer
             </button>
           </div>
-        </article>
+        </div>
+      ) : (
+        entry && (
+          <article className="doc-tab__card">
+            <div className="doc-tab__card-head">
+              <h4>{entry.title}</h4>
+              <StatusDot status={entry.status} />
+            </div>
+            <p className="doc-tab__timestamp">
+              {isManual ? "Personnalisée" : "Générée"} le {new Date(entry.updated_at).toLocaleString("fr-FR")}
+            </p>
+            <MarkdownView content={entry.description} />
+            <div className="doc-tab__editor-actions">
+              <button
+                type="button"
+                className="doc-tab__ghost-btn"
+                onClick={() =>
+                  run(
+                    () =>
+                      entry.status === "publie"
+                        ? unpublishDocEntry(projectId, entry.id)
+                        : publishDocEntry(projectId, entry.id),
+                    entry.status === "publie" ? "Fiche dépubliée." : "Fiche publiée.",
+                  )
+                }
+                disabled={busy}
+              >
+                {entry.status === "publie" ? "Dépublier" : "Publier"}
+              </button>
+            </div>
+          </article>
+        )
       )}
     </div>
   );

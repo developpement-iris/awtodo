@@ -91,6 +91,37 @@ class DocPageServiceTests(TestCase):
         with self.assertRaises(services.DocsValidationError):
             services.update_page(actor=self.manager, project=self.project, page_id=a.id, parent_id=b.id)
 
+    def test_default_section_is_documentation(self):
+        p = services.create_page(actor=self.manager, project=self.project, title="X")
+        self.assertEqual(p.section, "documentation")
+
+    def test_support_section_is_a_tree_independent_from_documentation(self):
+        doc_page = services.create_page(actor=self.manager, project=self.project, title="A")
+        support_page = services.create_page(
+            actor=self.manager, project=self.project, title="A", section="support"
+        )
+        self.assertEqual(doc_page.section, "documentation")
+        self.assertEqual(support_page.section, "support")
+        self.assertNotEqual(doc_page.id, support_page.id)
+
+    def test_cross_section_parenting_rejected_on_create(self):
+        doc_page = services.create_page(actor=self.manager, project=self.project, title="A")
+        with self.assertRaises(services.DocsValidationError):
+            services.create_page(
+                actor=self.manager, project=self.project, title="B",
+                parent_id=doc_page.id, section="support",
+            )
+
+    def test_cross_section_parenting_rejected_on_update(self):
+        doc_page = services.create_page(actor=self.manager, project=self.project, title="A")
+        support_page = services.create_page(
+            actor=self.manager, project=self.project, title="B", section="support"
+        )
+        with self.assertRaises(services.DocsValidationError):
+            services.update_page(
+                actor=self.manager, project=self.project, page_id=support_page.id, parent_id=doc_page.id
+            )
+
 
 class DocEntryServiceTests(TestCase):
     def setUp(self):
@@ -214,6 +245,73 @@ class ContributorsEntryServiceTests(TestCase):
     def test_member_cannot_generate(self):
         with self.assertRaises(services.DocsPermissionError):
             services.generate_contributors_entry(actor=self.member, project=self.project)
+
+    def test_update_contributors_entry_sets_rows_and_description(self):
+        rows = [{"name": "Grace Hopper", "role": "Marraine"}, {"name": "Margaret Hamilton", "role": ""}]
+        entry = services.update_contributors_entry(actor=self.manager, project=self.project, rows=rows)
+        self.assertEqual(entry.kind, "contributeurs")
+        self.assertEqual(entry.contributor_rows, rows)
+        self.assertIn("Grace Hopper", entry.description)
+        self.assertIn("Margaret Hamilton", entry.description)
+
+    def test_update_contributors_entry_rejects_empty_name(self):
+        with self.assertRaises(services.DocsValidationError):
+            services.update_contributors_entry(
+                actor=self.manager, project=self.project, rows=[{"name": "", "role": "Dev"}]
+            )
+
+    def test_update_contributors_entry_denied_to_member(self):
+        with self.assertRaises(services.DocsPermissionError):
+            services.update_contributors_entry(
+                actor=self.member, project=self.project, rows=[{"name": "X", "role": ""}]
+            )
+
+    def test_generate_clears_manual_contributor_rows(self):
+        services.update_contributors_entry(
+            actor=self.manager, project=self.project, rows=[{"name": "X", "role": "Y"}]
+        )
+        entry = services.generate_contributors_entry(actor=self.manager, project=self.project)
+        self.assertIsNone(entry.contributor_rows)
+        self.assertIn("Ada Lovelace", entry.description)
+
+
+class ResolutionEntryFromIncidentServiceTests(TestCase):
+    def setUp(self):
+        from apps.incidents.models import Incident
+
+        self.manager = User.objects.create(username="mgr")
+        self.project = Project.objects.create(name="P", project_type="collaboratif")
+        ProjectMembership.objects.create(project=self.project, user=self.manager, role="chef_de_projet")
+        self.incident = Incident.objects.create(
+            project=self.project, title="Panne export", status="resolu",
+            resolution_comment="Ajout d'un retry réseau.",
+        )
+
+    def test_returns_none_without_project(self):
+        self.incident.project = None
+        self.incident.team_id = None
+        self.incident.save(update_fields=["project", "team"])
+        self.assertIsNone(services.create_resolution_entry_from_incident(incident=self.incident))
+
+    def test_returns_none_without_existing_space(self):
+        self.assertIsNone(services.create_resolution_entry_from_incident(incident=self.incident))
+
+    def test_creates_draft_entry_from_resolution_comment(self):
+        from apps.documentation.models import DocEntry
+
+        services.get_or_create_space(actor=self.manager, project=self.project)
+        entry = services.create_resolution_entry_from_incident(incident=self.incident)
+        self.assertIsInstance(entry, DocEntry)
+        self.assertEqual(entry.kind, "resolution")
+        self.assertEqual(entry.status, "brouillon")
+        self.assertEqual(entry.source, "incident")
+        self.assertEqual(entry.source_incident_id, self.incident.id)
+        self.assertEqual(entry.description, "Ajout d'un retry réseau.")
+
+    def test_idempotent_second_call_returns_none(self):
+        services.get_or_create_space(actor=self.manager, project=self.project)
+        services.create_resolution_entry_from_incident(incident=self.incident)
+        self.assertIsNone(services.create_resolution_entry_from_incident(incident=self.incident))
 
 
 class PublicLinkSlugServiceTests(TestCase):

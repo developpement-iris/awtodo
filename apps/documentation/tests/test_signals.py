@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.test import TestCase
 
 from apps.accounts.models import User
-from apps.documentation.models import DocSpace, PendingDocEntry
+from apps.documentation.models import DocEntry, DocSpace, PendingDocEntry
 from apps.incidents import services as incident_services
 from apps.incidents.models import Incident
 from apps.notifications.models import Notification
@@ -65,15 +65,18 @@ class DocQueueSignalTests(TestCase):
         self._complete_task("correction")
         self.assertEqual(PendingDocEntry.objects.count(), 0)
 
-    def test_resolved_incident_creates_resolution_pending(self):
+    def test_resolved_incident_creates_draft_resolution_entry_directly(self):
+        # Session du 2026-10-06 : un incident résolu ne passe plus par la
+        # file "à documenter" — sa fiche est créée directement en brouillon.
         DocSpace.objects.create(project=self.project)
         incident = self._resolve_incident()
         self.assertEqual(
-            PendingDocEntry.objects.filter(
-                incident=incident, kind="resolution", status="en_attente"
+            DocEntry.objects.filter(
+                kind="resolution", source_incident=incident, status="brouillon"
             ).count(),
             1,
         )
+        self.assertEqual(PendingDocEntry.objects.filter(incident=incident).count(), 0)
 
     def test_ajout_notifies_project_manager(self):
         # Retour direct (session du 2026-09-23) : "envoie des notifs au chef
@@ -118,7 +121,9 @@ class DocQueueSignalTests(TestCase):
         from apps.incidents.signals import incident_resolved
 
         incident_resolved.send(sender=Incident, incident=incident, actor=self.mgr)
-        self.assertEqual(PendingDocEntry.objects.filter(incident=incident).count(), 1)
+        self.assertEqual(
+            DocEntry.objects.filter(kind="resolution", source_incident=incident).count(), 1
+        )
         # Pas de notification en double non plus — seule la création réelle
-        # de la ligne (get_or_create) déclenche `_notify_project_managers`.
+        # de la fiche déclenche `_notify_project_managers`.
         self.assertEqual(Notification.objects.filter(verb="doc_entry_pending").count(), 1)

@@ -39,8 +39,20 @@ class DocPage(UUIDModel, TimeStampedModel, StatusLifecycleModel):
         ("archive", "Archivé"),
     ]
     ACTIVE_STATUSES = frozenset({"brouillon", "publie"})
+    # Deux arbres de pages distincts (session du 2026-10-06) — la page
+    # publique les présente comme deux onglets séparés façon "classeur"
+    # (même design que `BinderTabs` côté app authentifiée) : "Documentation"
+    # (le contenu existant) et "Support d'utilisation" (nouveau, pensé pour
+    # un guide/tutoriel — pièces jointes et génération de page enrichie
+    # prévues plus tard, voir CLAUDE.md > Reste à faire). Un parent doit
+    # appartenir à la même section que son enfant (voir `create_page`).
+    SECTION_CHOICES = [
+        ("documentation", "Documentation"),
+        ("support", "Support d'utilisation"),
+    ]
 
     space = models.ForeignKey(DocSpace, on_delete=models.PROTECT, related_name="pages")
+    section = models.CharField(max_length=20, choices=SECTION_CHOICES, default="documentation")
     parent = models.ForeignKey(
         "self", null=True, blank=True, on_delete=models.PROTECT, related_name="children"
     )
@@ -114,6 +126,17 @@ class DocEntry(UUIDModel, TimeStampedModel, StatusLifecycleModel):
         "projects.ProjectVersion", null=True, blank=True, on_delete=models.SET_NULL, related_name="doc_entries"
     )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="brouillon")
+    # Liste personnalisée pour la fiche "Contributeurs" (session du
+    # 2026-10-06, retour direct : "on doit pouvoir personnaliser qui on met
+    # et quel rôle on leur attribue") — `[{"name": str, "role": str}]`,
+    # `role` en texte libre (pas forcément un rôle `ProjectMembership` réel,
+    # peut désigner un contributeur externe). `None`/vide = pas encore
+    # personnalisée, `description` porte alors l'instantané auto-généré par
+    # `generate_contributors_entry` (comportement d'origine, inchangé) — la
+    # présence de `contributor_rows` est ce qui bascule l'affichage vers la
+    # liste manuelle plutôt que le texte Markdown. Sans objet pour les autres
+    # `kind`, jamais rempli.
+    contributor_rows = models.JSONField(null=True, blank=True, default=None)
 
     class Meta:
         default_manager_name = "all_objects"

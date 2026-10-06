@@ -540,9 +540,17 @@ Les segments de la frise sont peu contrastés (remplissage sombre proche de la c
 - **Bug distinct sur les dialogs de création (2) :** `.xxx-create-dialog` est un flex item dans un overlay centré (`display: flex; align-items: center`) avec `max-height` + `overflow-y: auto`. Un flex item a par défaut `min-height: auto` (= hauteur intrinsèque du contenu), qui **prime sur `max-height`** quand le contenu est plus haut que le viewport — `overflow-y: auto` n'engageait donc jamais, et l'excédent débordait au-dessus de `y: 0` sous l'effet du centrage. Trouvé en le vérifiant dans les trois dialogs de création (projet/tâche/incident, même pattern dupliqué) — corrigé par un `min-height: 0` sur chacun. Vérifié via `npm run build` + relecture du raisonnement CSS (pas de rendu navigateur possible dans cet environnement — à confirmer visuellement).
 - **Roadmap :** fond des segments passé à `color-mix(in srgb, var(--priority-X-text) 22%, transparent)` (teinte translucide de la couleur "text", vive dans les deux thèmes) + bordure 1.5px pleine dans la même couleur — remplace l'ancien `background: var(--priority-X-bg)`, qui est sombre en mode sombre (pensé pour du texte sur badge, pas un remplissage de grande surface) et se fondait dans le fond de page. Légende ajoutée au-dessus de la frise (4 pastilles, même traitement couleur que les segments). Graduations : couleur passée de `--color-text-muted` à `--color-text`, poids 600, taille 11px→12px.
 
-## Documentation de projet (implémenté — session du 2026-09-03, étoffé le 2026-09-23)
+## Documentation de projet (implémenté — session du 2026-09-03, étoffé le 2026-09-23, le 2026-10-06)
 
 App `apps/documentation/` (label `documentation`). Onglet « Documentation » du hub projet, **visible uniquement pour un chef de projet** (`permissions.can_edit_documentation`, ajouté à `get_project_permissions`). Objectif : de la **documentation utilisateur** du produit, hébergée dans Awtodo et partageable en lecture publique.
+
+### Améliorations du 2026-10-06
+
+Trois demandes directes groupées dans une même session.
+
+- **Fiche « Contributeurs » personnalisable à la main.** `DocEntry.contributor_rows` (nouveau `JSONField` nullable, `[{"name": str, "role": str}]`) — présence/absence du champ, pas un booléen séparé, qui discrimine "personnalisée" vs "auto-générée" (`description` reste le Markdown rendu dans les deux cas, pour ne rien casser côté affichage/export existant). `PATCH .../contributors/` (`update_contributors_entry`, réservé au chef de projet comme `generate_contributors_entry`) remplace la liste et régénère `description` à partir des lignes fournies. **Régénérer écrase** une liste personnalisée (décision actée avec l'utilisateur : "Écraser avec confirmation" — la confirmation elle-même est un `window.confirm` côté `DocumentationTab.tsx`, pas une étape serveur) : `generate_contributors_entry` remet systématiquement `contributor_rows=None`. Page publique : la fiche s'affiche en liste structurée nom/rôle (`EntrySection`, `PublicDocsPage.tsx`) quand `contributor_rows` est renseigné, sinon comme avant (Markdown).
+- **Deux arbres de pages — Documentation / Support d'utilisation.** Nouveau `DocPage.section` (`"documentation"` | `"support"`, défaut `"documentation"` — aucune migration de données nécessaire, tout le contenu existant reste dans l'arbre "documentation"). Un parent et son enfant doivent être dans la **même section** (gardé dans `create_page`/`update_page`, sinon `DocsValidationError`) — pas de contrainte DB, même doctrine que la limite de profondeur à 2 niveaux. `get_documentation_bundle` renvoie désormais `pages` **et** `support_pages` (deux arbres indépendants, même forme) ; même chose côté public (`get_public_docs` → `pages`/`support_pages`). Sur la page publique (`PublicDocsPage.tsx`), deux onglets de premier niveau **« Documentation »** / **« Support d'utilisation »**, stylés à l'identique de la barre `BinderTabs` interne (classes `.binder-tabs`/`.binder-tab` réutilisées directement, pas le composant — couplé à la navigation interne `ViewName`) : "Documentation" regroupe tout l'existant (pages, fonctionnalités, résolutions, contributeurs), "Support d'utilisation" n'affiche que son propre arbre de pages pour l'instant. **Richesse différée explicitement par l'utilisateur** (pièces jointes, génération de page en Markdown) — voir CLAUDE.md > "Reste à faire".
+- **Incidents résolus — remontée automatique, sans passer par la file "à documenter".** Contrairement aux tâches (`task_completed` → `PendingDocEntry`, étape manuelle de conversion inchangée — "Incidents seulement" explicitement demandé), un incident résolu crée désormais directement une fiche `kind="resolution"` en statut `brouillon` (`create_resolution_entry_from_incident`, appelée depuis `_on_incident_resolved` à la place de l'ancien `PendingDocEntry.objects.get_or_create(...)`). La « main sur l'affichage » demandée par l'utilisateur est le mécanisme `DocEntry.status` déjà existant (`brouillon`/`publie`/`archive`) — rien de nouveau à ce niveau, publier/dépublier suffit. Idempotent par construction (`DocEntry.all_objects.filter(space=..., kind="resolution", source_incident=incident).exists()` avant création) : un second envoi du signal (ou un rejeu) ne crée pas de doublon. Migration `0003_page_sections_and_contributor_rows` inclut une étape de données (`RunPython`) qui convertit toute `PendingDocEntry(kind="resolution", status="en_attente")` laissée en plan au moment de la migration en fiche brouillon équivalente, pour ne pas perdre d'incidents déjà résolus avant ce changement.
 
 ### Améliorations du 2026-09-23 (retours groupés, après une revue de l'onglet)
 
@@ -558,8 +566,8 @@ App `apps/documentation/` (label `documentation`). Onglet « Documentation » du
 ### Modèles
 
 - **`DocSpace`** — un par projet (`OneToOneField(Project)`, `related_name="doc_space"`). Créé à la demande (`get_or_create`) au premier accès. Pas de `StatusLifecycleModel` (suit le projet). Champs : `is_public` (bool), `public_token` (`CharField(64)`, `unique`, `null` tant que jamais activé). Révoquer = `public_token=None` + `is_public=False`. Régénérer = nouveau token (`secrets.token_urlsafe(32)`).
-- **`DocPage`** — page Markdown arborescente. `StatusLifecycleModel` (`brouillon` / `publie` / `archive` ; `ACTIVE_STATUSES = {brouillon, publie}`). `space` FK, `parent` self-FK **limité à 2 niveaux** (garde `create_page`/`update_page` : refuse un parent qui a lui-même un parent, refuse de re-parenter une page ayant des enfants), `title`, `slug` (unique par espace hors archivées, contrainte partielle), `content`, `order`. « Supprimer » = `status="archive"` ; les enfants directs sont remontés au parent de la page archivée.
-- **`DocEntry`** — fiche structurée, un seul modèle pour les deux onglets via `kind` (`fonctionnalite` | `resolution`). `StatusLifecycleModel` même cycle. `space` FK, `title`, `description` (Markdown), `order`, `source` (`manuelle` | `tache` | `incident` | `cahier_des_charges`), `source_task` / `source_incident` (FK nullables `SET_NULL`).
+- **`DocPage`** — page Markdown arborescente. `StatusLifecycleModel` (`brouillon` / `publie` / `archive` ; `ACTIVE_STATUSES = {brouillon, publie}`). `space` FK, `parent` self-FK **limité à 2 niveaux** (garde `create_page`/`update_page` : refuse un parent qui a lui-même un parent, refuse de re-parenter une page ayant des enfants), `title`, `slug` (unique par espace hors archivées, contrainte partielle), `content`, `order`, `section` (`documentation` | `support`, défaut `documentation` — session du 2026-10-06, un parent et son enfant doivent être dans la même section). « Supprimer » = `status="archive"` ; les enfants directs sont remontés au parent de la page archivée.
+- **`DocEntry`** — fiche structurée, un seul modèle pour les trois kinds via `kind` (`fonctionnalite` | `resolution` | `contributeurs`). `StatusLifecycleModel` même cycle. `space` FK, `title`, `description` (Markdown), `order`, `source` (`manuelle` | `tache` | `incident` | `cahier_des_charges`), `source_task` / `source_incident` (FK nullables `SET_NULL`), `contributor_rows` (`JSONField` nullable, session du 2026-10-06 — non-null uniquement sur la fiche "contributeurs" personnalisée à la main).
 - **`PendingDocEntry`** — file « À documenter ». `StatusLifecycleModel` (`en_attente` / `traitee` / `ignoree`). `space` FK, `kind`, `task` **ou** `incident` (`OneToOneField` nullables, `CheckConstraint` « exactement un des deux »), `entry` FK (renseignée quand `traitee`).
 
 Les trois modèles `StatusLifecycleModel` déclarent `default_manager_name = base_manager_name = "all_objects"` dans leur `Meta` (piège Django documenté dans `CLAUDE.md`). Régression couverte par `apps/documentation/tests/test_models.py`.
@@ -569,9 +577,9 @@ Les trois modèles `StatusLifecycleModel` déclarent `default_manager_name = bas
 Deux signaux Django **nouveaux**, consommés par `apps/documentation/signals.py` (jamais d'import inverse — règle de dépendances) :
 
 - **`apps.tasks.signals.task_completed`** (kwargs `task`, `actor`) — émis en fin de `complete_task`. Le récepteur crée une `PendingDocEntry(kind="fonctionnalite")` **si** `task.task_type ∈ {ajout, evolution}` (pas `correction`) **et** le projet a déjà un `DocSpace`.
-- **`apps.incidents.signals.incident_resolved`** (kwargs `incident`, `actor`) — émis en fin de `resolve_incident`. Récepteur : `PendingDocEntry(kind="resolution")` **si** `incident.project_id` est renseigné (incident rattaché à un groupe seul → ignoré) **et** le projet a un `DocSpace`.
+`get_or_create(task=…)` → idempotent.
 
-`get_or_create(task=…)` / `get_or_create(incident=…)` → idempotent.
+**Incidents : plus de file "à documenter" depuis le 2026-10-06.** `apps.incidents.signals.incident_resolved` (kwargs `incident`, `actor`) déclenche désormais directement `create_resolution_entry_from_incident` (`DocEntry(kind="resolution", status="brouillon", source="incident")`), sans `PendingDocEntry` intermédiaire — "une main sur l'affichage" via le statut `brouillon`/`publie` déjà existant de la fiche, pas via une file de curation séparée. Idempotent par vérification explicite (`DocEntry.all_objects.filter(space=..., kind="resolution", source_incident=incident).exists()`) avant création.
 
 ### API — endpoints authentifiés (`/api/v1/docs/`, chef de projet)
 
@@ -579,9 +587,9 @@ Deux signaux Django **nouveaux**, consommés par `apps/documentation/signals.py`
 
 | Méthode / chemin | Effet |
 |---|---|
-| `GET /api/v1/docs/{project_id}/` | agrégat : `{ space, pages (arbre), features, resolutions, pending_features, pending_resolutions }` |
-| `POST .../pages/` | crée une page (`title`, `parent_id?`, `content?`) |
-| `PATCH .../pages/{page_id}/` | `title?`, `content?`, `parent_id?` (absent = inchangé, `null` = racine), `order?` |
+| `GET /api/v1/docs/{project_id}/` | agrégat : `{ space, pages (arbre "documentation"), support_pages (arbre "support", session 2026-10-06), features, resolutions, contributors, pending_features, pending_resolutions }` |
+| `POST .../pages/` | crée une page (`title`, `parent_id?`, `content?`, `section?` — `documentation` par défaut, session 2026-10-06) |
+| `PATCH .../pages/{page_id}/` | `title?`, `content?`, `parent_id?` (absent = inchangé, `null` = racine — rejeté si l'enfant et le nouveau parent ne sont pas dans la même `section`), `order?` |
 | `POST .../pages/{page_id}/publish/` · `/unpublish/` | bascule `status` |
 | `DELETE .../pages/{page_id}/` | archive (204) |
 | `POST .../entries/` | crée une fiche (`kind`, `title`, `description?`) |
@@ -592,11 +600,12 @@ Deux signaux Django **nouveaux**, consommés par `apps/documentation/signals.py`
 | `POST .../public-link/` · `POST .../public-link/rotate/` · `DELETE .../public-link/` | active / régénère / révoque le lien public — renvoie `{ space }` |
 | `PATCH .../public-link/slug/` | change le préfixe lisible du lien (`slug`), régénère `public_token` si un lien est déjà actif — session du 2026-09-23 |
 | `PATCH .../appearance/` | couleur/en-tête/pied de page de la page publique (`accent_color?`, `header_content?`, `footer_content?`) — session du 2026-09-23 |
-| `POST .../contributors/generate/` | (re)génère la fiche unique "Contributeurs au projet" — session du 2026-09-23 |
+| `POST .../contributors/generate/` | (re)génère la fiche unique "Contributeurs au projet" — remet `contributor_rows` à `null` (écrase une personnalisation manuelle) |
+| `PATCH .../contributors/` | remplace la liste personnalisée (`rows: [{name, role}]`) — session du 2026-10-06 |
 
 ### API — endpoint public (`AllowAny`, sans authentification)
 
-`GET /api/v1/docs/public/{token}/` → `{ project_name, pages (arbre, publiées seulement), features, resolutions }`. `404` si token vide, inconnu, ou `is_public=False`. **Seul le contenu `status="publie"` est exposé** ; une page publiée dont le parent ne l'est pas est remontée à la racine. Aucune donnée de gestion (tâches, membres, budget, incidents) n'est jamais renvoyée. Voir `CLAUDE.md` > Stack technique > Auth pour l'exception au garde-fou « connexion obligatoire ».
+`GET /api/v1/docs/public/{token}/` → `{ project_name, pages (arbre "documentation", publiées seulement), support_pages (arbre "support", publiées seulement), features, resolutions, contributors }`. `404` si token vide, inconnu, ou `is_public=False`. **Seul le contenu `status="publie"` est exposé** ; une page publiée dont le parent ne l'est pas est remontée à la racine. Aucune donnée de gestion (tâches, membres, budget, incidents) n'est jamais renvoyée. Voir `CLAUDE.md` > Stack technique > Auth pour l'exception au garde-fou « connexion obligatoire ».
 
 Toute la logique est dans `apps/documentation/services.py` (y compris la mise en forme des dicts de réponse) ; les vues ne font que router et traduire les exceptions.
 

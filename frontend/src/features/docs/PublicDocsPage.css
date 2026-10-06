@@ -1,9 +1,21 @@
 /* Page publique autonome (hors AppShell) — suit le thème clair/sombre du
    visiteur via les jetons globaux. Voir docs/charte-graphique.md. */
 
+.public-docs-shell {
+  min-height: 100vh;
+  background: var(--sidebar-bg);
+}
+
+/* Les onglets "classeur" (session du 2026-10-06) réutilisent directement les
+   classes `.binder-tabs`/`.binder-tab` de la navigation interne — reprise à
+   l'identique demandée explicitement, pas de style propre à cette page. */
+.public-docs__top-tabs {
+  padding: var(--space-3) var(--space-5) 0;
+}
+
 .public-docs {
   display: flex;
-  min-height: 100vh;
+  min-height: calc(100vh - 44px);
   background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-sans);
@@ -158,6 +170,32 @@
   display: none;
 }
 
+.public-docs__contributor-list {
+  list-style: none;
+  margin-top: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.public-docs__contributor-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.public-docs__contributor-name {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.public-docs__contributor-role {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
 /* Contenu Markdown libre (rédigé par le chef de projet) : une image ou un
    tableau plus large que l'écran ne doit jamais casser la mise en page d'une
    page publique consultée par un visiteur externe, potentiellement sur
@@ -213,6 +251,7 @@
 }
 
 @media print {
+  .public-docs__top-tabs,
   .public-docs__nav,
   .public-docs__screen {
     display: none;

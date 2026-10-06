@@ -13,6 +13,7 @@ from apps.projects.models import ProjectMembership
 from apps.tasks.signals import task_completed
 
 from .models import DocSpace, PendingDocEntry
+from .services import create_resolution_entry_from_incident
 
 # Seules les tâches qui apportent quelque chose de visible pour l'utilisateur
 # final alimentent l'onglet Fonctionnalités. Une `correction` ne documente pas
@@ -46,15 +47,10 @@ def _on_task_completed(sender, task, actor, **kwargs):
 
 @receiver(incident_resolved)
 def _on_incident_resolved(sender, incident, actor, **kwargs):
-    # Un incident rattaché à une Team sans projet n'a pas d'espace de doc :
-    # il n'entre pas dans la file.
-    if not incident.project_id:
-        return
-    space = DocSpace.objects.filter(project_id=incident.project_id).first()
-    if space is None:
-        return
-    _, created = PendingDocEntry.objects.get_or_create(
-        incident=incident, defaults={"space": space, "kind": "resolution"}
-    )
-    if created:
+    # Session du 2026-10-06 : contrairement aux tâches, un incident résolu
+    # ne passe plus par la file "à documenter" — sa fiche de résolution est
+    # créée directement en brouillon (voir `create_resolution_entry_from_incident`),
+    # le chef de projet garde "la main sur l'affichage" via publier/dépublier.
+    entry = create_resolution_entry_from_incident(incident=incident)
+    if entry is not None:
         _notify_project_managers(incident.project, incident=incident)

@@ -14,6 +14,7 @@ from apps.projects.services import contributor_projects
 from . import services
 from .models import DocSpace
 from .serializers import (
+    ContributorsUpdateSerializer,
     DocEntryCreateSerializer,
     DocEntryUpdateSerializer,
     DocPageCreateSerializer,
@@ -67,6 +68,7 @@ class DocSpaceViewSet(viewsets.GenericViewSet):
             title=data["title"],
             parent_id=data.get("parent_id"),
             content=data.get("content", ""),
+            section=data.get("section", "documentation"),
         )
         return Response(services._page_dict(page), status=201)
 
@@ -176,6 +178,16 @@ class DocSpaceViewSet(viewsets.GenericViewSet):
         project = self._project(request, project_id)
         entry = services.generate_contributors_entry(actor=request.user, project=project)
         return Response(services._entry_dict(entry), status=201)
+
+    @action(detail=True, methods=["patch"], url_path="contributors")
+    def update_contributors(self, request, project_id=None):
+        project = self._project(request, project_id)
+        serializer = ContributorsUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        entry = services.update_contributors_entry(
+            actor=request.user, project=project, rows=serializer.validated_data["rows"]
+        )
+        return Response(services._entry_dict(entry))
 
     # --- Lien public --------------------------------------------------
     @action(detail=True, methods=["post", "delete"], url_path="public-link")

@@ -147,22 +147,26 @@ def _get_page(space, page_id):
         raise DocsValidationError("Page introuvable.")
 
 
-def create_page(*, actor, project, title, parent_id=None, content=""):
+def create_page(*, actor, project, title, parent_id=None, content="", section="documentation"):
     _require_manager(actor, project)
     space = get_or_create_space(actor=actor, project=project)
     if not title or not title.strip():
         raise DocsValidationError("Le titre est obligatoire.")
+    if section not in dict(DocPage.SECTION_CHOICES):
+        raise DocsValidationError("Section de documentation invalide.")
     parent = None
     if parent_id:
         parent = _get_page(space, parent_id)
         if parent.parent_id is not None:
             raise DocsValidationError("La documentation est limitée à 2 niveaux de pages.")
+        if parent.section != section:
+            raise DocsValidationError("Une page ne peut avoir un parent que dans la même section.")
     max_order = (
         DocPage.all_objects.filter(space=space, parent=parent)
         .order_by("-order").values_list("order", flat=True).first()
     )
     page = DocPage.objects.create(
-        space=space, parent=parent, title=title.strip(),
+        space=space, section=section, parent=parent, title=title.strip(),
         slug=_unique_slug(space, title), content=content or "", order=(max_order or 0) + 1,
     )
     record_event(
@@ -192,6 +196,8 @@ def update_page(*, actor, project, page_id, title=None, content=None, parent_id=
                 raise DocsValidationError("Une page ne peut pas être son propre parent.")
             if new_parent.parent_id is not None:
                 raise DocsValidationError("La documentation est limitée à 2 niveaux de pages.")
+            if new_parent.section != page.section:
+                raise DocsValidationError("Une page ne peut avoir un parent que dans la même section.")
             if DocPage.all_objects.filter(parent=page).exclude(status="archive").exists():
                 raise DocsValidationError(
                     "Cette page a des sous-pages : elle ne peut pas devenir elle-même une sous-page."
@@ -359,7 +365,13 @@ def generate_contributors_entry(*, actor, project):
     contenu est entièrement réécrit à chaque appel (liste des membres
     actifs, pas un ajout incrémental) : c'est un instantané, pas un journal.
     Contrairement aux autres fiches, jamais alimentée via la file "à
-    documenter"."""
+    documenter".
+
+    Écrase aussi une éventuelle liste personnalisée (`contributor_rows`,
+    session du 2026-10-06) — c'est le sens même du bouton "Régénérer" :
+    revenir à l'instantané automatique. La confirmation avant perte de la
+    personnalisation est de la responsabilité du frontend, pas de ce
+    service."""
     from apps.projects.models import ProjectMembership
 
     _require_manager(actor, project)
@@ -387,7 +399,46 @@ def generate_contributors_entry(*, actor, project):
     )
     if not created:
         entry.description = description
-        entry.save(update_fields=["description", "updated_at"])
+        entry.contributor_rows = None
+        entry.save(update_fields=["description", "contributor_rows", "updated_at"])
+    return entry
+
+
+def update_contributors_entry(*, actor, project, rows):
+    """Liste personnalisée de contributeurs (session du 2026-10-06, retour
+    direct : "on doit pouvoir personnaliser qui on met et quel rôle on leur
+    attribue") — `rows` : liste de `{"name": str, "role": str}`, un nom
+    libre et un rôle en texte libre (pas forcément un rôle `ProjectMembership`
+    réel, ni même quelqu'un ayant un compte Awtodo).
+
+    Régénère aussi `description` en Markdown à partir de `rows` (même format
+    que `generate_contributors_entry`, sans le regroupement par rôle réel) —
+    garde le rendu cohérent pour tout consommateur qui n'afficherait que ce
+    champ (ex. d'anciens exports), même si l'affichage courant (interne et
+    public) lit `contributor_rows` en priorité quand il est renseigné."""
+    _require_manager(actor, project)
+    space = get_or_create_space(actor=actor, project=project)
+    if not isinstance(rows, list):
+        raise DocsValidationError("Liste de contributeurs invalide.")
+    cleaned = []
+    for row in rows:
+        if not isinstance(row, dict):
+            raise DocsValidationError("Liste de contributeurs invalide.")
+        name = str(row.get("name") or "").strip()[:200]
+        role = str(row.get("role") or "").strip()[:100]
+        if not name:
+            raise DocsValidationError("Chaque contributeur doit avoir un nom.")
+        cleaned.append({"name": name, "role": role})
+
+    description = "\n".join(f"- **{row['name']}** — {row['role']}" if row["role"] else f"- {row['name']}" for row in cleaned)
+
+    entry, _created = DocEntry.all_objects.get_or_create(
+        space=space, kind="contributeurs",
+        defaults={"title": _CONTRIBUTORS_TITLE, "source": "manuelle"},
+    )
+    entry.contributor_rows = cleaned
+    entry.description = description
+    entry.save(update_fields=["contributor_rows", "description", "updated_at"])
     return entry
 
 
@@ -431,6 +482,40 @@ def create_entry_from_pending(*, actor, project, pending_id):
     return entry
 
 
+def create_resolution_entry_from_incident(*, incident):
+    """Remontée automatique d'un incident résolu (session du 2026-10-06,
+    retour direct : "les incidents résolus [doivent être] automatiquement
+    remontés [...] mais avec une main sur l'affichage") — crée directement la
+    fiche de résolution en **brouillon**, sans passer par la file "à
+    documenter" (étape de conversion manuelle conservée, elle, pour les
+    tâches terminées — portée volontairement limitée aux incidents).
+    "Main sur l'affichage" = `publish_entry`/`unpublish_entry`, déjà en
+    place sur n'importe quelle fiche.
+
+    Appelée depuis le signal `incident_resolved` — pas d'`actor` (action
+    système, pas de garde de permission), pas de création d'espace à la
+    volée : si aucun `DocSpace` n'existe encore pour ce projet (personne n'a
+    jamais ouvert l'onglet Documentation), on ne force rien, même
+    comportement que l'ancien flux `PendingDocEntry`."""
+    if not incident.project_id:
+        return None
+    space = DocSpace.objects.filter(project_id=incident.project_id).first()
+    if space is None:
+        return None
+    if DocEntry.all_objects.filter(space=space, kind="resolution", source_incident=incident).exists():
+        return None
+    max_order = (
+        DocEntry.all_objects.filter(space=space, kind="resolution")
+        .order_by("-order").values_list("order", flat=True).first()
+    )
+    return DocEntry.objects.create(
+        space=space, kind="resolution", title=incident.title[:200],
+        description=getattr(incident, "resolution_comment", "") or incident.description or "",
+        source="incident", source_incident=incident, status="brouillon",
+        order=(max_order or 0) + 1,
+    )
+
+
 def ignore_pending(*, actor, project, pending_id):
     _require_manager(actor, project)
     space = get_or_create_space(actor=actor, project=project)
@@ -442,8 +527,10 @@ def ignore_pending(*, actor, project, pending_id):
 # --- Agrégat public (lecture seule, AllowAny) -----------------------------
 
 
-def _public_pages(space):
-    pages = list(DocPage.all_objects.filter(space=space, status="publie").order_by("order", "created_at"))
+def _public_pages(space, section):
+    pages = list(
+        DocPage.all_objects.filter(space=space, section=section, status="publie").order_by("order", "created_at")
+    )
     ids = {p.id for p in pages}
 
     def node(pg):
@@ -459,6 +546,7 @@ def _public_entries(space, kind):
             "id": str(e.id),
             "title": e.title,
             "description": e.description,
+            "contributor_rows": e.contributor_rows,
             "created_at": e.created_at.isoformat(),
             "version_label": e.version.label if e.version_id else None,
         }
@@ -476,7 +564,8 @@ def get_public_docs(token):
         return None
     return {
         "project_name": space.project.name,
-        "pages": _public_pages(space),
+        "pages": _public_pages(space, "documentation"),
+        "support_pages": _public_pages(space, "support"),
         "features": _public_entries(space, "fonctionnalite"),
         "resolutions": _public_entries(space, "resolution"),
         "contributors": _public_entries(space, "contributeurs"),
@@ -497,6 +586,7 @@ def _page_dict(page, children=None):
     return {
         "id": str(page.id),
         "parent_id": str(page.parent_id) if page.parent_id else None,
+        "section": page.section,
         "title": page.title,
         "slug": page.slug,
         "content": page.content,
@@ -509,9 +599,10 @@ def _page_dict(page, children=None):
     }
 
 
-def _pages_tree(space):
+def _pages_tree(space, section):
     pages = list(
-        DocPage.all_objects.filter(space=space).exclude(status="archive").order_by("order", "created_at")
+        DocPage.all_objects.filter(space=space, section=section)
+        .exclude(status="archive").order_by("order", "created_at")
     )
     by_parent = {}
     for page in pages:
@@ -535,6 +626,7 @@ def _entry_dict(entry):
         "source_incident_id": str(entry.source_incident_id) if entry.source_incident_id else None,
         "version_id": str(entry.version_id) if entry.version_id else None,
         "version_label": entry.version.label if entry.version_id else None,
+        "contributor_rows": entry.contributor_rows,
         "status": entry.status,
         "status_display": entry.get_status_display(),
         "created_at": entry.created_at.isoformat(),
@@ -582,7 +674,8 @@ def get_documentation_bundle(*, actor, project, request=None):
     )
     return {
         "space": _space_dict(space, request),
-        "pages": _pages_tree(space),
+        "pages": _pages_tree(space, "documentation"),
+        "support_pages": _pages_tree(space, "support"),
         "features": [_entry_dict(e) for e in entries if e.kind == "fonctionnalite"],
         "resolutions": [_entry_dict(e) for e in entries if e.kind == "resolution"],
         "contributors": [_entry_dict(e) for e in entries if e.kind == "contributeurs"],

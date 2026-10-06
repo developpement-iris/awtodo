@@ -1,12 +1,17 @@
 from rest_framework import serializers
 
-from .models import DocEntry
+from .models import DocEntry, DocPage
 
 
 class DocPageCreateSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=200)
     parent_id = serializers.UUIDField(required=False, allow_null=True)
     content = serializers.CharField(required=False, allow_blank=True, default="")
+    # Deux arbres distincts (session du 2026-10-06) — voir
+    # `DocPage.SECTION_CHOICES`. Par défaut "documentation" : le contenu
+    # existant avant ce chantier reste au même endroit sans rien changer
+    # côté appelants existants qui n'envoient pas ce champ.
+    section = serializers.ChoiceField(choices=DocPage.SECTION_CHOICES, required=False, default="documentation")
 
 
 class DocPageUpdateSerializer(serializers.Serializer):
@@ -57,3 +62,12 @@ class DocSpaceAppearanceSerializer(serializers.Serializer):
 
 class DocSpaceSlugSerializer(serializers.Serializer):
     slug = serializers.CharField(max_length=80, allow_blank=True)
+
+
+class ContributorRowSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=200)
+    role = serializers.CharField(max_length=100, required=False, allow_blank=True, default="")
+
+
+class ContributorsUpdateSerializer(serializers.Serializer):
+    rows = ContributorRowSerializer(many=True)

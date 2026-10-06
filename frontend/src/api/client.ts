@@ -23,6 +23,7 @@ import type {
   DocEntry,
   DocEntryKind,
   DocPage,
+  DocPageSection,
   DocSpace,
   DocumentationBundle,
   GlobalTaskStats,
@@ -773,7 +774,7 @@ export function getDocumentation(projectId: string): Promise<DocumentationBundle
 
 export function createDocPage(
   projectId: string,
-  payload: { title: string; parent_id?: string | null; content?: string },
+  payload: { title: string; parent_id?: string | null; content?: string; section?: DocPageSection },
 ): Promise<DocPage> {
   return postJson<DocPage>(`/docs/${projectId}/pages/`, payload);
 }
@@ -855,6 +856,13 @@ export function getPublicDocs(token: string): Promise<PublicDocs> {
 
 export function generateContributorsEntry(projectId: string): Promise<DocEntry> {
   return postJson<DocEntry>(`/docs/${projectId}/contributors/generate/`);
+}
+
+export function updateContributorsEntry(
+  projectId: string,
+  rows: { name: string; role: string }[],
+): Promise<DocEntry> {
+  return patchJson<DocEntry>(`/docs/${projectId}/contributors/`, { rows });
 }
 
 export function setDocPublicSlug(projectId: string, slug: string): Promise<{ space: DocSpace }> {

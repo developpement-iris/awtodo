@@ -241,6 +241,9 @@ export interface CommunicationMessage {
 
 export type DocStatus = "brouillon" | "publie" | "archive";
 export type DocEntryKind = "fonctionnalite" | "resolution";
+// Deux arbres de pages distincts sur la page publique (session du
+// 2026-10-06) — voir DocPage.SECTION_CHOICES côté backend.
+export type DocPageSection = "documentation" | "support";
 
 export interface DocPage {
   id: string;
@@ -249,6 +252,7 @@ export interface DocPage {
   slug: string;
   content: string;
   order: number;
+  section: DocPageSection;
   status: DocStatus;
   status_display: string;
   created_at: string;
@@ -259,6 +263,11 @@ export interface DocPage {
 // "contributeurs" : fiche unique auto-générée (session du 2026-09-23), pas
 // une file "à documenter" comme les deux autres — voir DocumentationTab.
 export type DocEntryFullKind = DocEntryKind | "contributeurs";
+
+export interface ContributorRow {
+  name: string;
+  role: string;
+}
 
 export interface DocEntry {
   id: string;
@@ -275,6 +284,10 @@ export interface DocEntry {
   status_display: string;
   created_at: string;
   updated_at: string;
+  // Non-null uniquement sur la fiche "contributeurs" personnalisée à la
+  // main (session du 2026-10-06) — null = contenu auto-généré (`description`
+  // tient alors le Markdown rendu).
+  contributor_rows: ContributorRow[] | null;
 }
 
 export interface PendingDocEntry {
@@ -299,6 +312,9 @@ export interface DocSpace {
 export interface DocumentationBundle {
   space: DocSpace;
   pages: DocPage[];
+  // Arbre "Support d'utilisation" (session du 2026-10-06), indépendant de
+  // `pages` ("Documentation") — même forme, même composant de page côté UI.
+  support_pages: DocPage[];
   features: DocEntry[];
   resolutions: DocEntry[];
   contributors: DocEntry[];
@@ -320,11 +336,13 @@ export interface PublicDocsEntry {
   description: string;
   created_at: string;
   version_label: string | null;
+  contributor_rows: ContributorRow[] | null;
 }
 
 export interface PublicDocs {
   project_name: string;
   pages: PublicDocsNode[];
+  support_pages: PublicDocsNode[];
   features: PublicDocsEntry[];
   resolutions: PublicDocsEntry[];
   contributors: PublicDocsEntry[];
