@@ -64,6 +64,31 @@ class CommunicationApiTests(APITestCase):
         self.assertEqual(r.status_code, 201)
         self.assertEqual(CommunicationChannel.objects.filter(project=self.project).count(), 1)
 
+    def test_manager_creates_channel_with_long_power_automate_url(self):
+        # Régression (session du 2026-10-06) : une URL de déclenchement Power
+        # Platform signée (SAS) dépasse couramment 200 caractères, la limite
+        # par défaut d'un URLField Django — provoquait un 500 non géré à
+        # l'INSERT sur Postgres (silencieux sur SQLite, utilisé par les
+        # tests, d'où l'assertion explicite sur `max_length` en plus du 201).
+        self.assertEqual(CommunicationChannel._meta.get_field("teams_webhook_url").max_length, 1000)
+        long_url = "https://prod-00.westeurope.logic.azure.com/workflows/" + ("a" * 220) + "?sig=" + ("b" * 100)
+        self.assertGreater(len(long_url), 200)
+        self._as(self.manager)
+        r = self.client.post(
+            self._channels_url(),
+            {
+                "label": "Support",
+                "teams_channel_id": "19:abc@thread.tacv2",
+                "teams_channel_name": "#suivi-projet",
+                "teams_webhook_url": long_url,
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(
+            CommunicationChannel.objects.get(project=self.project).teams_webhook_url, long_url
+        )
+
     def test_member_cannot_create_channel(self):
         self._as(self.member)
         r = self.client.post(

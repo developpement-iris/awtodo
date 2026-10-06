@@ -59,8 +59,13 @@ class CommunicationChannel(UUIDModel, TimeStampedModel, StatusLifecycleModel):
     teams_channel_id = models.CharField(max_length=255, blank=True, default="")
     teams_channel_name = models.CharField(max_length=150, blank=True, default="")
     # URL du flow Power Automate "Quand une requête HTTP est reçue" qui
-    # publie ensuite dans le canal Teams.
-    teams_webhook_url = models.URLField(blank=True, default="")
+    # publie ensuite dans le canal Teams. `max_length` relevé explicitement
+    # (bug corrigé le 2026-10-06) : le défaut Django (200) est trop court
+    # pour une URL de déclenchement Power Platform signée (SAS), qui dépasse
+    # couramment 300-400 caractères — provoquait un 500 non géré à l'INSERT
+    # sur Postgres (silencieux sur SQLite en dev, qui n'impose pas la
+    # longueur de colonne).
+    teams_webhook_url = models.URLField(blank=True, default="", max_length=1000)
     # Gabarit de payload personnalisable (session du 2026-09-28) — objet JSON
     # plat `{clé: "{{espace.champ}}" | valeur littérale}`, résolu par
     # apps.communication.payload.render_payload_for_channel. Vide = payload

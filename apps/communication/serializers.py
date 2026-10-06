@@ -46,7 +46,7 @@ class CommunicationChannelCreateSerializer(serializers.Serializer):
     label = serializers.CharField(max_length=150)
     teams_channel_id = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
     teams_channel_name = serializers.CharField(max_length=150, required=False, allow_blank=True, default="")
-    teams_webhook_url = serializers.URLField(required=False, allow_blank=True, default="")
+    teams_webhook_url = serializers.URLField(required=False, allow_blank=True, default="", max_length=1000)
     payload_template = serializers.JSONField(required=False, default=dict)
     notify_incident_created = serializers.BooleanField(required=False, default=False)
 
@@ -55,7 +55,7 @@ class CommunicationChannelUpdateSerializer(serializers.Serializer):
     label = serializers.CharField(max_length=150, required=False)
     teams_channel_id = serializers.CharField(max_length=255, required=False, allow_blank=True)
     teams_channel_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
-    teams_webhook_url = serializers.URLField(required=False, allow_blank=True)
+    teams_webhook_url = serializers.URLField(required=False, allow_blank=True, max_length=1000)
     payload_template = serializers.JSONField(required=False)
     notify_incident_created = serializers.BooleanField(required=False)
 
