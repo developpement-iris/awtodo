@@ -1,4 +1,4 @@
-import { Archive, ChevronDown, MessagesSquare, Plus, Send, Trash2, CheckCircle2, Clock, XCircle } from "lucide-react";
+import { Archive, ChevronDown, MessagesSquare, Plus, Send, Trash2, CheckCircle2, Clock, Users, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   archiveProjectCommunicationChannel,
@@ -74,6 +74,10 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
   const { showToast } = useToast();
   const canManage = project.permissions.can_manage_project_communication;
   const canSend = project.permissions.can_send_project_communication;
+  // Canaux au niveau groupe (session du 2026-10-07) — vrai si l'acteur est
+  // chef de projet d'UN projet du groupe, pas forcément de celui-ci.
+  const canManageTeam = project.permissions.can_manage_team_communication;
+  const canManageAnyChannel = canManage || canManageTeam;
 
   const [channels, setChannels] = useState<CommunicationChannel[] | null>(null);
   const [messages, setMessages] = useState<CommunicationMessage[] | null>(null);
@@ -94,6 +98,8 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
   }, [project.id, reloadKey]);
 
   const activeChannels = useMemo(() => (channels ?? []).filter((c) => c.status === "active"), [channels]);
+  const teamChannels = useMemo(() => activeChannels.filter((c) => c.scope === "team"), [activeChannels]);
+  const projectChannels = useMemo(() => activeChannels.filter((c) => c.scope === "project"), [activeChannels]);
 
   // --- Canaux Teams ----------------------------------------------------
   const [channelLabel, setChannelLabel] = useState("");
@@ -102,6 +108,11 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
   const [channelWebhook, setChannelWebhook] = useState("");
   const [channelNotifyIncident, setChannelNotifyIncident] = useState(false);
   const [channelBusy, setChannelBusy] = useState(false);
+  // Portée du canal en cours de création — pertinent seulement quand les
+  // deux droits sont détenus en même temps (sinon imposée silencieusement).
+  const [channelScope, setChannelScope] = useState<"project" | "team">(canManage ? "project" : "team");
+  const effectiveChannelScope: "project" | "team" =
+    canManage && canManageTeam ? channelScope : canManageTeam ? "team" : "project";
 
   // Gabarit de payload personnalisable (session du 2026-09-28) — vide par
   // défaut, le backend applique alors le payload standard (sujet/corps/…).
@@ -143,6 +154,7 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
         teams_channel_id: channelId.trim(),
         teams_channel_name: channelName.trim(),
         teams_webhook_url: channelWebhook.trim(),
+        scope: effectiveChannelScope,
         payload_template,
         notify_incident_created: channelNotifyIncident,
       });
@@ -154,7 +166,7 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
       setTemplateRows([]);
       setTemplateOpen(false);
       reload();
-      showToast("Canal ajouté.");
+      showToast(effectiveChannelScope === "team" ? "Canal du groupe ajouté." : "Canal ajouté.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "L'ajout a échoué.");
     } finally {
@@ -187,8 +199,23 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
 
   useEffect(() => {
     if (!canSend) return;
-    getTasks({ project: project.id }).then(setProjectTasks).catch(() => setProjectTasks([]));
-    getIncidents({ project: project.id }).then(setProjectIncidents).catch(() => setProjectIncidents([]));
+    // `status` explicite pour contourner le filtre "actifs par défaut" côté
+    // API (sans ce paramètre, les tâches/incidents clôturés disparaissent du
+    // sélecteur — bug remonté le 2026-10-07 : on veut justement pouvoir
+    // joindre une tâche/un incident déjà terminé à une communication, ex.
+    // "fonctionnalité X livrée").
+    getTasks({
+      project: project.id,
+      status: ["en_attente_validation", "disponible", "assignee", "en_cours", "rejetee", "archivee", "annulee"],
+    })
+      .then(setProjectTasks)
+      .catch(() => setProjectTasks([]));
+    getIncidents({
+      project: project.id,
+      status: ["signale", "en_cours", "resolu", "annule", "archive"],
+    })
+      .then(setProjectIncidents)
+      .catch(() => setProjectIncidents([]));
   }, [canSend, project.id]);
 
   function toggleChannelSelection(id: string) {
@@ -260,41 +287,64 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
         )}
 
         {channels !== null && (
-          <ul className="communication-tab__channel-list">
-            {activeChannels.map((channel) => (
-              <li key={channel.id} className="communication-tab__channel">
-                <MessagesSquare size={15} strokeWidth={1.75} aria-hidden="true" />
-                <div className="communication-tab__channel-info">
-                  <span className="communication-tab__channel-label">{channel.label}</span>
-                  <span className="communication-tab__channel-target">
-                    {channel.teams_channel_name || "Canal non renseigné"}
-                    {channel.teams_channel_id ? ` · ${channel.teams_channel_id}` : ""}
-                  </span>
-                </div>
-                {Object.keys(channel.payload_template ?? {}).length > 0 && (
-                  <StatusBadge label="Payload personnalisé" tone="neutral" />
-                )}
-                {channel.notify_incident_created && (
-                  <StatusBadge label="Auto à la création d'incident" tone="neutral" />
-                )}
-                {canManage && (
-                  <button
-                    type="button"
-                    className="communication-tab__icon-btn"
-                    onClick={() => handleArchiveChannel(channel)}
-                    aria-label={`Archiver ${channel.label}`}
-                  >
-                    <Archive size={14} strokeWidth={1.75} aria-hidden="true" />
-                  </button>
-                )}
-              </li>
-            ))}
-            {activeChannels.length === 0 && <li className="communication-tab__empty">Aucun canal configuré.</li>}
-          </ul>
+          <>
+            {(teamChannels.length > 0 || canManageTeam) && (
+              <>
+                <div className="communication-tab__channel-group-label">Canaux du groupe</div>
+                <ul className="communication-tab__channel-list">
+                  {teamChannels.map((channel) => (
+                    <ChannelRow
+                      key={channel.id}
+                      channel={channel}
+                      canArchive={canManageTeam}
+                      onArchive={handleArchiveChannel}
+                    />
+                  ))}
+                  {teamChannels.length === 0 && (
+                    <li className="communication-tab__empty">
+                      Aucun canal partagé avec les autres projets de ce groupe.
+                    </li>
+                  )}
+                </ul>
+              </>
+            )}
+
+            {teamChannels.length > 0 && <div className="communication-tab__channel-group-label">Canaux du projet</div>}
+            <ul className="communication-tab__channel-list">
+              {projectChannels.map((channel) => (
+                <ChannelRow key={channel.id} channel={channel} canArchive={canManage} onArchive={handleArchiveChannel} />
+              ))}
+              {projectChannels.length === 0 && teamChannels.length > 0 && (
+                <li className="communication-tab__empty">Aucun canal propre à ce projet.</li>
+              )}
+              {activeChannels.length === 0 && <li className="communication-tab__empty">Aucun canal configuré.</li>}
+            </ul>
+          </>
         )}
 
-        {canManage && (
+        {canManageAnyChannel && (
           <div className="communication-tab__form">
+            {canManage && canManageTeam && (
+              <div className="communication-tab__field">
+                <span>Portée du canal</span>
+                <div className="communication-tab__scope-toggle">
+                  <button
+                    type="button"
+                    className={`communication-tab__scope-btn${effectiveChannelScope === "project" ? " communication-tab__scope-btn--active" : ""}`}
+                    onClick={() => setChannelScope("project")}
+                  >
+                    Ce projet uniquement
+                  </button>
+                  <button
+                    type="button"
+                    className={`communication-tab__scope-btn${effectiveChannelScope === "team" ? " communication-tab__scope-btn--active" : ""}`}
+                    onClick={() => setChannelScope("team")}
+                  >
+                    Tout le groupe
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="communication-tab__form-row">
               <label className="communication-tab__field">
                 <span>Libellé</span>
@@ -568,5 +618,44 @@ export function CommunicationTab({ project }: CommunicationTabProps) {
         )}
       </section>
     </div>
+  );
+}
+
+interface ChannelRowProps {
+  channel: CommunicationChannel;
+  canArchive: boolean;
+  onArchive: (channel: CommunicationChannel) => void;
+}
+
+function ChannelRow({ channel, canArchive, onArchive }: ChannelRowProps) {
+  return (
+    <li className="communication-tab__channel">
+      {channel.scope === "team" ? (
+        <Users size={15} strokeWidth={1.75} aria-hidden="true" />
+      ) : (
+        <MessagesSquare size={15} strokeWidth={1.75} aria-hidden="true" />
+      )}
+      <div className="communication-tab__channel-info">
+        <span className="communication-tab__channel-label">{channel.label}</span>
+        <span className="communication-tab__channel-target">
+          {channel.teams_channel_name || "Canal non renseigné"}
+          {channel.teams_channel_id ? ` · ${channel.teams_channel_id}` : ""}
+        </span>
+      </div>
+      {Object.keys(channel.payload_template ?? {}).length > 0 && (
+        <StatusBadge label="Payload personnalisé" tone="neutral" />
+      )}
+      {channel.notify_incident_created && <StatusBadge label="Auto à la création d'incident" tone="neutral" />}
+      {canArchive && (
+        <button
+          type="button"
+          className="communication-tab__icon-btn"
+          onClick={() => onArchive(channel)}
+          aria-label={`Archiver ${channel.label}`}
+        >
+          <Archive size={14} strokeWidth={1.75} aria-hidden="true" />
+        </button>
+      )}
+    </li>
   );
 }

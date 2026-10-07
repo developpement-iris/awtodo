@@ -28,10 +28,16 @@ class O365ConnectionSerializer(serializers.ModelSerializer):
 
 
 class CommunicationChannelSerializer(serializers.ModelSerializer):
+    # "team" si rattaché à un groupe (hérité par tous ses projets), "project"
+    # sinon — le frontend s'en sert pour regrouper l'affichage sous deux
+    # sections distinctes (session du 2026-10-07).
+    scope = serializers.SerializerMethodField()
+
     class Meta:
         model = CommunicationChannel
         fields = [
             "id",
+            "scope",
             "label",
             "teams_channel_id",
             "teams_channel_name",
@@ -41,12 +47,17 @@ class CommunicationChannelSerializer(serializers.ModelSerializer):
             "status",
         ]
 
+    def get_scope(self, obj):
+        return "team" if obj.team_id else "project"
+
 
 class CommunicationChannelCreateSerializer(serializers.Serializer):
     label = serializers.CharField(max_length=150)
     teams_channel_id = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
     teams_channel_name = serializers.CharField(max_length=150, required=False, allow_blank=True, default="")
     teams_webhook_url = serializers.URLField(required=False, allow_blank=True, default="", max_length=1000)
+    # "project" (défaut) ou "team" — voir apps.communication.services.create_channel.
+    scope = serializers.ChoiceField(choices=["project", "team"], required=False, default="project")
     payload_template = serializers.JSONField(required=False, default=dict)
     notify_incident_created = serializers.BooleanField(required=False, default=False)
 

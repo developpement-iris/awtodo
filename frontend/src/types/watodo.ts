@@ -157,6 +157,10 @@ export interface ProjectPermissions {
   can_manage_project_planning: boolean;
   can_manage_project_communication: boolean;
   can_send_project_communication: boolean;
+  // Canaux au niveau groupe (session du 2026-10-07) — vrai si l'acteur est
+  // chef de projet d'UN projet du groupe (pas forcément de celui-ci), faux
+  // si le projet n'a pas de groupe (individuel).
+  can_manage_team_communication: boolean;
   // Historique d'activité (session du 2026-09-29) — réservé au chef de
   // projet, pas les membres/lecteurs.
   can_view_history: boolean;
@@ -199,6 +203,9 @@ export type CommunicationPayloadTemplate = Record<string, string | number | bool
 
 export interface CommunicationChannel {
   id: string;
+  // "team" = hérité du groupe (visible par tous ses projets, session du
+  // 2026-10-07) ; "project" = propre à ce seul projet.
+  scope: "team" | "project";
   label: string;
   teams_channel_id: string;
   teams_channel_name: string;

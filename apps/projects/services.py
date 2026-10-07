@@ -242,6 +242,25 @@ def _ensure_can_send_project_communication(actor, project):
     _require_contributor(actor, project)
 
 
+def _ensure_can_manage_team_communication(actor, project):
+    # Canaux de communication au niveau du GROUPE (session du 2026-10-07,
+    # retour direct : "configurer des canaux teams dans les groupes, qui
+    # redescendront dans les projets") — ouvert à tout chef de projet d'UN
+    # projet du groupe, pas réservé à celui de `project` précisément ni à
+    # l'"administrateur du groupe" (mécanisme différent, TeamMembership.role) :
+    # la config redescend vers tous les projets du groupe, n'importe lequel
+    # de leurs chefs de projet doit donc pouvoir la gérer.
+    _require_actor(actor)
+    if project.team_id is None:
+        raise ProjectValidationError("Ce projet n'appartient à aucun groupe.")
+    if not ProjectMembership.objects.filter(
+        project__team_id=project.team_id, user=actor, status="active", role="chef_de_projet"
+    ).exists():
+        raise ProjectPermissionError(
+            "Seul un chef de projet d'un projet de ce groupe peut configurer sa communication."
+        )
+
+
 def can_edit_spec(user, project):
     return _check(_ensure_can_edit_notes, user, project)
 
@@ -293,6 +312,10 @@ def can_send_project_communication(user, project):
     return _check(_ensure_can_send_project_communication, user, project)
 
 
+def can_manage_team_communication(user, project):
+    return _check(_ensure_can_manage_team_communication, user, project)
+
+
 def get_project_permissions(user, project):
     return {
         # `false` pour un membre `lecteur` : le frontend s'en sert pour masquer
@@ -312,6 +335,7 @@ def get_project_permissions(user, project):
         "can_manage_project_planning": can_manage_project_planning(user, project),
         "can_manage_project_communication": can_manage_project_communication(user, project),
         "can_send_project_communication": can_send_project_communication(user, project),
+        "can_manage_team_communication": can_manage_team_communication(user, project),
         # Historique d'activité (session du 2026-09-29) — réservé au chef de
         # projet, comme demandé explicitement (pas les membres/lecteurs).
         "can_view_history": is_project_manager(user, project),

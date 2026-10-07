@@ -36,12 +36,20 @@ class O365Connection(UUIDModel, TimeStampedModel):
 
 
 class CommunicationChannel(UUIDModel, TimeStampedModel, StatusLifecycleModel):
-    """Un canal Teams configuré sur un projet, relié à un flow Power
-    Automate ("Quand une requête HTTP est reçue" → poste dans le canal).
-    `teams_channel_id`/`teams_channel_name` sont transmis dans le payload
-    envoyé au flow pour qu'il route vers le bon canal Teams avec certitude,
-    même si plusieurs canaux Awtodo partagent le même flow/URL de
-    déclenchement."""
+    """Un canal Teams relié à un flow Power Automate ("Quand une requête
+    HTTP est reçue" → poste dans le canal). `teams_channel_id`/
+    `teams_channel_name` sont transmis dans le payload envoyé au flow pour
+    qu'il route vers le bon canal Teams avec certitude, même si plusieurs
+    canaux Awtodo partagent le même flow/URL de déclenchement.
+
+    Portée **projet OU groupe**, jamais les deux (session du 2026-10-07,
+    retour direct : recréer un canal par projet n'a pas de sens quand
+    plusieurs projets partagent le même groupe) — exactement un des deux
+    champs `project`/`team` est renseigné, validé en service-layer
+    (`_validate_scope`), pas en contrainte DB, même doctrine que
+    `Incident.project`/`.team`. Un canal `team` est visible et utilisable
+    par tous les projets de ce groupe (`list_channels`) ; un canal `project`
+    reste propre à un seul projet, en plus des canaux hérités du groupe."""
 
     STATUS_CHOICES = [
         ("active", "Actif"),
@@ -50,7 +58,10 @@ class CommunicationChannel(UUIDModel, TimeStampedModel, StatusLifecycleModel):
     ACTIVE_STATUSES = frozenset({"active"})
 
     project = models.ForeignKey(
-        "projects.Project", on_delete=models.PROTECT, related_name="communication_channels"
+        "projects.Project", null=True, blank=True, on_delete=models.PROTECT, related_name="communication_channels"
+    )
+    team = models.ForeignKey(
+        "accounts.Team", null=True, blank=True, on_delete=models.PROTECT, related_name="communication_channels"
     )
     label = models.CharField(max_length=150)
     # Identifiant et nom du canal Teams cible côté Microsoft — transmis au

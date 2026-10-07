@@ -1152,6 +1152,7 @@ export function createProjectCommunicationChannel(
     teams_channel_id: string;
     teams_channel_name: string;
     teams_webhook_url: string;
+    scope?: "project" | "team";
     payload_template?: CommunicationPayloadTemplate;
     notify_incident_created?: boolean;
   },

@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 from django.test import override_settings
 from rest_framework.test import APITestCase
 
-from apps.accounts.models import Organisation, User
+from apps.accounts.models import Organisation, Team, User
 from apps.communication.models import CommunicationChannel, CommunicationDelivery, CommunicationMessage, O365Connection
 from apps.incidents.services import create_incident
 from apps.projects.models import Project, ProjectMembership, ProjectVersion
@@ -304,3 +304,121 @@ class CommunicationApiTests(APITestCase):
         )
         self.assertEqual(incident.author_name, "Client X")
         self.assertEqual(incident.author_email, "client@ext.io")
+
+
+# --- Canaux au niveau groupe (session du 2026-10-07) -----------------------
+
+
+@override_settings(
+    DEBUG=True,
+    REST_FRAMEWORK={
+        "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
+        "DEFAULT_AUTHENTICATION_CLASSES": ["apps.accounts.authentication.DebugUserIdAuthentication"],
+    },
+)
+class TeamScopedChannelApiTests(APITestCase):
+    def setUp(self):
+        self.org = Organisation.objects.create(name="Org")
+        self.team = Team.objects.create(name="Groupe", organisation=self.org)
+        # Deux projets collaboratifs du même groupe, chacun avec son propre
+        # chef de projet — vérifie que la règle "chef de projet d'UN projet
+        # du groupe" n'est pas limitée au chef du projet courant.
+        self.manager_a = User.objects.create(username="cp_a", organisation=self.org)
+        self.manager_b = User.objects.create(username="cp_b", organisation=self.org)
+        self.member = User.objects.create(username="mbr", organisation=self.org)
+        self.outsider = User.objects.create(username="out", organisation=self.org)
+        self.project_a = Project.objects.create(name="A", organisation=self.org, team=self.team, project_type="collaboratif")
+        self.project_b = Project.objects.create(name="B", organisation=self.org, team=self.team, project_type="collaboratif")
+        self.lone_project = Project.objects.create(name="Seul", organisation=self.org)  # pas de groupe
+        ProjectMembership.objects.create(project=self.project_a, user=self.manager_a, role="chef_de_projet")
+        ProjectMembership.objects.create(project=self.project_a, user=self.member, role="membre")
+        ProjectMembership.objects.create(project=self.project_b, user=self.manager_b, role="chef_de_projet")
+        # `manager_b` est aussi simple membre (pas chef) de `project_a` — un
+        # scénario réaliste pour tester que le droit "canal groupe" vient de
+        # son rôle de chef de projet ailleurs dans le groupe (project_b), pas
+        # de son rôle sur le projet dont on ouvre l'onglet (project_a, où il
+        # n'est que contributeur).
+        ProjectMembership.objects.create(project=self.project_a, user=self.manager_b, role="membre")
+        ProjectMembership.objects.create(project=self.lone_project, user=self.outsider, role="chef_de_projet")
+
+    def _as(self, user):
+        self.client.credentials(HTTP_X_DEBUG_USER_ID=str(user.id))
+
+    def _channels_url(self, project):
+        return f"/api/v1/communication/projects/{project.id}/channels/"
+
+    def _payload(self, **overrides):
+        payload = {
+            "label": "Groupe Teams",
+            "teams_channel_id": "19:abc@thread.tacv2",
+            "teams_channel_name": "#groupe",
+            "teams_webhook_url": "https://prod-00.westeurope.logic.azure.com/x",
+            "scope": "team",
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_manager_of_another_project_in_the_group_can_create_team_channel(self):
+        # Chef de projet de B, crée un canal groupe depuis l'onglet de A.
+        self._as(self.manager_b)
+        r = self.client.post(self._channels_url(self.project_a), self._payload(), format="json")
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(r.data["scope"], "team")
+        channel = CommunicationChannel.objects.get()
+        self.assertIsNone(channel.project_id)
+        self.assertEqual(channel.team_id, self.team.id)
+
+    def test_member_cannot_create_team_channel(self):
+        self._as(self.member)
+        r = self.client.post(self._channels_url(self.project_a), self._payload(), format="json")
+        self.assertEqual(r.status_code, 403)
+
+    def test_individual_project_without_team_rejects_team_scope(self):
+        self._as(self.outsider)
+        r = self.client.post(self._channels_url(self.lone_project), self._payload(), format="json")
+        self.assertEqual(r.status_code, 400)
+
+    def test_team_channel_visible_from_every_project_of_the_group(self):
+        self._as(self.manager_a)
+        self.client.post(self._channels_url(self.project_a), self._payload(), format="json")
+        r_a = self.client.get(self._channels_url(self.project_a))
+        self._as(self.manager_b)  # seul manager_b a accès à project_b
+        r_b = self.client.get(self._channels_url(self.project_b))
+        self.assertEqual(len(r_a.data), 1)
+        self.assertEqual(len(r_b.data), 1)
+        self.assertEqual(r_a.data[0]["id"], r_b.data[0]["id"])
+
+    def test_project_scoped_channel_not_visible_from_sibling_project(self):
+        self._as(self.manager_a)
+        self.client.post(self._channels_url(self.project_a), self._payload(scope="project"), format="json")
+        r_a = self.client.get(self._channels_url(self.project_a))
+        self._as(self.manager_b)  # seul manager_b a accès à project_b
+        r_b = self.client.get(self._channels_url(self.project_b))
+        self.assertEqual(len(r_a.data), 1)
+        self.assertEqual(len(r_b.data), 0)
+
+    def test_manager_of_sibling_project_can_archive_team_channel(self):
+        self._as(self.manager_a)
+        create_resp = self.client.post(self._channels_url(self.project_a), self._payload(), format="json")
+        channel_id = create_resp.data["id"]
+        self._as(self.manager_b)
+        r = self.client.delete(f"{self._channels_url(self.project_b)}{channel_id}/")
+        self.assertEqual(r.status_code, 204)
+        self.assertEqual(CommunicationChannel.all_objects.get(id=channel_id).status, "archived")
+
+    @patch("apps.communication.tasks.requests.post")
+    def test_compose_can_target_a_team_channel_from_sibling_project(self, mock_post):
+        mock_post.return_value = Mock(status_code=200, text="ok")
+        self._as(self.manager_a)
+        create_resp = self.client.post(self._channels_url(self.project_a), self._payload(), format="json")
+        channel_id = create_resp.data["id"]
+        self._as(self.manager_b)
+        with self.captureOnCommitCallbacks(execute=True):
+            r = self.client.post(
+                f"/api/v1/communication/projects/{self.project_b.id}/messages/",
+                {"subject": "X", "body": "Y", "channel_ids": [channel_id]},
+                format="json",
+            )
+        self.assertEqual(r.status_code, 201)
+        delivery = CommunicationDelivery.objects.get()
+        self.assertEqual(delivery.status, "envoye")

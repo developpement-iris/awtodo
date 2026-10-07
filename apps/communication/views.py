@@ -1,3 +1,4 @@
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
@@ -77,7 +78,13 @@ class ProjectCommunicationViewSet(_CommunicationExceptionMixin, viewsets.Generic
     @action(detail=True, methods=["patch", "delete"], url_path=r"channels/(?P<channel_id>[^/.]+)")
     def channel_detail(self, request, project_id=None, channel_id=None):
         project = self._project(request, project_id)
-        channel = get_object_or_404(CommunicationChannel.all_objects, id=channel_id, project=project)
+        # Un canal accessible depuis ce projet est soit le sien, soit celui
+        # de son groupe (hérité, session du 2026-10-07) — `Q(team=None)`
+        # élargirait trop si on l'ajoutait sans condition, d'où le `if`.
+        scope_query = Q(project=project)
+        if project.team_id:
+            scope_query |= Q(team_id=project.team_id)
+        channel = get_object_or_404(CommunicationChannel.all_objects.filter(scope_query), id=channel_id)
         if request.method == "DELETE":
             services.archive_channel(actor=request.user, channel=channel)
             return Response(status=204)
