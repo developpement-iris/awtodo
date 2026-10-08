@@ -438,6 +438,7 @@ export interface TaskPermissions {
 export interface Task {
   id: string;
   project: string;
+  project_name: string;
   version: string;
   version_label: string;
   title: string;

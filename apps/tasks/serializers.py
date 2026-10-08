@@ -18,12 +18,17 @@ class TaskSerializer(serializers.ModelSerializer):
     assignee = UserSerializer(read_only=True)
     permissions = serializers.SerializerMethodField()
     version_label = serializers.CharField(source="version.label", read_only=True)
+    # Regroupement par projet du panneau "À planifier" (session du 2026-10-08)
+    # — déjà `select_related("project")` sur les querysets de liste, aucun
+    # N+1 introduit.
+    project_name = serializers.CharField(source="project.name", read_only=True)
 
     class Meta:
         model = Task
         fields = [
             "id",
             "project",
+            "project_name",
             "version",
             "version_label",
             "title",

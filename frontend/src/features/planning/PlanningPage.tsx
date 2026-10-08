@@ -111,6 +111,23 @@ interface PlanningPageProps {
   onNavigate?: (view: ViewName, options?: { taskId?: string; incidentId?: string }) => void;
 }
 
+// Regroupement par projet du panneau "À planifier" (session du 2026-10-08,
+// retour direct : "possible de faire un regroupement par projet ? ce serait
+// plus simple [...] pour s'y retrouver") — trié par nom de projet, groupes
+// repliés par défaut (cliquer un projet déroule/rentre sa liste).
+function groupTasksByProject(tasks: Task[]): { projectId: string; projectName: string; tasks: Task[] }[] {
+  const groups = new Map<string, { projectId: string; projectName: string; tasks: Task[] }>();
+  for (const task of tasks) {
+    const group = groups.get(task.project);
+    if (group) {
+      group.tasks.push(task);
+    } else {
+      groups.set(task.project, { projectId: task.project, projectName: task.project_name, tasks: [task] });
+    }
+  }
+  return Array.from(groups.values()).sort((a, b) => a.projectName.localeCompare(b.projectName, "fr"));
+}
+
 export function PlanningPage({ onNavigate }: PlanningPageProps) {
   const { currentUser, users } = useCurrentUser();
   const { showToast } = useToast();
@@ -288,6 +305,8 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
     }
     return map;
   }, [bundle]);
+
+  const tasksByProject = useMemo(() => groupTasksByProject(tasks), [tasks]);
 
   function toggleCalendar(id: string) {
     setHiddenCalendars((current) => {
@@ -532,17 +551,31 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
                     {tasks.length > 0 && <span className="planning-unsched__accordion-count">{tasks.length}</span>}
                   </AccordionTrigger>
                   <AccordionContent>
-                    <ul className="planning-unsched__list">
-                      {tasks.map((task) => (
-                        <UnscheduledItem
-                          key={task.id}
-                          kind="task"
-                          task={task}
-                          blockCount={blockCountByTask.get(task.id) ?? 0}
-                        />
-                      ))}
-                      {tasks.length === 0 && <li className="planning-side__empty">Aucune tâche à planifier.</li>}
-                    </ul>
+                    {tasks.length === 0 && <p className="planning-side__empty">Aucune tâche à planifier.</p>}
+                    {tasks.length > 0 && (
+                      <Accordion type="multiple" className="planning-unsched__projects">
+                        {tasksByProject.map((group) => (
+                          <AccordionItem key={group.projectId} value={group.projectId}>
+                            <AccordionTrigger className="planning-unsched__project-trigger">
+                              {group.projectName}
+                              <span className="planning-unsched__accordion-count">{group.tasks.length}</span>
+                            </AccordionTrigger>
+                            <AccordionContent>
+                              <ul className="planning-unsched__list">
+                                {group.tasks.map((task) => (
+                                  <UnscheduledItem
+                                    key={task.id}
+                                    kind="task"
+                                    task={task}
+                                    blockCount={blockCountByTask.get(task.id) ?? 0}
+                                  />
+                                ))}
+                              </ul>
+                            </AccordionContent>
+                          </AccordionItem>
+                        ))}
+                      </Accordion>
+                    )}
                   </AccordionContent>
                 </AccordionItem>
                 <AccordionItem value="incidents">

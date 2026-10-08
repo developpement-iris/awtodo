@@ -37,6 +37,19 @@ class TaskListApiTests(APITestCase):
         titles = [item["title"] for item in response.json()]
         self.assertEqual(titles, [task.title])
 
+    def test_list_exposes_project_name_for_grouping(self):
+        # Regroupement par projet du panneau "À planifier" (session du
+        # 2026-10-08) — le frontend a besoin du nom, pas seulement de l'id.
+        project = Project.objects.create(name="Projet Groupé")
+        version = ProjectVersion.objects.create(project=project, label="v1", is_current=True)
+        member = User.objects.create_user(username="member-grouping")
+        ProjectMembership.objects.create(project=project, user=member, role="membre")
+        Task.objects.create(project=project, version=version, title="T", task_type="correction")
+
+        response = self.client.get("/api/v1/tasks/", {"project": str(project.id)}, **self.as_user(member))
+
+        self.assertEqual(response.json()[0]["project_name"], "Projet Groupé")
+
     def test_list_filtered_by_team_returns_only_tasks_assigned_to_team_members(self):
         project = Project.objects.create(name="Projet Test")
         version = ProjectVersion.objects.create(project=project, label="v1", is_current=True)
