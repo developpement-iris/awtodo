@@ -336,3 +336,81 @@ class TaskLifecycleApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, 404)
+
+    def test_member_updates_task_type(self):
+        task = self.make_task("disponible")
+
+        response = self.client.post(
+            f"/api/v1/tasks/{task.id}/update-type/",
+            {"task_type": "evolution"},
+            **self.as_user(self.member),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["task_type"], "evolution")
+
+    def test_update_task_type_rejects_invalid_value(self):
+        task = self.make_task("disponible")
+
+        response = self.client.post(
+            f"/api/v1/tasks/{task.id}/update-type/",
+            {"task_type": "pas-un-type"},
+            **self.as_user(self.member),
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_member_updates_task_priority(self):
+        task = self.make_task("disponible")
+
+        response = self.client.post(
+            f"/api/v1/tasks/{task.id}/update-priority/",
+            {"priority": "critique"},
+            **self.as_user(self.member),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["priority"], "critique")
+
+    def test_update_task_priority_rejects_invalid_value(self):
+        task = self.make_task("disponible")
+
+        response = self.client.post(
+            f"/api/v1/tasks/{task.id}/update-priority/",
+            {"priority": "pas-une-priorite"},
+            **self.as_user(self.member),
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_manager_reactivates_cancelled_task(self):
+        task = self.make_task("disponible")
+        self.client.post(
+            f"/api/v1/tasks/{task.id}/cancel/",
+            {"cancellation_reason": "Besoin abandonné"},
+            **self.as_user(self.manager),
+        )
+
+        response = self.client.post(f"/api/v1/tasks/{task.id}/reactivate/", **self.as_user(self.manager))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "disponible")
+
+    def test_member_cannot_reactivate_task(self):
+        task = self.make_task("disponible")
+        self.client.post(
+            f"/api/v1/tasks/{task.id}/cancel/",
+            {"cancellation_reason": "Besoin abandonné"},
+            **self.as_user(self.manager),
+        )
+
+        response = self.client.post(f"/api/v1/tasks/{task.id}/reactivate/", **self.as_user(self.member))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_cannot_reactivate_non_cancelled_task(self):
+        task = self.make_task("disponible")
+
+        response = self.client.post(f"/api/v1/tasks/{task.id}/reactivate/", **self.as_user(self.manager))
+
+        self.assertEqual(response.status_code, 400)

@@ -11,6 +11,20 @@ import { auditFieldLabel } from "../../lib/auditFieldLabels";
 import type { AuditLogEntry, Task, TaskComment, User } from "../../types/watodo";
 import "./TaskDrawer.css";
 
+const TASK_TYPE_OPTIONS: { value: Task["task_type"]; label: string }[] = [
+  { value: "correction", label: "Correction" },
+  { value: "ajout", label: "Ajout" },
+  { value: "evolution", label: "Évolution" },
+  { value: "test", label: "Test" },
+];
+
+const PRIORITY_OPTIONS: { value: Task["priority"]; label: string }[] = [
+  { value: "basse", label: "Basse" },
+  { value: "moyenne", label: "Moyenne" },
+  { value: "haute", label: "Haute" },
+  { value: "critique", label: "Critique" },
+];
+
 function displayName(user: User): string {
   return `${user.first_name} ${user.last_name}`.trim() || user.username;
 }
@@ -26,12 +40,15 @@ interface TaskDrawerProps {
   onValidate: (task: Task) => void;
   onReject: (task: Task) => void;
   onCancel: (task: Task) => void;
+  onReactivate: (task: Task) => void;
   onClaim: (task: Task) => void;
   onAssign: (task: Task, userId: string) => void;
   onStart: (task: Task) => void;
   onComplete: (task: Task) => void;
   onSaveEstimatedHours: (task: Task, value: string | null) => void;
   onSaveDeadline: (task: Task, value: string | null) => void;
+  onSaveType: (task: Task, value: Task["task_type"]) => void;
+  onSavePriority: (task: Task, value: Task["priority"]) => void;
   auditLog: AuditLogEntry[];
   comments: TaskComment[] | null;
   commentsError: string | null;
@@ -47,12 +64,15 @@ export function TaskDrawer({
   onValidate,
   onReject,
   onCancel,
+  onReactivate,
   onClaim,
   onAssign,
   onStart,
   onComplete,
   onSaveEstimatedHours,
   onSaveDeadline,
+  onSaveType,
+  onSavePriority,
   auditLog,
   comments,
   commentsError,
@@ -92,9 +112,33 @@ export function TaskDrawer({
         </div>
 
         <div className="task-drawer__badges">
-          <TypeBadge type={task.task_type} label={task.task_type_display} />
+          {task.permissions.can_edit_type ? (
+            <span className="task-drawer__badge-select">
+              <Combobox
+                options={TASK_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                value={task.task_type}
+                onChange={(value) => onSaveType(task, value as Task["task_type"])}
+                disabled={pending}
+                clearable={false}
+              />
+            </span>
+          ) : (
+            <TypeBadge type={task.task_type} label={task.task_type_display} />
+          )}
           <StatusBadge label={task.status_display} tone={statusTone(task.status)} icon={taskStatusIcon(task.status)} />
-          <StatusBadge label={task.priority_display} tone={priorityTone(task.priority)} />
+          {task.permissions.can_edit_priority ? (
+            <span className="task-drawer__badge-select">
+              <Combobox
+                options={PRIORITY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                value={task.priority}
+                onChange={(value) => onSavePriority(task, value as Task["priority"])}
+                disabled={pending}
+                clearable={false}
+              />
+            </span>
+          ) : (
+            <StatusBadge label={task.priority_display} tone={priorityTone(task.priority)} />
+          )}
         </div>
 
         {task.external_reference_id && (
@@ -133,6 +177,17 @@ export function TaskDrawer({
               whileTap={{ scale: 0.96 }}
             >
               Annuler
+            </motion.button>
+          )}
+          {task.permissions.can_reactivate && (
+            <motion.button
+              type="button"
+              className="task-drawer__action"
+              onClick={() => onReactivate(task)}
+              disabled={pending}
+              whileTap={{ scale: 0.96 }}
+            >
+              Réactiver
             </motion.button>
           )}
           {task.permissions.can_claim && (

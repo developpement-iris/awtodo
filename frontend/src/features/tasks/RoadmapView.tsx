@@ -1,6 +1,14 @@
 import { AlertTriangle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { addTaskComment, getTask, getTasks, updateTaskDeadline, updateTaskEstimatedHours } from "../../api/client";
+import {
+  addTaskComment,
+  getTask,
+  getTasks,
+  updateTaskDeadline,
+  updateTaskEstimatedHours,
+  updateTaskPriority,
+  updateTaskType,
+} from "../../api/client";
 import { CancelDialog } from "../../components/CancelDialog";
 import { LoadingTransition } from "../../components/LoadingTransition";
 import { SkeletonRows } from "../../components/Skeleton";
@@ -172,6 +180,7 @@ export function RoadmapView({ project, versionId }: RoadmapViewProps) {
     handleStart,
     handleReject,
     handleCancel,
+    handleReactivate,
     handleComplete,
   } = useTaskTransitions(updateTaskLocally, removeTaskLocally, showToast);
 
@@ -190,6 +199,24 @@ export function RoadmapView({ project, versionId }: RoadmapViewProps) {
       updateTaskLocally(await updateTaskDeadline(task.id, value));
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "La mise à jour de l'échéance a échoué.");
+    }
+  }
+
+  async function handleSaveType(task: Task, value: Task["task_type"]) {
+    setActionError(null);
+    try {
+      updateTaskLocally(await updateTaskType(task.id, value));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "La mise à jour du type a échoué.");
+    }
+  }
+
+  async function handleSavePriority(task: Task, value: Task["priority"]) {
+    setActionError(null);
+    try {
+      updateTaskLocally(await updateTaskPriority(task.id, value));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "La mise à jour de la priorité a échoué.");
     }
   }
 
@@ -329,12 +356,15 @@ export function RoadmapView({ project, versionId }: RoadmapViewProps) {
           onValidate={handleValidate}
           onReject={setRejectingTask}
           onCancel={setCancellingTask}
+          onReactivate={handleReactivate}
           onClaim={handleClaim}
           onAssign={handleAssign}
           onStart={handleStart}
           onComplete={setCompletingTask}
           onSaveEstimatedHours={handleSaveEstimatedHours}
           onSaveDeadline={handleSaveDeadline}
+          onSaveType={handleSaveType}
+          onSavePriority={handleSavePriority}
           comments={comments}
           commentsError={commentsError}
           commentSubmitting={commentSubmitting}

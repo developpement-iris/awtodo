@@ -1,5 +1,14 @@
 import { useState } from "react";
-import { assignTask, cancelTask, claimTask, completeTask, rejectTask, startTask, validateTask } from "../../api/client";
+import {
+  assignTask,
+  cancelTask,
+  claimTask,
+  completeTask,
+  reactivateTask,
+  rejectTask,
+  startTask,
+  validateTask,
+} from "../../api/client";
 import type { Task } from "../../types/watodo";
 
 export function useTaskTransitions(
@@ -97,6 +106,23 @@ export function useTaskTransitions(
     }
   }
 
+  async function handleReactivate(task: Task) {
+    setActionError(null);
+    setPendingTaskId(task.id);
+    try {
+      // Une vue filtrée par défaut sur les statuts actifs ne montre une
+      // tâche annulée qu'en demandant explicitement ce statut — une fois
+      // réactivée, elle en sort, symétrique à `handleCancel`/`onRemoved`.
+      await reactivateTask(task.id);
+      onRemoved(task.id);
+      onSuccess?.("Tâche réactivée.");
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "La réactivation a échoué.");
+    } finally {
+      setPendingTaskId(null);
+    }
+  }
+
   async function handleComplete(timeSpent: string) {
     if (!completingTask) return;
     const task = completingTask;
@@ -131,6 +157,7 @@ export function useTaskTransitions(
     handleStart,
     handleReject,
     handleCancel,
+    handleReactivate,
     handleComplete,
   };
 }

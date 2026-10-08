@@ -600,6 +600,12 @@ export function cancelTask(taskId: string, cancellationReason: string): Promise<
   return postJson<Task>(`/tasks/${taskId}/cancel/`, { cancellation_reason: cancellationReason });
 }
 
+// Fait revenir une tâche annulée dans le cycle actif (`permissions.can_reactivate`,
+// réservé au chef de projet, même autorité que l'annulation).
+export function reactivateTask(taskId: string): Promise<Task> {
+  return postJson<Task>(`/tasks/${taskId}/reactivate/`, {});
+}
+
 export function claimTask(taskId: string): Promise<Task> {
   return postJson<Task>(`/tasks/${taskId}/claim/`, {});
 }
@@ -640,6 +646,16 @@ export function updateTaskEstimatedHours(taskId: string, estimatedHours: string 
 // `deadline` au format "YYYY-MM-DD", ou `null` pour supprimer l'échéance.
 export function updateTaskDeadline(taskId: string, deadline: string | null): Promise<Task> {
   return postJson<Task>(`/tasks/${taskId}/update-deadline/`, { deadline });
+}
+
+// Classification — ouvert à tout membre du projet, même garde que le
+// titre/la description (`permissions.can_edit_type`/`can_edit_priority`).
+export function updateTaskType(taskId: string, taskType: Task["task_type"]): Promise<Task> {
+  return postJson<Task>(`/tasks/${taskId}/update-type/`, { task_type: taskType });
+}
+
+export function updateTaskPriority(taskId: string, priority: Task["priority"]): Promise<Task> {
+  return postJson<Task>(`/tasks/${taskId}/update-priority/`, { priority });
 }
 
 // Fiche utilisateur (écran Administration > Membres) — voir

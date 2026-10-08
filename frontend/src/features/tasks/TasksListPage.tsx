@@ -10,6 +10,8 @@ import {
   updateTaskDeadline,
   updateTaskDescription,
   updateTaskEstimatedHours,
+  updateTaskPriority,
+  updateTaskType,
 } from "../../api/client";
 import { CancelDialog } from "../../components/CancelDialog";
 import { ColumnPicker, type ColumnDef } from "../../components/ColumnPicker";
@@ -303,6 +305,7 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
     handleStart,
     handleReject,
     handleCancel,
+    handleReactivate,
     handleComplete,
   } = useTaskTransitions(updateTaskLocally, removeTaskLocally, showToast);
 
@@ -339,6 +342,24 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
       updateTaskLocally(await updateTaskDeadline(task.id, value));
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "La mise à jour de l'échéance a échoué.");
+    }
+  }
+
+  async function handleSaveType(task: Task, value: Task["task_type"]) {
+    setActionError(null);
+    try {
+      updateTaskLocally(await updateTaskType(task.id, value));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "La mise à jour du type a échoué.");
+    }
+  }
+
+  async function handleSavePriority(task: Task, value: Task["priority"]) {
+    setActionError(null);
+    try {
+      updateTaskLocally(await updateTaskPriority(task.id, value));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "La mise à jour de la priorité a échoué.");
     }
   }
 
@@ -564,6 +585,7 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
                               onValidate={handleValidate}
                               onReject={setRejectingTask}
                               onCancel={setCancellingTask}
+                              onReactivate={handleReactivate}
                               onClaim={handleClaim}
                               onAssign={handleAssign}
                               onStart={handleStart}
@@ -571,6 +593,8 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
                               onSaveDescription={handleSaveDescription}
                               onSaveEstimatedHours={handleSaveEstimatedHours}
                               onSaveDeadline={handleSaveDeadline}
+                              onSaveType={handleSaveType}
+                              onSavePriority={handleSavePriority}
                               comments={comments}
                               commentsError={commentsError}
                               commentSubmitting={commentSubmitting}

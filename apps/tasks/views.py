@@ -33,12 +33,15 @@ from .services import (
     get_global_task_stats,
     get_project_task_insights,
     get_project_user_stats,
+    reactivate_task,
     reject_task,
     rename_task,
     start_task,
     update_task_deadline,
     update_task_description,
     update_task_estimated_hours,
+    update_task_priority,
+    update_task_type,
     validate_task,
 )
 
@@ -213,6 +216,32 @@ class TaskViewSet(ListOnlyFilterMixin, mixins.ListModelMixin, mixins.RetrieveMod
 
         return Response(self.get_serializer(task).data)
 
+    @action(detail=True, methods=["post"], url_path="update-type")
+    def update_type(self, request, pk=None):
+        task = self.get_object()
+
+        try:
+            update_task_type(actor=request.user, task=task, task_type=request.data.get("task_type"))
+        except TaskPermissionError as exc:
+            return Response({"detail": str(exc)}, status=403)
+        except InvalidTransitionError as exc:
+            return Response({"detail": str(exc)}, status=400)
+
+        return Response(self.get_serializer(task).data)
+
+    @action(detail=True, methods=["post"], url_path="update-priority")
+    def update_priority(self, request, pk=None):
+        task = self.get_object()
+
+        try:
+            update_task_priority(actor=request.user, task=task, priority=request.data.get("priority"))
+        except TaskPermissionError as exc:
+            return Response({"detail": str(exc)}, status=403)
+        except InvalidTransitionError as exc:
+            return Response({"detail": str(exc)}, status=400)
+
+        return Response(self.get_serializer(task).data)
+
     @action(detail=True, methods=["post"])
     def validate(self, request, pk=None):
         task = self.get_object()
@@ -256,6 +285,19 @@ class TaskViewSet(ListOnlyFilterMixin, mixins.ListModelMixin, mixins.RetrieveMod
                 task=task,
                 cancellation_reason=request.data.get("cancellation_reason"),
             )
+        except TaskPermissionError as exc:
+            return Response({"detail": str(exc)}, status=403)
+        except InvalidTransitionError as exc:
+            return Response({"detail": str(exc)}, status=400)
+
+        return Response(self.get_serializer(task).data)
+
+    @action(detail=True, methods=["post"])
+    def reactivate(self, request, pk=None):
+        task = self.get_object()
+
+        try:
+            reactivate_task(actor=request.user, task=task)
         except TaskPermissionError as exc:
             return Response({"detail": str(exc)}, status=403)
         except InvalidTransitionError as exc:

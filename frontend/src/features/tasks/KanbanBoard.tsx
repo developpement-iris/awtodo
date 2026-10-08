@@ -16,6 +16,8 @@ import {
   renameTask,
   updateTaskDeadline,
   updateTaskEstimatedHours,
+  updateTaskPriority,
+  updateTaskType,
   type TaskCreatePayload,
 } from "../../api/client";
 import { CancelDialog } from "../../components/CancelDialog";
@@ -191,6 +193,7 @@ export function KanbanBoard({ project, versionId }: KanbanBoardProps) {
     handleStart,
     handleReject,
     handleCancel,
+    handleReactivate,
     handleComplete,
   } = useTaskTransitions(updateTaskLocally, removeTaskLocally, showToast);
 
@@ -243,6 +246,24 @@ export function KanbanBoard({ project, versionId }: KanbanBoardProps) {
       updateTaskLocally(await updateTaskDeadline(task.id, value));
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "La mise à jour de l'échéance a échoué.");
+    }
+  }
+
+  async function handleSaveType(task: Task, value: Task["task_type"]) {
+    setActionError(null);
+    try {
+      updateTaskLocally(await updateTaskType(task.id, value));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "La mise à jour du type a échoué.");
+    }
+  }
+
+  async function handleSavePriority(task: Task, value: Task["priority"]) {
+    setActionError(null);
+    try {
+      updateTaskLocally(await updateTaskPriority(task.id, value));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "La mise à jour de la priorité a échoué.");
     }
   }
 
@@ -337,12 +358,15 @@ export function KanbanBoard({ project, versionId }: KanbanBoardProps) {
           onValidate={handleValidate}
           onReject={setRejectingTask}
           onCancel={setCancellingTask}
+          onReactivate={handleReactivate}
           onClaim={handleClaim}
           onAssign={handleAssign}
           onStart={handleStart}
           onComplete={setCompletingTask}
           onSaveEstimatedHours={handleSaveEstimatedHours}
           onSaveDeadline={handleSaveDeadline}
+          onSaveType={handleSaveType}
+          onSavePriority={handleSavePriority}
           comments={comments}
           commentsError={commentsError}
           commentSubmitting={commentSubmitting}

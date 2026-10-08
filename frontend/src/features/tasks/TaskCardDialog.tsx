@@ -8,6 +8,8 @@ import {
   updateTaskDeadline,
   updateTaskDescription,
   updateTaskEstimatedHours,
+  updateTaskPriority,
+  updateTaskType,
 } from "../../api/client";
 import { CancelDialog } from "../../components/CancelDialog";
 import type { Task, TaskDetail, User } from "../../types/watodo";
@@ -109,6 +111,7 @@ export function TaskCardDialog({ taskId, onClose, onChanged }: TaskCardDialogPro
     handleStart,
     handleReject,
     handleCancel,
+    handleReactivate,
     handleComplete,
   } = useTaskTransitions(updateTaskLocally, removeTaskLocally);
 
@@ -122,6 +125,14 @@ export function TaskCardDialog({ taskId, onClose, onChanged }: TaskCardDialogPro
 
   async function handleSaveDeadline(current: Task, value: string | null) {
     updateTaskLocally(await updateTaskDeadline(current.id, value));
+  }
+
+  async function handleSaveType(current: Task, value: Task["task_type"]) {
+    updateTaskLocally(await updateTaskType(current.id, value));
+  }
+
+  async function handleSavePriority(current: Task, value: Task["priority"]) {
+    updateTaskLocally(await updateTaskPriority(current.id, value));
   }
 
   async function handleAddComment(content: string) {
@@ -192,6 +203,7 @@ export function TaskCardDialog({ taskId, onClose, onChanged }: TaskCardDialogPro
                 onValidate={handleValidate}
                 onReject={setRejectingTask}
                 onCancel={setCancellingTask}
+                onReactivate={handleReactivate}
                 onClaim={handleClaim}
                 onAssign={handleAssign}
                 onStart={handleStart}
@@ -199,6 +211,8 @@ export function TaskCardDialog({ taskId, onClose, onChanged }: TaskCardDialogPro
                 onSaveDescription={handleSaveDescription}
                 onSaveEstimatedHours={handleSaveEstimatedHours}
                 onSaveDeadline={handleSaveDeadline}
+                onSaveType={handleSaveType}
+                onSavePriority={handleSavePriority}
                 comments={task.comments}
                 commentsError={commentsError}
                 commentSubmitting={commentSubmitting}

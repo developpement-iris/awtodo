@@ -11,10 +11,13 @@ from apps.tasks.services import (
     claim_task,
     complete_task,
     create_task,
+    reactivate_task,
     reject_task,
     rename_task,
     start_task,
     update_task_description,
+    update_task_priority,
+    update_task_type,
     validate_task,
 )
 
@@ -184,6 +187,86 @@ class CancelTaskTests(TaskServicesTestCase):
 
         with self.assertRaises(InvalidTransitionError):
             cancel_task(actor=self.manager, task=task, cancellation_reason="Trop tard")
+
+
+class ReactivateTaskTests(TaskServicesTestCase):
+    def test_manager_reactivates_unassigned_task_to_disponible(self):
+        task = self.make_task("disponible")
+        cancel_task(actor=self.manager, task=task, cancellation_reason="Besoin abandonné")
+
+        reactivate_task(actor=self.manager, task=task)
+
+        self.assertEqual(task.status, "disponible")
+
+    def test_manager_reactivates_assigned_task_to_assignee(self):
+        task = self.make_task("en_cours", assignee=self.member)
+        cancel_task(actor=self.manager, task=task, cancellation_reason="Besoin abandonné")
+
+        reactivate_task(actor=self.manager, task=task)
+
+        self.assertEqual(task.status, "assignee")
+        self.assertEqual(task.assignee, self.member)
+
+    def test_cancellation_reason_is_preserved_as_history(self):
+        task = self.make_task("disponible")
+        cancel_task(actor=self.manager, task=task, cancellation_reason="Besoin abandonné")
+
+        reactivate_task(actor=self.manager, task=task)
+
+        self.assertEqual(task.cancellation_reason, "Besoin abandonné")
+
+    def test_member_cannot_reactivate(self):
+        task = self.make_task("disponible")
+        cancel_task(actor=self.manager, task=task, cancellation_reason="Besoin abandonné")
+
+        with self.assertRaises(TaskPermissionError):
+            reactivate_task(actor=self.member, task=task)
+
+    def test_cannot_reactivate_non_cancelled_task(self):
+        task = self.make_task("disponible")
+
+        with self.assertRaises(InvalidTransitionError):
+            reactivate_task(actor=self.manager, task=task)
+
+
+class UpdateTaskTypeAndPriorityTests(TaskServicesTestCase):
+    def test_member_updates_type(self):
+        task = self.make_task("disponible")
+
+        update_task_type(actor=self.member, task=task, task_type="evolution")
+
+        self.assertEqual(task.task_type, "evolution")
+
+    def test_member_updates_priority(self):
+        task = self.make_task("disponible")
+
+        update_task_priority(actor=self.member, task=task, priority="critique")
+
+        self.assertEqual(task.priority, "critique")
+
+    def test_invalid_type_rejected(self):
+        task = self.make_task("disponible")
+
+        with self.assertRaises(InvalidTransitionError):
+            update_task_type(actor=self.member, task=task, task_type="pas-un-type")
+
+    def test_invalid_priority_rejected(self):
+        task = self.make_task("disponible")
+
+        with self.assertRaises(InvalidTransitionError):
+            update_task_priority(actor=self.member, task=task, priority="pas-une-priorite")
+
+    def test_outsider_cannot_update_type(self):
+        task = self.make_task("disponible")
+
+        with self.assertRaises(TaskPermissionError):
+            update_task_type(actor=self.outsider, task=task, task_type="evolution")
+
+    def test_outsider_cannot_update_priority(self):
+        task = self.make_task("disponible")
+
+        with self.assertRaises(TaskPermissionError):
+            update_task_priority(actor=self.outsider, task=task, priority="critique")
 
 
 class ClaimTaskTests(TaskServicesTestCase):

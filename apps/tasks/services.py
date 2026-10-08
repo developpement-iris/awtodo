@@ -114,6 +114,14 @@ def _ensure_can_cancel(actor, task):
         )
 
 
+def _ensure_can_reactivate(actor, task):
+    # Même autorité que l'annulation (chef de projet, `_ensure_can_cancel`) —
+    # revenir sur une décision de gestion reste une décision de gestion.
+    _require_manager(actor, task.project)
+    if task.status != "annulee":
+        raise InvalidTransitionError("Seule une tâche annulée peut être réactivée.")
+
+
 def _ensure_can_claim(actor, task):
     _require_member(actor, task.project)
     if task.status != "disponible":
@@ -163,6 +171,10 @@ def can_reject_task(user, task):
 
 def can_cancel_task(user, task):
     return _check(_ensure_can_cancel, user, task)
+
+
+def can_reactivate_task(user, task):
+    return _check(_ensure_can_reactivate, user, task)
 
 
 def can_claim_task(user, task):
@@ -395,10 +407,17 @@ def get_task_permissions(user, task):
         "can_rename": can_rename_task(user, task),
         "can_edit_description": can_rename_task(user, task),
         "can_edit_deadline": can_edit_deadline_task(user, task),
+        # Classification (type/priorité) — même garde que titre/description,
+        # ouverte à tout membre du projet (retour direct, session du
+        # 2026-10-08 : pouvoir "changer le type de tâche ainsi que sa
+        # priorité").
+        "can_edit_type": can_rename_task(user, task),
+        "can_edit_priority": can_rename_task(user, task),
         "can_comment": can_comment_task(user, task),
         "can_validate": can_validate_task(user, task),
         "can_reject": can_reject_task(user, task),
         "can_cancel": can_cancel_task(user, task),
+        "can_reactivate": can_reactivate_task(user, task),
         "can_claim": can_claim_task(user, task),
         "can_assign": can_assign_task(user, task),
         "can_start": can_start_task(user, task),
@@ -552,6 +571,30 @@ def update_task_estimated_hours(*, actor, task, estimated_hours):
     return task
 
 
+def update_task_type(*, actor, task, task_type):
+    # Même garde que le titre/la description : tout membre du projet
+    # (_ensure_can_rename), pas réservé au chef de projet.
+    _ensure_can_rename(actor, task)
+    if task_type not in dict(Task.TASK_TYPE_CHOICES):
+        raise InvalidTransitionError("Type de tâche invalide.")
+
+    with record_changes(task, actor=actor, project=task.project):
+        task.task_type = task_type
+        task.save()
+    return task
+
+
+def update_task_priority(*, actor, task, priority):
+    _ensure_can_rename(actor, task)
+    if priority not in dict(PRIORITY_CHOICES):
+        raise InvalidTransitionError("Priorité invalide.")
+
+    with record_changes(task, actor=actor, project=task.project):
+        task.priority = priority
+        task.save()
+    return task
+
+
 def validate_task(*, actor, task, assignee=None):
     _ensure_can_validate(actor, task)
 
@@ -584,6 +627,20 @@ def cancel_task(*, actor, task, cancellation_reason):
     with record_changes(task, actor=actor, project=task.project):
         task.status = "annulee"
         task.cancellation_reason = cancellation_reason
+        task.save()
+    return task
+
+
+def reactivate_task(*, actor, task):
+    """Fait revenir une tâche annulée dans le cycle de vie actif — même
+    logique de statut de départ que `create_task` (assignée si un assigné
+    est déjà renseigné, sinon disponible). `cancellation_reason` n'est pas
+    effacé : il reste l'historique de la précédente annulation, cohérent
+    avec le fait que `rejection_reason` n'est jamais nettoyé non plus."""
+    _ensure_can_reactivate(actor, task)
+
+    with record_changes(task, actor=actor, project=task.project):
+        task.status = "assignee" if task.assignee_id else "disponible"
         task.save()
     return task
 

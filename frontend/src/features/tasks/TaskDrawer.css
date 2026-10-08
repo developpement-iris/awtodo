@@ -61,8 +61,14 @@
 .task-drawer__badges {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-2);
   margin-bottom: var(--space-3);
+}
+
+.task-drawer__badge-select {
+  display: inline-block;
+  width: 150px;
 }
 
 .task-drawer__ref {
