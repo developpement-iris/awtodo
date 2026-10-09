@@ -96,7 +96,7 @@ export function UserProfileDrawer({ user, teams, onClose }: UserProfileDrawerPro
                 <li key={task.id} className="user-profile-drawer__task">
                   <span className="user-profile-drawer__task-title">{task.title}</span>
                   <span className="user-profile-drawer__task-badges">
-                    <TypeBadge type={task.task_type} label={task.task_type_display} />
+                    <TypeBadge icon={task.task_type_icon} label={task.task_type_display} />
                     <StatusBadge label={task.status_display} tone={statusTone(task.status)} icon={taskStatusIcon(task.status)} />
                     <StatusBadge label={task.priority_display} tone={priorityTone(task.priority)} />
                   </span>

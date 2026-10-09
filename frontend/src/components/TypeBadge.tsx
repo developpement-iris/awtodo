@@ -1,20 +1,14 @@
-import { CirclePlus, FlaskConical, TrendingUp, Wrench, type LucideIcon } from "lucide-react";
+import { TASK_TYPE_ICONS } from "../lib/taskTypeIcons";
+import type { TaskTypeIcon } from "../types/watodo";
 import "./TypeBadge.css";
 
-const TASK_TYPE_ICONS: Record<string, LucideIcon> = {
-  correction: Wrench,
-  ajout: CirclePlus,
-  evolution: TrendingUp,
-  test: FlaskConical,
-};
-
 interface TypeBadgeProps {
-  type: string;
+  icon: TaskTypeIcon;
   label: string;
 }
 
-export function TypeBadge({ type, label }: TypeBadgeProps) {
-  const Icon = TASK_TYPE_ICONS[type];
+export function TypeBadge({ icon, label }: TypeBadgeProps) {
+  const Icon = TASK_TYPE_ICONS[icon];
 
   return (
     <span className="type-badge">

@@ -7,12 +7,23 @@ from apps.common.choices import PRIORITY_CHOICES
 from apps.common.serializers import AuditLogEntrySerializer
 from apps.projects.models import Project
 
-from .models import Task, TaskComment
-from .services import get_task_permissions
+from .models import Task, TaskComment, TaskType
+from .services import get_task_permissions, resolve_task_type
+
+
+class TaskTypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TaskType
+        fields = ["id", "key", "label", "icon", "status", "position"]
 
 
 class TaskSerializer(serializers.ModelSerializer):
-    task_type_display = serializers.CharField(source="get_task_type_display", read_only=True)
+    # Types personnalisables (session du 2026-10-09) : libellé/icône résolus
+    # depuis la portée du projet. Cache partagé par toute la liste (contexte
+    # du serializer racine) — une requête par groupe/projet distinct, pas
+    # une par tâche.
+    task_type_display = serializers.SerializerMethodField()
+    task_type_icon = serializers.SerializerMethodField()
     priority_display = serializers.CharField(source="get_priority_display", read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     assignee = UserSerializer(read_only=True)
@@ -35,6 +46,7 @@ class TaskSerializer(serializers.ModelSerializer):
             "description",
             "task_type",
             "task_type_display",
+            "task_type_icon",
             "priority",
             "priority_display",
             "deadline",
@@ -51,6 +63,16 @@ class TaskSerializer(serializers.ModelSerializer):
             "updated_at",
             "permissions",
         ]
+
+    def _task_type(self, obj):
+        cache = self.context.setdefault("_task_type_cache", {}) if isinstance(self.context, dict) else None
+        return resolve_task_type(obj.project, obj.task_type, cache=cache)
+
+    def get_task_type_display(self, obj):
+        return self._task_type(obj)[0]
+
+    def get_task_type_icon(self, obj):
+        return self._task_type(obj)[1]
 
     def get_permissions(self, obj):
         # Voir CLAUDE.md > "Permissions API — flags calculés" : une seule
@@ -134,7 +156,8 @@ class TaskCreateSerializer(serializers.Serializer):
     project = serializers.PrimaryKeyRelatedField(queryset=Project.objects.all())
     title = serializers.CharField(max_length=255)
     description = serializers.CharField(required=False, allow_blank=True, default="")
-    task_type = serializers.ChoiceField(choices=Task.TASK_TYPE_CHOICES)
+    # Validé contre les types actifs de la portée du projet par le service.
+    task_type = serializers.CharField(max_length=50)
     priority = serializers.ChoiceField(choices=PRIORITY_CHOICES, required=False, default="moyenne")
     deadline = serializers.DateField(required=False, allow_null=True)
     external_reference_id = serializers.CharField(

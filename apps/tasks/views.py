@@ -1,16 +1,18 @@
+from django.core.exceptions import ValidationError
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from apps.accounts.models import TeamMembership, User
+from apps.accounts.models import Team, TeamMembership, User
 from apps.common.views import ListOnlyFilterMixin
 from apps.projects.services import accessible_projects, prefetched_project_roles
 
 from .filters import TaskFilterSet
-from .models import Task
+from .models import Task, TaskType
 from .serializers import (
+    TaskTypeSerializer,
     GlobalTaskStatsSerializer,
     ProjectUserStatsSerializer,
     TaskCommentCreateSerializer,
@@ -24,11 +26,18 @@ from .services import (
     InvalidTransitionError,
     TaskPermissionError,
     add_comment,
+    archive_task_type,
     assign_task,
+    can_manage_task_types,
     cancel_task,
     claim_task,
     complete_task,
     create_task,
+    create_task_type,
+    list_task_types,
+    restore_task_type,
+    task_type_scope,
+    update_task_type_definition,
     get_assigned_tasks_for_admin,
     get_global_task_stats,
     get_project_task_insights,
@@ -44,6 +53,95 @@ from .services import (
     update_task_type,
     validate_task,
 )
+
+
+class TaskTypeViewSet(viewsets.GenericViewSet):
+    """Types de tâche personnalisables (session du 2026-10-09). La portée se
+    désigne par `team` ou `project` (query string en lecture, body à la
+    création) ; un `project` rattaché à un groupe renvoie vers les types du
+    groupe — le frontend n'a pas à connaître la règle de portée."""
+
+    queryset = TaskType.all_objects.all()
+    serializer_class = TaskTypeSerializer
+
+    def _resolve_scope(self, params):
+        team_id, project_id = params.get("team"), params.get("project")
+        if project_id:
+            return task_type_scope(get_object_or_404(accessible_projects(self.request.user), pk=project_id))
+        if team_id:
+            return get_object_or_404(Team.objects.all(), pk=team_id)
+        return None
+
+    def _scope_payload(self, scope):
+        is_team = isinstance(scope, Team)
+        return {"kind": "team" if is_team else "project", "id": str(scope.id), "name": scope.name}
+
+    def list(self, request):
+        try:
+            scope = self._resolve_scope(request.query_params)
+        except (ValueError, ValidationError):
+            return Response({"detail": "Portée invalide."}, status=400)
+        if scope is None:
+            return Response({"detail": "Paramètre `team` ou `project` requis."}, status=400)
+        include_archived = request.query_params.get("include_archived") in ("1", "true")
+        try:
+            types = list_task_types(actor=request.user, scope=scope, include_archived=include_archived)
+        except TaskPermissionError as exc:
+            return Response({"detail": str(exc)}, status=403)
+        return Response(
+            {
+                "scope": self._scope_payload(scope),
+                "can_manage": can_manage_task_types(request.user, scope),
+                "types": TaskTypeSerializer(types, many=True).data,
+            }
+        )
+
+    def create(self, request):
+        try:
+            scope = self._resolve_scope(request.data)
+        except (ValueError, ValidationError):
+            return Response({"detail": "Portée invalide."}, status=400)
+        if scope is None:
+            return Response({"detail": "Champ `team` ou `project` requis."}, status=400)
+        try:
+            task_type = create_task_type(
+                actor=request.user, scope=scope, label=request.data.get("label"), icon=request.data.get("icon", "tag")
+            )
+        except TaskPermissionError as exc:
+            return Response({"detail": str(exc)}, status=403)
+        except InvalidTransitionError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response(TaskTypeSerializer(task_type).data, status=201)
+
+    def partial_update(self, request, pk=None):
+        task_type = self.get_object()
+        try:
+            update_task_type_definition(
+                actor=request.user, task_type=task_type, label=request.data.get("label"), icon=request.data.get("icon")
+            )
+        except TaskPermissionError as exc:
+            return Response({"detail": str(exc)}, status=403)
+        except InvalidTransitionError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response(TaskTypeSerializer(task_type).data)
+
+    def _transition(self, request, fn):
+        task_type = self.get_object()
+        try:
+            fn(actor=request.user, task_type=task_type)
+        except TaskPermissionError as exc:
+            return Response({"detail": str(exc)}, status=403)
+        except InvalidTransitionError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response(TaskTypeSerializer(task_type).data)
+
+    @action(detail=True, methods=["post"])
+    def archive(self, request, pk=None):
+        return self._transition(request, archive_task_type)
+
+    @action(detail=True, methods=["post"])
+    def restore(self, request, pk=None):
+        return self._transition(request, restore_task_type)
 
 
 def _resolve_assignee(user_id):

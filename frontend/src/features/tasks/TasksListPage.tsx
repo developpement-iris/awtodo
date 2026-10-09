@@ -538,7 +538,7 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
                       )}
                       {visibleColumns.has("type") && (
                         <td data-label="Type">
-                          <TypeBadge type={task.task_type} label={task.task_type_display} />
+                          <TypeBadge icon={task.task_type_icon} label={task.task_type_display} />
                         </td>
                       )}
                       {visibleColumns.has("status") && (

@@ -51,6 +51,9 @@ PERMISSION_CAPABILITY_CHOICES = [
     ("manage_invitations", "Inviter de nouveaux comptes internes"),
     ("manage_branding", "Gérer les couleurs de marque de l'organisation"),
     ("manage_integrations", "Gérer la connexion Office 365 et les clés API"),
+    # Session du 2026-10-09 : ne suffit pas seule — s'ajoute au rôle
+    # d'administrateur du groupe (voir `apps.tasks.services._ensure_can_manage_task_types`).
+    ("manage_task_types", "Gérer les types de tâche des groupes qu'on administre"),
 ]
 PERMISSION_CAPABILITY_KEYS = frozenset(key for key, _ in PERMISSION_CAPABILITY_CHOICES)
 

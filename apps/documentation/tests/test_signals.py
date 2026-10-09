@@ -60,10 +60,12 @@ class DocQueueSignalTests(TestCase):
         self._complete_task("evolution")
         self.assertEqual(PendingDocEntry.objects.filter(kind="fonctionnalite").count(), 1)
 
-    def test_correction_creates_nothing(self):
+    def test_any_task_type_enters_the_queue(self):
+        # Session du 2026-10-09 : types personnalisables par groupe, plus de
+        # filtre `ajout`/`evolution` — toute tâche terminée entre dans la file.
         DocSpace.objects.create(project=self.project)
         self._complete_task("correction")
-        self.assertEqual(PendingDocEntry.objects.count(), 0)
+        self.assertEqual(PendingDocEntry.objects.count(), 1)
 
     def test_resolved_incident_creates_draft_resolution_entry_directly(self):
         # Session du 2026-10-06 : un incident résolu ne passe plus par la
@@ -104,10 +106,10 @@ class DocQueueSignalTests(TestCase):
         self._complete_task("ajout")
         self.assertEqual(Notification.objects.filter(verb="doc_entry_pending").count(), 0)
 
-    def test_correction_does_not_notify(self):
+    def test_any_task_type_notifies(self):
         DocSpace.objects.create(project=self.project)
         self._complete_task("correction")
-        self.assertEqual(Notification.objects.filter(verb="doc_entry_pending").count(), 0)
+        self.assertEqual(Notification.objects.filter(verb="doc_entry_pending").count(), 1)
 
     def test_signal_is_idempotent(self):
         DocSpace.objects.create(project=self.project)

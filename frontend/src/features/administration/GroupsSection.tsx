@@ -13,6 +13,7 @@ import { Combobox } from "../../components/Combobox";
 import { CreationCard } from "../../components/CreationCard";
 import { InlineEditableText } from "../../components/InlineEditableText";
 import { SkeletonCards } from "../../components/Skeleton";
+import { TaskTypesEditor } from "../../components/TaskTypesEditor";
 import { useToast } from "../../context/ToastContext";
 import type { Team, TeamMembershipRole, User } from "../../types/watodo";
 import "./GroupsSection.css";
@@ -244,6 +245,8 @@ export function GroupsSection({ currentUser }: GroupsSectionProps) {
                     </button>
                   </div>
                 )}
+
+                <TaskTypesEditor scope={{ team: team.id }} collapsible />
               </div>
             );
           })}

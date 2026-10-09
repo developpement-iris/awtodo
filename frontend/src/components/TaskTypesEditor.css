@@ -1,0 +1,206 @@
+.task-types-editor--collapsible {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3);
+}
+
+.task-types-editor__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.task-types-editor__toggle:hover {
+  color: var(--color-text);
+}
+
+.task-types-editor__chevron {
+  transition: transform 0.15s ease;
+}
+
+.task-types-editor__chevron--open {
+  transform: rotate(180deg);
+}
+
+.task-types-editor__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.task-types-editor--collapsible .task-types-editor__body {
+  margin-top: var(--space-3);
+}
+
+.task-types-editor__muted {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.task-types-editor__list,
+.task-types-editor__badges {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.task-types-editor__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.task-types-editor__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.task-types-editor__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 13.5px;
+  color: var(--color-text);
+}
+
+.task-types-editor__row--archived {
+  justify-content: space-between;
+  opacity: 0.7;
+}
+
+.task-types-editor__label {
+  flex: 1;
+  min-width: 0;
+}
+
+.task-types-editor__icon-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 0.12s ease;
+}
+
+.task-types-editor__icon-trigger:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+.task-types-editor__icon-trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.task-types-editor__icon-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 32px);
+  gap: var(--space-1);
+  padding: var(--space-2);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-resting);
+}
+
+.task-types-editor__icon-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: none;
+  color: var(--color-text);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.task-types-editor__icon-option:hover {
+  background: var(--tone-neutral-bg);
+}
+
+.task-types-editor__icon-option[aria-selected="true"] {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.task-types-editor__row-action {
+  display: inline-flex;
+  flex: none;
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: color 0.12s ease;
+}
+
+.task-types-editor__row-action:hover:not(:disabled) {
+  color: var(--color-accent);
+}
+
+.task-types-editor__row-action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.task-types-editor__add {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.task-types-editor__add input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  height: 28px;
+}
+
+.task-types-editor__add > button:last-child {
+  background: var(--tone-neutral-bg);
+  color: var(--tone-neutral-text);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.task-types-editor__add > button:last-child:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.task-types-editor__archived {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* Même niveau que les panneaux de `Combobox`/`DateTimeField`. */
+.task-types-editor__icon-panel {
+  z-index: 80;
+}

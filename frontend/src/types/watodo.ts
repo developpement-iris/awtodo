@@ -45,7 +45,8 @@ export type PermissionCapabilityKey =
   | "manage_groups"
   | "manage_invitations"
   | "manage_branding"
-  | "manage_integrations";
+  | "manage_integrations"
+  | "manage_task_types";
 
 export interface PermissionProfile {
   id: string;
@@ -443,8 +444,11 @@ export interface Task {
   version_label: string;
   title: string;
   description: string;
-  task_type: "correction" | "ajout" | "evolution" | "test";
+  /** Clé d'un `TaskType` de la portée du projet (groupe, sinon projet) —
+   * personnalisable depuis le 2026-10-09, plus une liste figée. */
+  task_type: string;
   task_type_display: string;
+  task_type_icon: TaskTypeIcon;
   priority: "basse" | "moyenne" | "haute" | "critique";
   priority_display: string;
   deadline: string | null;
@@ -460,6 +464,39 @@ export interface Task {
   created_at: string;
   updated_at: string;
   permissions: TaskPermissions;
+}
+
+// Types de tâche personnalisables (session du 2026-10-09) — portée groupe,
+// ou projet sans groupe. Miroir de `apps.tasks.models.TaskType.ICON_CHOICES`.
+export type TaskTypeIcon =
+  | "wrench"
+  | "circle_plus"
+  | "trending_up"
+  | "flask"
+  | "rocket"
+  | "code"
+  | "lightbulb"
+  | "book"
+  | "search"
+  | "bug"
+  | "file"
+  | "users"
+  | "shield"
+  | "tag";
+
+export interface TaskType {
+  id: string;
+  key: string;
+  label: string;
+  icon: TaskTypeIcon;
+  status: "active" | "archived";
+  position: number;
+}
+
+export interface TaskTypeList {
+  scope: { kind: "team" | "project"; id: string; name: string };
+  can_manage: boolean;
+  types: TaskType[];
 }
 
 export interface TaskComment {

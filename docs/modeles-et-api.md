@@ -33,7 +33,25 @@ Détail des modèles de données et des endpoints. Référencé depuis CLAUDE.md
 - Projet parent
 - **Version du projet** (FK `ProjectVersion`, voir ci-dessus) — attribuée automatiquement à la version courante du projet au moment de la création, jamais choisie manuellement.
 - Titre, description
-- **Type** : `CORRECTION` / `AJOUT` / `ÉVOLUTION` / `TEST` (ajouté session du 2026-09-10)
+- **Type** *(historique — personnalisable depuis le 2026-10-09, voir "Types de tâche personnalisables" ci-dessous)* : `CORRECTION` / `AJOUT` / `ÉVOLUTION` / `TEST` (ajouté session du 2026-09-10)
+
+### Types de tâche personnalisables (session du 2026-10-09)
+
+Demande directe : « un groupe développement utiliserait des tâches "développement"/"déploiement"… tandis qu'un autre groupe "réflexion"/"étude" ». Lève le point "Personnalisation avancée des statuts/types" de "Hors périmètre v1" (CLAUDE.md), **pour le type seulement** — statuts et priorités restent figés.
+
+- **Modèle `apps.tasks.models.TaskType`** (`StatusLifecycleModel`, `active`/`archived`) : `key` (figée à la création, slug du libellé, dédoublonnée `_2`, `_3`…), `label` (renommable, unique par portée sans tenir compte de la casse), `icon` (liste courte de 14 clés, `TaskType.ICON_CHOICES`, **pas de couleur** — une couleur = un axe), `position`.
+- **Portée** : `team` (types partagés par tous les projets du groupe) **ou** `project` (projet sans groupe, typiquement individuel) — exactement l'un des deux, garanti par le service. `task_type_scope(project)` = `project.team` s'il existe, sinon le projet.
+- **`Task.task_type` reste une clé texte** (plus de `choices`), pas une FK : l'API ouverte reste rétrocompatible (QWEASE/Power Automate envoient toujours `"correction"`). Validée à la création et au changement de type contre les types **actifs** de la portée (`_ensure_valid_task_type`, 400 sinon).
+- **Types par défaut** : `correction`/`ajout`/`evolution`/`test` créés pour chaque nouveau groupe et chaque nouveau projet sans groupe (`apps/tasks/receivers.py`, `post_save` de `Team`/`Project`) ; migration `tasks.0011` les a créés pour l'existant — les tâches déjà en base n'ont pas bougé.
+- **Archivage** : un type archivé n'est plus proposé mais les tâches qui le portent gardent leur libellé/icône. Le dernier type actif d'une portée ne s'archive pas. Restauration possible.
+- **Conversion individuel → collaboratif** : le projet passe sur les types du groupe ; ses anciennes tâches gardent leur clé (libellé résolu depuis le groupe si la clé y existe, sinon depuis les valeurs par défaut, sinon la clé brute).
+- **Droits** : groupe → administrateur du groupe (`can_manage_team`) **et** capacité `manage_task_types` d'un profil de droits (demande explicite : « administrateur de groupe mais on conditionnera ça à un droit ») ; un admin d'organisation/de plateforme passe toujours. Projet sans groupe → son chef de projet. Lecture : membres du groupe / du projet.
+- **Sérialisation** : `TaskSerializer.task_type_display` et nouveau `task_type_icon` résolus par `resolve_task_type` avec un cache dans le contexte du serializer (une requête par portée distincte dans une liste, pas une par tâche).
+- **Statistiques** : `type_breakdown` est désormais indexé par **libellé** (agrégé sur les portées), plus par clé, et ne liste que les types effectivement présents.
+- **API** (`/api/v1/tasks/types/`, enregistré avant la route de détail des tâches) :
+  - `GET ?project=<id>` ou `?team=<id>` (+ `include_archived=1`) → `{scope: {kind, id, name}, can_manage, types: [...]}` — un `project` rattaché à un groupe renvoie les types du groupe.
+  - `POST` `{project|team, label, icon}` · `PATCH /{id}/` `{label?, icon?}` · `POST /{id}/archive/` · `POST /{id}/restore/`.
+- **Frontend** : `components/TaskTypesEditor.tsx` (liste éditable, sélecteur d'icône, archivés repliés), monté dans Administration > Groupes (replié par défaut dans chaque carte) et dans l'onglet Administration d'un projet sans groupe. `hooks/useTaskTypes.ts` (cache par projet, vidé par l'éditeur) alimente les sélecteurs de type de `TaskCreateDialog`/`TaskAccordion`/`TaskDrawer` ; `TypeBadge` prend l'`icon` renvoyée par l'API au lieu d'une table figée.
 - **Priorité** : niveau configurable (basse/moyenne/haute/critique — à affiner)
 - Deadline optionnelle
 - Assigné à (utilisateur)
@@ -581,7 +599,7 @@ Les trois modèles `StatusLifecycleModel` déclarent `default_manager_name = bas
 
 Deux signaux Django **nouveaux**, consommés par `apps/documentation/signals.py` (jamais d'import inverse — règle de dépendances) :
 
-- **`apps.tasks.signals.task_completed`** (kwargs `task`, `actor`) — émis en fin de `complete_task`. Le récepteur crée une `PendingDocEntry(kind="fonctionnalite")` **si** `task.task_type ∈ {ajout, evolution}` (pas `correction`) **et** le projet a déjà un `DocSpace`.
+- **`apps.tasks.signals.task_completed`** (kwargs `task`, `actor`) — émis en fin de `complete_task`. Le récepteur crée une `PendingDocEntry(kind="fonctionnalite")` dès que le projet a déjà un `DocSpace`, **quel que soit le type** de la tâche (depuis le 2026-10-09 — avant, seulement `ajout`/`evolution` ; filtre retiré avec la personnalisation des types par groupe, le chef de projet ignore ce qui ne mérite pas de fiche).
 `get_or_create(task=…)` → idempotent.
 
 **Incidents : plus de file "à documenter" depuis le 2026-10-06.** `apps.incidents.signals.incident_resolved` (kwargs `incident`, `actor`) déclenche désormais directement `create_resolution_entry_from_incident` (`DocEntry(kind="resolution", status="brouillon", source="incident")`), sans `PendingDocEntry` intermédiaire — "une main sur l'affichage" via le statut `brouillon`/`publie` déjà existant de la fiche, pas via une file de curation séparée. Idempotent par vérification explicite (`DocEntry.all_objects.filter(space=..., kind="resolution", source_incident=incident).exists()`) avant création.

@@ -1,16 +1,10 @@
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Combobox } from "../../components/Combobox";
 import { DatePickerField } from "../../components/DatePickerField";
+import { taskTypeOptions, useTaskTypes } from "../../hooks/useTaskTypes";
 import type { Project, Task, User } from "../../types/watodo";
 import "./TaskCreateDialog.css";
-
-const TASK_TYPE_OPTIONS: { value: Task["task_type"]; label: string }[] = [
-  { value: "correction", label: "Correction" },
-  { value: "ajout", label: "Ajout" },
-  { value: "evolution", label: "Évolution" },
-  { value: "test", label: "Test" },
-];
 
 const PRIORITY_OPTIONS: { value: Task["priority"]; label: string }[] = [
   { value: "basse", label: "Basse" },
@@ -65,7 +59,7 @@ export function TaskCreateDialog({
     project: defaultProjectId ?? projects[0]?.id ?? "",
     title: "",
     description: "",
-    task_type: "correction",
+    task_type: "",
     priority: "moyenne",
     deadline: "",
     external_reference_id: "",
@@ -73,7 +67,18 @@ export function TaskCreateDialog({
     estimated_hours: "",
   });
 
-  const isValid = values.project.trim().length > 0 && values.title.trim().length > 0;
+  // Types du groupe du projet choisi (sinon ceux du projet lui-même) —
+  // personnalisables depuis le 2026-10-09. Changer de projet peut changer la
+  // liste : on retombe alors sur son premier type.
+  const taskTypes = useTaskTypes(values.project || null);
+  useEffect(() => {
+    if (taskTypes.length > 0 && !taskTypes.some((t) => t.key === values.task_type)) {
+      setValues((current) => ({ ...current, task_type: taskTypes[0].key }));
+    }
+  }, [taskTypes, values.task_type]);
+
+  const isValid =
+    values.project.trim().length > 0 && values.title.trim().length > 0 && values.task_type.length > 0;
 
   function update<K extends keyof TaskCreateFormValues>(key: K, value: TaskCreateFormValues[K]) {
     setValues((current) => ({ ...current, [key]: value }));
@@ -118,9 +123,9 @@ export function TaskCreateDialog({
           <label className="task-create-dialog__field">
             <span>Type</span>
             <Combobox
-              options={TASK_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+              options={taskTypeOptions(taskTypes)}
               value={values.task_type}
-              onChange={(value) => update("task_type", value as Task["task_type"])}
+              onChange={(value) => update("task_type", value)}
               clearable={false}
             />
           </label>

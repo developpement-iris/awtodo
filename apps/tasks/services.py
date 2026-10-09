@@ -1,11 +1,15 @@
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
+from types import SimpleNamespace
 
 from django.db.models import Count, F, Sum
 from django.db.models.functions import TruncWeek
 from django.utils import timezone
 from django.utils.dateparse import parse_date
+from django.utils.text import slugify
 
+from apps.accounts.models import Team
+from apps.accounts.services import can_manage_team, has_capability, is_active_team_member, is_organisation_admin
 from apps.common.audit import record_changes, record_event
 from apps.common.choices import PRIORITY_CHOICES
 from apps.common.permissions import check_permission
@@ -15,9 +19,10 @@ from apps.projects.services import (
     get_current_version,
     is_project_contributor,
     is_project_manager,
+    is_project_member,
 )
 
-from .models import Task, TaskComment
+from .models import DEFAULT_TASK_TYPES, Task, TaskComment, TaskType
 from .signals import task_assigned, task_commented, task_completed
 
 COMPLETION_TREND_WEEKS = 8
@@ -65,6 +70,185 @@ def _require_manager(actor, project):
     _require_actor(actor)
     if not _is_manager(actor, project):
         raise TaskPermissionError("Seul un chef de projet du projet peut effectuer cette action.")
+
+
+# --- Types de tâche personnalisables (session du 2026-10-09) ---------------
+# Portée = le groupe du projet s'il en a un (types partagés par tous les
+# projets du groupe), sinon le projet lui-même (projet individuel).
+
+
+def task_type_scope(project):
+    """`Team` ou `Project` portant les types de tâche de `project`."""
+    return project.team if project.team_id else project
+
+
+def _scope_filter(scope):
+    return {"team": scope} if isinstance(scope, Team) else {"project": scope}
+
+
+def _scope_cache_key(project):
+    return ("team", project.team_id) if project.team_id else ("project", project.id)
+
+
+def get_task_types(scope, include_archived=False):
+    qs = TaskType.all_objects.filter(**_scope_filter(scope))
+    if not include_archived:
+        qs = qs.filter(status="active")
+    return qs
+
+
+def seed_default_task_types(scope):
+    """Idempotent : ne crée rien si la portée a déjà au moins un type (même
+    archivé) — appelé à la création d'un groupe/projet sans groupe
+    (`apps.tasks.receivers`) et par la migration de données."""
+    if TaskType.all_objects.filter(**_scope_filter(scope)).exists():
+        return
+    TaskType.all_objects.bulk_create(
+        TaskType(key=key, label=label, icon=icon, position=index, **_scope_filter(scope))
+        for index, (key, label, icon) in enumerate(DEFAULT_TASK_TYPES)
+    )
+
+
+def resolve_task_type(project, key, cache=None):
+    """`(label, icon)` du type `key` dans la portée de `project`. `cache`
+    (dict) évite une requête par tâche dans les listes : une seule par
+    portée distincte. Repli sur les valeurs par défaut, puis sur la clé brute
+    (type supprimé de la portée après une conversion de projet, par ex.)."""
+    scope_key = _scope_cache_key(project)
+    types = cache.get(scope_key) if cache is not None else None
+    if types is None:
+        kind, scope_id = scope_key
+        types = {t.key: t for t in TaskType.all_objects.filter(**{f"{kind}_id": scope_id})}
+        if cache is not None:
+            cache[scope_key] = types
+    task_type = types.get(key)
+    if task_type is not None:
+        return task_type.label, task_type.icon
+    for default_key, label, icon in DEFAULT_TASK_TYPES:
+        if default_key == key:
+            return label, icon
+    return key, "tag"
+
+
+def _ensure_valid_task_type(project, key):
+    if not key or not get_task_types(task_type_scope(project)).filter(key=key).exists():
+        raise InvalidTransitionError("Type de tâche invalide pour ce projet.")
+
+
+def _ensure_can_view_task_types(actor, scope):
+    _require_actor(actor)
+    if isinstance(scope, Team):
+        if is_active_team_member(actor, scope) or can_manage_team(actor, scope):
+            return
+        raise TaskPermissionError("Réservé aux membres du groupe.")
+    if not is_project_member(actor, scope):
+        raise TaskPermissionError("Réservé aux membres du projet.")
+
+
+def _ensure_can_manage_task_types(actor, scope):
+    """Groupe : administrateur du groupe **et** capacité `manage_task_types`
+    (profil de droits) — demande explicite, "administrateur de groupe mais on
+    conditionnera ça à un droit". Un admin d'organisation garde toujours la
+    main, comme ailleurs. Projet sans groupe : son chef de projet."""
+    _require_actor(actor)
+    if isinstance(scope, Team):
+        organisation = scope.organisation
+        if is_organisation_admin(actor, organisation):
+            return
+        if can_manage_team(actor, scope) and has_capability(actor, "manage_task_types", organisation):
+            return
+        raise TaskPermissionError(
+            "Réservé à un administrateur du groupe disposant du droit « Gérer les types de tâche »."
+        )
+    _require_manager(actor, scope)
+
+
+def can_manage_task_types(user, scope):
+    return _check(_ensure_can_manage_task_types, user, scope)
+
+
+def list_task_types(*, actor, scope, include_archived=False):
+    _ensure_can_view_task_types(actor, scope)
+    return get_task_types(scope, include_archived=include_archived)
+
+
+def _clean_label(scope, label, exclude_id=None):
+    label = (label or "").strip()
+    if not label:
+        raise InvalidTransitionError("Le libellé ne peut pas être vide.")
+    if len(label) > 50:
+        raise InvalidTransitionError("Le libellé ne peut pas dépasser 50 caractères.")
+    # Comparé en Python : `iexact` sous SQLite ignore la casse des seuls
+    # caractères ASCII ("Étude" ≠ "étude").
+    others = get_task_types(scope)
+    if exclude_id is not None:
+        others = others.exclude(pk=exclude_id)
+    if any(existing.casefold() == label.casefold() for existing in others.values_list("label", flat=True)):
+        raise InvalidTransitionError("Un type de tâche porte déjà ce libellé.")
+    return label
+
+
+def _clean_icon(icon):
+    if icon not in dict(TaskType.ICON_CHOICES):
+        raise InvalidTransitionError("Icône invalide.")
+    return icon
+
+
+def create_task_type(*, actor, scope, label, icon="tag"):
+    _ensure_can_manage_task_types(actor, scope)
+    label = _clean_label(scope, label)
+    icon = _clean_icon(icon)
+
+    existing = TaskType.all_objects.filter(**_scope_filter(scope))
+    base_key = (slugify(label).replace("-", "_") or "type")[:40]
+    key, suffix = base_key, 2
+    taken = set(existing.values_list("key", flat=True))
+    while key in taken:
+        key, suffix = f"{base_key}_{suffix}", suffix + 1
+
+    position = (existing.order_by("-position").values_list("position", flat=True).first() or 0) + 1
+    return TaskType.all_objects.create(key=key, label=label, icon=icon, position=position, **_scope_filter(scope))
+
+
+def _task_type_scope_of(task_type):
+    return task_type.team if task_type.team_id else task_type.project
+
+
+def update_task_type_definition(*, actor, task_type, label=None, icon=None):
+    scope = _task_type_scope_of(task_type)
+    _ensure_can_manage_task_types(actor, scope)
+    if label is not None:
+        task_type.label = _clean_label(scope, label, exclude_id=task_type.pk)
+    if icon is not None:
+        task_type.icon = _clean_icon(icon)
+    task_type.save()
+    return task_type
+
+
+def archive_task_type(*, actor, task_type):
+    """Les tâches existantes gardent leur type (libellé toujours résolu) ; il
+    n'est simplement plus proposé à la création. Le dernier type actif d'une
+    portée ne s'archive pas — il faut toujours pouvoir créer une tâche."""
+    scope = _task_type_scope_of(task_type)
+    _ensure_can_manage_task_types(actor, scope)
+    if task_type.status != "active":
+        raise InvalidTransitionError("Ce type est déjà archivé.")
+    if get_task_types(scope).exclude(pk=task_type.pk).count() == 0:
+        raise InvalidTransitionError("Impossible d'archiver le dernier type de tâche actif.")
+    task_type.status = "archived"
+    task_type.save()
+    return task_type
+
+
+def restore_task_type(*, actor, task_type):
+    scope = _task_type_scope_of(task_type)
+    _ensure_can_manage_task_types(actor, scope)
+    if task_type.status == "active":
+        raise InvalidTransitionError("Ce type est déjà actif.")
+    _clean_label(scope, task_type.label, exclude_id=task_type.pk)
+    task_type.status = "active"
+    task_type.save()
+    return task_type
 
 
 # --- Fonctions de garde ---------------------------------------------------
@@ -338,7 +522,16 @@ def _task_insights(tasks_qs):
         .values_list("assignee__username", "count")
     )
 
-    type_breakdown = {choice: tasks_qs.filter(task_type=choice).count() for choice, _ in Task.TASK_TYPE_CHOICES}
+    # Types personnalisables par groupe/projet (session du 2026-10-09) : clés
+    # comptées telles qu'elles existent, puis regroupées par libellé (deux
+    # groupes peuvent avoir la même clé, ou deux clés le même libellé).
+    type_breakdown = {}
+    label_cache = {}
+    rows = tasks_qs.values("task_type", "project_id", "project__team_id").order_by().annotate(count=Count("id"))
+    for row in rows:
+        project = SimpleNamespace(id=row["project_id"], team_id=row["project__team_id"])
+        label, _ = resolve_task_type(project, row["task_type"], cache=label_cache)
+        type_breakdown[label] = type_breakdown.get(label, 0) + row["count"]
 
     return {
         "hours_total": hours_total,
@@ -439,6 +632,7 @@ def create_task(
     estimated_hours=None,
 ):
     _require_member(actor, project)
+    _ensure_valid_task_type(project, task_type)
 
     # Projet individuel : une seule personne travaille dessus, toute tâche lui
     # revient — auto-assignée au créateur (session du 2026-09-10). `actor` EST
@@ -575,8 +769,7 @@ def update_task_type(*, actor, task, task_type):
     # Même garde que le titre/la description : tout membre du projet
     # (_ensure_can_rename), pas réservé au chef de projet.
     _ensure_can_rename(actor, task)
-    if task_type not in dict(Task.TASK_TYPE_CHOICES):
-        raise InvalidTransitionError("Type de tâche invalide.")
+    _ensure_valid_task_type(task.project, task_type)
 
     with record_changes(task, actor=actor, project=task.project):
         task.task_type = task_type

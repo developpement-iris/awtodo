@@ -24,6 +24,7 @@ const CAPABILITY_OPTIONS: { key: PermissionCapabilityKey; label: string }[] = [
   { key: "manage_invitations", label: "Inviter de nouveaux comptes internes" },
   { key: "manage_branding", label: "Gérer les couleurs de marque de l'organisation" },
   { key: "manage_integrations", label: "Gérer la connexion Office 365 et les clés API" },
+  { key: "manage_task_types", label: "Gérer les types de tâche des groupes qu'on administre" },
 ];
 
 function displayName(user: { first_name: string; last_name: string; username: string }): string {

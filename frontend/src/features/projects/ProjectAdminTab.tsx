@@ -8,6 +8,7 @@ import {
   removeProjectMember,
 } from "../../api/client";
 import { Combobox } from "../../components/Combobox";
+import { TaskTypesEditor } from "../../components/TaskTypesEditor";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 import { useToast } from "../../context/ToastContext";
 import type { Project, ProjectMembership, ProjectRole, Team } from "../../types/watodo";
@@ -254,6 +255,14 @@ export function ProjectAdminTab({ project, onUpdated }: ProjectAdminTabProps) {
 
       {isManager && (
         <div className="project-admin-tab__forms">
+          {/* Types de tâche (session du 2026-10-09) : un projet rattaché à
+              un groupe utilise ceux du groupe (Administration > Groupes). */}
+          {project.team === null && (
+            <div className="project-admin-tab__form">
+              <h3>Types de tâche</h3>
+              <TaskTypesEditor scope={{ project: project.id }} />
+            </div>
+          )}
           {project.permissions.can_convert_to_collaborative && (
             <div className="project-admin-tab__form">
               <h3>Passer en projet collaboratif</h3>

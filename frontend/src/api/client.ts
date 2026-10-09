@@ -47,6 +47,9 @@ import type {
   PublicDocs,
   SpecSection,
   Task,
+  TaskType,
+  TaskTypeIcon,
+  TaskTypeList,
   TaskComment,
   TaskDetail,
   TaskInsights,
@@ -652,6 +655,36 @@ export function updateTaskDeadline(taskId: string, deadline: string | null): Pro
 // titre/la description (`permissions.can_edit_type`/`can_edit_priority`).
 export function updateTaskType(taskId: string, taskType: Task["task_type"]): Promise<Task> {
   return postJson<Task>(`/tasks/${taskId}/update-type/`, { task_type: taskType });
+}
+
+// Types de tâche personnalisables (session du 2026-10-09). `project` d'un
+// projet rattaché à un groupe renvoie les types du groupe (résolu côté
+// serveur).
+export type TaskTypeScope = { project: string } | { team: string };
+
+export function getTaskTypes(scope: TaskTypeScope, includeArchived = false): Promise<TaskTypeList> {
+  const params = new URLSearchParams(scope as Record<string, string>);
+  if (includeArchived) params.set("include_archived", "1");
+  return getJson<TaskTypeList>(`/tasks/types/?${params.toString()}`);
+}
+
+export function createTaskType(scope: TaskTypeScope, label: string, icon: TaskTypeIcon): Promise<TaskType> {
+  return postJson<TaskType>("/tasks/types/", { ...scope, label, icon });
+}
+
+export function updateTaskTypeDefinition(
+  typeId: string,
+  changes: { label?: string; icon?: TaskTypeIcon },
+): Promise<TaskType> {
+  return patchJson<TaskType>(`/tasks/types/${typeId}/`, changes);
+}
+
+export function archiveTaskType(typeId: string): Promise<TaskType> {
+  return postJson<TaskType>(`/tasks/types/${typeId}/archive/`);
+}
+
+export function restoreTaskType(typeId: string): Promise<TaskType> {
+  return postJson<TaskType>(`/tasks/types/${typeId}/restore/`);
 }
 
 export function updateTaskPriority(taskId: string, priority: Task["priority"]): Promise<Task> {

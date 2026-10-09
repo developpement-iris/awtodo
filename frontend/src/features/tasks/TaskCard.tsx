@@ -56,7 +56,7 @@ export function TaskCard({ task, onOpen, onReject, onCancel, onRename, pending =
         />
         {task.external_reference_id && <span className="task-card__ref">{task.external_reference_id}</span>}
         <span className="task-card__badges">
-          <TypeBadge type={task.task_type} label={task.task_type_display} />
+          <TypeBadge icon={task.task_type_icon} label={task.task_type_display} />
           <StatusBadge label={task.priority_display} tone={priorityTone(task.priority)} />
         </span>
         {task.assignee && (

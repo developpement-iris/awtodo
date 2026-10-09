@@ -5,13 +5,82 @@ from apps.common.choices import PRIORITY_CHOICES
 from apps.common.models import StatusLifecycleModel, TimeStampedModel, UUIDModel
 
 
-class Task(UUIDModel, TimeStampedModel, StatusLifecycleModel):
-    TASK_TYPE_CHOICES = [
-        ("correction", "Correction"),
-        ("ajout", "Ajout"),
-        ("evolution", "Évolution"),
-        ("test", "Test"),
+# Types créés d'office pour tout nouveau groupe / projet sans groupe (et par
+# la migration de données 0010 pour l'existant) — ce sont les 4 valeurs
+# figées avant la personnalisation (session du 2026-10-09), mêmes clés pour
+# rester compatibles avec les appelants API externes (QWEASE, Power Automate).
+DEFAULT_TASK_TYPES = [
+    ("correction", "Correction", "wrench"),
+    ("ajout", "Ajout", "circle_plus"),
+    ("evolution", "Évolution", "trending_up"),
+    ("test", "Test", "flask"),
+]
+
+
+class TaskType(UUIDModel, TimeStampedModel, StatusLifecycleModel):
+    """Type de tâche personnalisable (session du 2026-10-09). Portée : un
+    groupe (`team`, partagé par tous ses projets collaboratifs) **ou** un
+    projet sans groupe (`project`, projet individuel) — exactement l'un des
+    deux, garanti par le service (même doctrine que `Incident.project`/
+    `.team`), pas par une contrainte DB.
+
+    `Task.task_type` stocke la `key` (texte), pas une FK : l'API reste
+    rétrocompatible pour les intégrations qui envoient déjà `"correction"`.
+    `key` est figée à la création ; seul `label`/`icon` se renomment."""
+
+    STATUS_CHOICES = [("active", "Actif"), ("archived", "Archivé")]
+    ACTIVE_STATUSES = frozenset({"active"})
+    # Liste courte, sans couleur (une couleur = un axe, voir
+    # docs/charte-graphique.md) — miroir de `TASK_TYPE_ICONS` côté frontend.
+    ICON_CHOICES = [
+        ("wrench", "Clé"),
+        ("circle_plus", "Plus"),
+        ("trending_up", "Flèche montante"),
+        ("flask", "Fiole"),
+        ("rocket", "Fusée"),
+        ("code", "Code"),
+        ("lightbulb", "Ampoule"),
+        ("book", "Livre"),
+        ("search", "Loupe"),
+        ("bug", "Bug"),
+        ("file", "Document"),
+        ("users", "Personnes"),
+        ("shield", "Bouclier"),
+        ("tag", "Étiquette"),
     ]
+
+    team = models.ForeignKey(
+        "accounts.Team", null=True, blank=True, on_delete=models.PROTECT, related_name="task_types"
+    )
+    project = models.ForeignKey(
+        "projects.Project", null=True, blank=True, on_delete=models.PROTECT, related_name="task_types"
+    )
+    key = models.CharField(max_length=50)
+    label = models.CharField(max_length=50)
+    icon = models.CharField(max_length=30, choices=ICON_CHOICES, default="tag")
+    position = models.PositiveIntegerField(default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active")
+
+    class Meta:
+        default_manager_name = "all_objects"
+        base_manager_name = "all_objects"
+        ordering = ["position", "created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["team", "key"], condition=models.Q(team__isnull=False), name="unique_task_type_key_per_team"
+            ),
+            models.UniqueConstraint(
+                fields=["project", "key"],
+                condition=models.Q(project__isnull=False),
+                name="unique_task_type_key_per_project",
+            ),
+        ]
+
+    def __str__(self):
+        return self.label
+
+
+class Task(UUIDModel, TimeStampedModel, StatusLifecycleModel):
     ORIGIN_CHOICES = [
         ("manuelle", "Manuelle"),
         ("api", "API"),
@@ -31,7 +100,9 @@ class Task(UUIDModel, TimeStampedModel, StatusLifecycleModel):
     version = models.ForeignKey("projects.ProjectVersion", on_delete=models.PROTECT, related_name="tasks")
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
-    task_type = models.CharField(max_length=20, choices=TASK_TYPE_CHOICES)
+    # Clé d'un `TaskType` de la portée du projet (groupe, sinon projet) —
+    # validée par le service, plus de `choices` figées (session du 2026-10-09).
+    task_type = models.CharField(max_length=50)
     priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default="moyenne")
     deadline = models.DateField(null=True, blank=True)
     assignee = models.ForeignKey(

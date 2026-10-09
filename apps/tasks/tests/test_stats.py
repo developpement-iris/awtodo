@@ -304,7 +304,7 @@ class DashboardTaskInsightsFieldsTests(TestCase):
 
         insights = services.get_project_task_insights(actor=self.manager, project=self.project)
         self.assertEqual(
-            insights["type_breakdown"], {"correction": 1, "ajout": 1, "evolution": 1, "test": 0}
+            insights["type_breakdown"], {"Correction": 1, "Ajout": 1, "Évolution": 1}
         )
 
 

@@ -7,17 +7,11 @@ import { InlineEditableText } from "../../components/InlineEditableText";
 import { InlineEditableTextarea } from "../../components/InlineEditableTextarea";
 import { StatusBadge } from "../../components/StatusBadge";
 import { TypeBadge } from "../../components/TypeBadge";
+import { taskTypeOptions, useTaskTypes } from "../../hooks/useTaskTypes";
 import { priorityTone, statusTone, taskStatusIcon } from "../../lib/badges";
 import { auditFieldLabel } from "../../lib/auditFieldLabels";
 import type { AuditLogEntry, Task, TaskComment, User } from "../../types/watodo";
 import "./TaskAccordion.css";
-
-const TASK_TYPE_OPTIONS: { value: Task["task_type"]; label: string }[] = [
-  { value: "correction", label: "Correction" },
-  { value: "ajout", label: "Ajout" },
-  { value: "evolution", label: "Évolution" },
-  { value: "test", label: "Test" },
-];
 
 const PRIORITY_OPTIONS: { value: Task["priority"]; label: string }[] = [
   { value: "basse", label: "Basse" },
@@ -90,6 +84,7 @@ export function TaskAccordion({
 }: TaskAccordionProps) {
   const [assigneeSelection, setAssigneeSelection] = useState(task.assignee?.id ?? "");
   const [draft, setDraft] = useState("");
+  const taskTypes = useTaskTypes(task.permissions.can_edit_type ? task.project : null);
 
   useEffect(() => {
     setAssigneeSelection(task.assignee?.id ?? "");
@@ -115,7 +110,7 @@ export function TaskAccordion({
             {task.permissions.can_edit_type ? (
               <span className="task-accordion__badge-select">
                 <Combobox
-                  options={TASK_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                  options={taskTypeOptions(taskTypes, task)}
                   value={task.task_type}
                   onChange={(value) => onSaveType(task, value as Task["task_type"])}
                   disabled={pending}
@@ -123,7 +118,7 @@ export function TaskAccordion({
                 />
               </span>
             ) : (
-              <TypeBadge type={task.task_type} label={task.task_type_display} />
+              <TypeBadge icon={task.task_type_icon} label={task.task_type_display} />
             )}
             <StatusBadge label={task.status_display} tone={statusTone(task.status)} icon={taskStatusIcon(task.status)} />
             {task.permissions.can_edit_priority ? (

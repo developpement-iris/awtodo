@@ -15,13 +15,6 @@ from apps.tasks.signals import task_completed
 from .models import DocSpace, PendingDocEntry
 from .services import create_resolution_entry_from_incident
 
-# Seules les tâches qui apportent quelque chose de visible pour l'utilisateur
-# final alimentent l'onglet Fonctionnalités. Une `correction` ne documente pas
-# une fonctionnalité (décision session 2026-09-03) — les incidents résolus
-# couvrent le versant « ce qui a été réparé ».
-_DOCUMENTABLE_TASK_TYPES = {"ajout", "evolution"}
-
-
 def _notify_project_managers(project, **kwargs):
     # Retour direct (session du 2026-09-23) : "envoie des notifs au chef de
     # projet" — un projet collaboratif peut avoir plusieurs chefs de projet
@@ -33,8 +26,10 @@ def _notify_project_managers(project, **kwargs):
 
 @receiver(task_completed)
 def _on_task_completed(sender, task, actor, **kwargs):
-    if task.task_type not in _DOCUMENTABLE_TASK_TYPES:
-        return
+    # Toute tâche terminée entre dans la file, quel que soit son type
+    # (session du 2026-10-09) : les types étant désormais personnalisés par
+    # groupe, l'ancien filtre `ajout`/`evolution` n'a plus de sens — le chef
+    # de projet ignore ce qui ne mérite pas de fiche.
     space = DocSpace.objects.filter(project=task.project).first()
     if space is None:
         return
