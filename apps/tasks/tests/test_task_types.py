@@ -103,6 +103,20 @@ class TaskTypeServiceTests(TestCase):
         correction.refresh_from_db()
         self.assertEqual((correction.key, correction.label, correction.icon), ("correction", "Bugfix", "bug"))
 
+    def test_converted_project_keeps_labels_of_its_former_types(self):
+        # Ancien projet individuel avec un type propre, puis rattaché à un
+        # groupe qui ne connaît pas cette clé : le libellé ne doit pas
+        # retomber sur la clé brute.
+        owner = User.objects.create_user(username="owner2")
+        project = Project.objects.create(name="Perso", project_type="individuel")
+        ProjectMembership.objects.create(project=project, user=owner, role="chef_de_projet")
+        services.create_task_type(actor=owner, scope=project, label="Réflexion", icon="lightbulb")
+        project.team = self.team
+        project.project_type = "collaboratif"
+        project.save()
+        self.assertEqual(services.resolve_task_type(project, "reflexion"), ("Réflexion", "lightbulb"))
+        self.assertEqual(services.resolve_task_type(project, "correction"), ("Correction", "wrench"))
+
     def test_individual_project_manager_manages_own_types(self):
         owner = User.objects.create_user(username="owner")
         project = Project.objects.create(name="Perso", project_type="individuel")

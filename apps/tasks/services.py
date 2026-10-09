@@ -109,19 +109,28 @@ def seed_default_task_types(scope):
     )
 
 
-def resolve_task_type(project, key, cache=None):
-    """`(label, icon)` du type `key` dans la portée de `project`. `cache`
-    (dict) évite une requête par tâche dans les listes : une seule par
-    portée distincte. Repli sur les valeurs par défaut, puis sur la clé brute
-    (type supprimé de la portée après une conversion de projet, par ex.)."""
-    scope_key = _scope_cache_key(project)
+def _types_for_scope_key(scope_key, cache):
     types = cache.get(scope_key) if cache is not None else None
     if types is None:
         kind, scope_id = scope_key
         types = {t.key: t for t in TaskType.all_objects.filter(**{f"{kind}_id": scope_id})}
         if cache is not None:
             cache[scope_key] = types
-    task_type = types.get(key)
+    return types
+
+
+def resolve_task_type(project, key, cache=None):
+    """`(label, icon)` du type `key` dans la portée de `project`. `cache`
+    (dict) évite une requête par tâche dans les listes : une seule par
+    portée distincte.
+
+    Replis successifs : types propres au projet (un ancien projet individuel
+    converti en collaboratif garde ses `TaskType` de portée projet — ses
+    anciennes tâches retrouvent ainsi leur libellé même si le groupe ne
+    connaît pas la clé), puis valeurs par défaut, puis clé brute."""
+    task_type = _types_for_scope_key(_scope_cache_key(project), cache).get(key)
+    if task_type is None and project.team_id:
+        task_type = _types_for_scope_key(("project", project.id), cache).get(key)
     if task_type is not None:
         return task_type.label, task_type.icon
     for default_key, label, icon in DEFAULT_TASK_TYPES:

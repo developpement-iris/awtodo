@@ -9,6 +9,7 @@ import {
 } from "../../api/client";
 import { Combobox } from "../../components/Combobox";
 import { TaskTypesEditor } from "../../components/TaskTypesEditor";
+import { invalidateTaskTypes } from "../../hooks/useTaskTypes";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 import { useToast } from "../../context/ToastContext";
 import type { Project, ProjectMembership, ProjectRole, Team } from "../../types/watodo";
@@ -86,6 +87,9 @@ export function ProjectAdminTab({ project, onUpdated }: ProjectAdminTabProps) {
     setError(null);
     try {
       onUpdated(await convertProjectToCollaborative(project.id, convertTeam));
+      // Le projet passe sur les types de tâche du groupe : la liste mise en
+      // cache pour ce projet (types propres au projet individuel) est périmée.
+      invalidateTaskTypes();
       setConvertTeam("");
       showToast("Projet passé en collaboratif.");
     } catch (err) {
