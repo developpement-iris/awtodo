@@ -28,12 +28,14 @@ class IncidentAuditServiceTests(TestCase):
         )
 
         entries = list(get_audit_log(self.incident))
-        # 1 entrée pour le démarrage (status) + 3 pour la résolution (status,
-        # resolution_comment, time_spent — même patron que `complete_task`,
-        # qui journalise aussi `time_spent` en plus du statut).
-        self.assertEqual(len(entries), 4)
-        self.assertEqual(entries[0].new_value, "En cours")
-        self.assertEqual(entries[1].new_value, "Résolu")
+        # 2 entrées pour le démarrage (status + assigned_to : démarrer un
+        # incident non attribué l'attribue à l'acteur, session du
+        # 2026-10-13) + 3 pour la résolution (status, resolution_comment,
+        # time_spent — même patron que `complete_task`).
+        self.assertEqual(len(entries), 5)
+        status_entries = [e for e in entries if e.field_name == "status"]
+        self.assertEqual(status_entries[0].new_value, "En cours")
+        self.assertEqual(status_entries[1].new_value, "Résolu")
 
 
 @override_settings(
@@ -63,6 +65,7 @@ class IncidentAuditApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 200)
         audit_log = response.json()["audit_log"]
-        self.assertEqual(len(audit_log), 1)
-        self.assertEqual(audit_log[0]["field_name"], "status")
-        self.assertEqual(audit_log[0]["new_value"], "En cours")
+        # status + assigned_to (démarrer attribue l'incident, 2026-10-13).
+        self.assertEqual({entry["field_name"] for entry in audit_log}, {"status", "assigned_to"})
+        status_entry = next(entry for entry in audit_log if entry["field_name"] == "status")
+        self.assertEqual(status_entry["new_value"], "En cours")

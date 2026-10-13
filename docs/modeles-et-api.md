@@ -260,7 +260,7 @@ Le SSO/gestion de comptes est volontairement mis en dernier dans la roadmap — 
 | Endpoint | Rôle requis | Effet |
 |---|---|---|
 | `POST /api/v1/incidents/` | membre du groupe attribué au projet **ou** du groupe direct (`team`, incident non-affecté — voir "Boîte de réception" ci-dessus) | crée l'incident, statut initial `signalé`. **Peut aussi être créé automatiquement via l'intégration ticketing** (voir note ci-dessous) — dans ce cas, pas de contrainte de groupe, l'appel vient du service account ticketing, pas d'un utilisateur. |
-| `POST /api/v1/incidents/{id}/start/` | n'importe quel membre du groupe | `signalé` → `en_cours` |
+| `POST /api/v1/incidents/{id}/start/` | n'importe quel membre du groupe | `signalé` → `en_cours` ; si l'incident n'a pas d'assigné, il est attribué à l'acteur (session du 2026-10-13 — sinon il n'apparaissait dans le panneau « À planifier » du planning de personne, ce panneau ne listant que les incidents attribués) |
 | `POST /api/v1/incidents/{id}/resolve/` (session du 2026-09-14 : body devenu obligatoire) | n'importe quel membre du groupe | `en_cours` → `résolu`, body `{"resolution_comment": "...", "time_spent": "1.50"}` — les deux obligatoires, même patron que `complete_task` (clôture d'une tâche) |
 | `POST /api/v1/incidents/{id}/archive/` | n'importe quel membre du groupe | `résolu` → `archivé` (jamais supprimé) |
 | `GET /api/v1/incidents/inbox/` (session du 07/08/2026) | membre du groupe | liste les incidents non-affectés (`project=NULL`) du/des groupe(s) de l'acteur |

@@ -201,6 +201,25 @@ class StartIncidentTests(IncidentServicesTestCase):
 
         self.assertEqual(incident.status, "en_cours")
 
+    def test_start_assigns_unassigned_incident_to_actor(self):
+        # Retour direct (session du 2026-10-13) : un incident démarré doit
+        # pouvoir se planifier — le panneau « À planifier » ne liste que les
+        # incidents attribués à l'utilisateur.
+        incident = self.make_incident(status="signale")
+
+        start_incident(actor=self.other_member, incident=incident)
+
+        self.assertEqual(incident.assigned_to, self.other_member)
+
+    def test_start_keeps_existing_assignee(self):
+        incident = self.make_incident(status="signale")
+        incident.assigned_to = self.member
+        incident.save()
+
+        start_incident(actor=self.other_member, incident=incident)
+
+        self.assertEqual(incident.assigned_to, self.member)
+
     def test_outsider_cannot_start(self):
         incident = self.make_incident(status="signale")
 

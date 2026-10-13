@@ -349,6 +349,11 @@ def start_incident(*, actor, incident):
 
     with record_changes(incident, actor=actor, project=incident.project, team=incident.team):
         incident.status = "en_cours"
+        # Qui démarre un incident non attribué le prend (session du
+        # 2026-10-13) — sinon il n'apparaît dans le panneau « À planifier »
+        # du planning de personne. Un assigné existant reste en place.
+        if incident.assigned_to_id is None:
+            incident.assigned_to = actor
         incident.save()
     return incident
 
