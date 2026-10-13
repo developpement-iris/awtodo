@@ -103,7 +103,7 @@ interface LoginPageProps {
 }
 
 export function LoginPage({ onSuccess, onCancel }: LoginPageProps) {
-  const { login } = useCurrentUser();
+  const { login, sessionExpired } = useCurrentUser();
   const { showToast } = useToast();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -185,6 +185,11 @@ export function LoginPage({ onSuccess, onCancel }: LoginPageProps) {
             <h1 className="login-page__card-title">Bon retour</h1>
             <p className="login-page__card-subtitle">Connectez-vous pour accéder à vos projets.</p>
 
+            {sessionExpired && !error && (
+              <p className="login-page__notice" role="status">
+                Votre session a expiré. Reconnectez-vous pour continuer.
+              </p>
+            )}
             {error && <p className="login-page__error">{error}</p>}
 
             <label className="login-page__field">

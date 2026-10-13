@@ -292,6 +292,15 @@ Un chef de projet peut ajouter au projet une personne qui n'a pas de compte dans
   - ✅ Exclus de l'annuaire "Membres" de l'organisation (`MembersSection`) et des pickers "ajouter un membre" (`GroupsSection`, sélection de membres à la création de projet) — filtrage sur `account_type === "interne"` côté frontend.
   - ✅ Un compte `pending` (interne ou externe) n'est pas sélectionnable dans le sélecteur `X-Debug-User-Id` (`UserMenu`) tant que son invitation n'est pas acceptée.
   - ✅ Un badge "Externe" est affiché dans l'onglet Administration du projet.
+
+#### Détection de session expirée (session du 2026-10-09)
+
+Remontée directe : un jeton expiré (durée de vie 8 h, `SIMPLE_JWT.ACCESS_TOKEN_LIFETIME`) laissait chaque écran afficher son propre « Impossible de charger… ». Désormais, toute requête authentifiée passe par `authFetch` (`frontend/src/api/client.ts`) : un **401** sur une requête partie avec un jeton appelle le gestionnaire enregistré par `CurrentUserContext`, qui purge le jeton et revient à l'écran de connexion avec le message « Votre session a expiré. Reconnectez-vous pour continuer. » (`sessionExpired`).
+
+**Correctif backend nécessaire** : un jeton invalide répondait en fait **403**, pas 401 — DRF ne lit `authenticate_header` que sur la *première* classe d'authentification (`DebugUserIdAuthentication`), qui n'en déclarait pas. Elle renvoie désormais `Bearer realm="api"`. Effet de bord : une clé API révoquée ou absente répond aussi 401 au lieu de 403 (code HTTP correct ; un vrai refus de droit reste 403). Régression : `apps/accounts/tests/test_session_expiry.py`.
+
+Pas de rafraîchissement silencieux : le `refresh` renvoyé par `POST /accounts/login/` n'est ni conservé par le frontend ni exploitable (aucun endpoint `token/refresh/` câblé).
+
 ### Réinitialisation de mot de passe (implémenté — session du 2026-09-09)
 
 **Statut : implémenté. Comble le "hors périmètre explicite" noté à la fin de la section précédente** — remontée directe d'un utilisateur bloqué (identifiant réel). Même schéma qu'`Invitation` (voir modèle `PasswordResetRequest`, `apps/accounts/models.py`) : token UUID public, email avec lien cliquable, endpoints publics gardés par un `get_permissions`/`permission_classes` explicite (⚠️ même piège que `InvitationViewSet` — la permission par défaut est `IsAuthenticated` en staging/production, voir `config/settings/base.py`).

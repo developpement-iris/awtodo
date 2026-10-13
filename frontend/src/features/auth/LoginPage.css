@@ -357,3 +357,15 @@
     padding: var(--space-7) var(--space-5);
   }
 }
+
+/* Déconnexion forcée par un jeton refusé (401) — information, pas une erreur
+   de saisie : encre atténuée plutôt que la couleur d'erreur. */
+.login-page__notice {
+  font-size: 13px;
+  color: var(--login-ink-muted);
+  background: var(--login-beige);
+  border: 1px solid var(--login-beige-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  margin: 0 0 var(--space-3);
+}

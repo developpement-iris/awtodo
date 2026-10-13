@@ -1,5 +1,12 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { getMe, getOrganisationBranding, getUsers, login as loginRequest, setAccessToken } from "../api/client";
+import {
+  getMe,
+  getOrganisationBranding,
+  getUsers,
+  login as loginRequest,
+  onSessionExpired,
+  setAccessToken,
+} from "../api/client";
 import type { Me, User } from "../types/watodo";
 import { applyBrandColors } from "../theme/brandColors";
 
@@ -18,6 +25,9 @@ interface CurrentUserContextValue {
    * tentative de reprise d'un token stocké) — évite à `App.tsx` de flasher
    * l'écran de connexion avant de savoir si une identité existe déjà. */
   isRestoring: boolean;
+  /** Vrai quand la déconnexion vient d'un jeton refusé par l'API (401), pas
+   * d'un clic sur "Se déconnecter" — `LoginPage` l'annonce. */
+  sessionExpired: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
   /** Recharge `currentUser` depuis `/accounts/me/` — utilisé après un
@@ -37,6 +47,22 @@ export function CurrentUserProvider({ children }: { children: ReactNode }) {
   const [authUser, setAuthUser] = useState<Me | null>(null);
   const [usersLoaded, setUsersLoaded] = useState(false);
   const [authRestored, setAuthRestored] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
+
+  // Tout 401 sur une requête authentifiée (voir `authFetch`) : on purge le
+  // jeton et on retombe sur l'écran de connexion. Ignoré pendant la
+  // restauration initiale, qui gère déjà silencieusement un jeton périmé.
+  useEffect(() => {
+    onSessionExpired(() => {
+      window.localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+      setAccessToken(null);
+      setAuthUser((current) => {
+        if (current) setSessionExpired(true);
+        return null;
+      });
+    });
+    return () => onSessionExpired(null);
+  }, []);
 
   // Couleurs de marque de l'organisation (session du 2026-09-28, remplace
   // l'ancienne préférence d'accent par utilisateur) — chargées et
@@ -91,6 +117,7 @@ export function CurrentUserProvider({ children }: { children: ReactNode }) {
   }, [authRestored, authUser?.id]);
 
   function logout() {
+    setSessionExpired(false);
     window.localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
     setAccessToken(null);
     setAuthUser(null);
@@ -100,6 +127,7 @@ export function CurrentUserProvider({ children }: { children: ReactNode }) {
     const response = await loginRequest(username, password);
     window.localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, response.access);
     setAccessToken(response.access);
+    setSessionExpired(false);
     setAuthUser(response.user);
   }
 
@@ -115,6 +143,7 @@ export function CurrentUserProvider({ children }: { children: ReactNode }) {
         currentUser: authUser,
         isAuthenticated: authUser !== null,
         isRestoring: !usersLoaded || !authRestored,
+        sessionExpired,
         login,
         logout,
         refreshCurrentUser,

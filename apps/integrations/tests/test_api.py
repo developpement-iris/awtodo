@@ -73,11 +73,10 @@ class ApiKeyApiTests(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f"Api-Key {raw_key}")
         r = self.client.get("/api/v1/incidents/inbox/")
         # DRF choisit 401 vs 403 selon `authenticate_header` du *premier*
-        # authenticator enregistré (`DebugUserIdAuthentication`, sans
-        # WWW-Authenticate) plutôt que celui qui a effectivement rejeté la
-        # requête — 403 est donc le code obtenu en pratique ici, cohérent
-        # avec l'ordre de `DEFAULT_AUTHENTICATION_CLASSES`.
-        self.assertEqual(r.status_code, 403)
+        # authenticator enregistré (`DebugUserIdAuthentication`) — qui
+        # déclare `Bearer` depuis le 2026-10-09 (détection de session
+        # expirée côté frontend) : une clé révoquée répond donc 401.
+        self.assertEqual(r.status_code, 401)
 
     def test_api_key_scoped_to_its_own_organisation(self):
         other_org = Organisation.objects.create(name="Autre org")

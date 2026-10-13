@@ -79,6 +79,29 @@ function authHeaders(): Record<string, string> {
   return accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
 }
 
+// Session expirée (jeton JWT périmé, ou compte désactivé entre-temps) : un
+// 401 sur une requête partie AVEC un jeton prévient `CurrentUserContext`,
+// qui ramène à l'écran de connexion — plutôt que chaque écran n'affiche son
+// propre "Impossible de charger…".
+let sessionExpiredHandler: (() => void) | null = null;
+
+export function onSessionExpired(handler: (() => void) | null) {
+  sessionExpiredHandler = handler;
+}
+
+async function authFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const sentWithToken = accessToken !== null;
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers: { ...(init.headers as Record<string, string> | undefined), ...authHeaders() },
+  });
+  if (response.status === 401 && sentWithToken) {
+    sessionExpiredHandler?.();
+    throw new Error("Votre session a expiré. Reconnectez-vous.");
+  }
+  return response;
+}
+
 // Rend lisible un corps d'erreur DRF : soit `{detail: "..."}`, soit un
 // dictionnaire d'erreurs par champ (`{password: ["..."]}`) que
 // `serializer.is_valid(raise_exception=True)` renvoie — jusqu'ici masqué
@@ -97,7 +120,7 @@ function errorMessage(payload: unknown, path: string, status: number): string {
 }
 
 async function getJson<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, { headers: authHeaders() });
+  const response = await authFetch(path);
   if (!response.ok) {
     throw new Error(`Échec de la requête ${path} (${response.status})`);
   }
@@ -105,9 +128,9 @@ async function getJson<T>(path: string): Promise<T> {
 }
 
 async function postJson<T>(path: string, body: Record<string, unknown> = {}): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await authFetch(path, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   if (!response.ok) {
@@ -121,9 +144,9 @@ async function postJson<T>(path: string, body: Record<string, unknown> = {}): Pr
 }
 
 async function patchJson<T>(path: string, body: Record<string, unknown> = {}): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await authFetch(path, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   if (!response.ok) {
@@ -135,9 +158,9 @@ async function patchJson<T>(path: string, body: Record<string, unknown> = {}): P
 }
 
 async function putJson<T>(path: string, body: Record<string, unknown> = {}): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await authFetch(path, {
     method: "PUT",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   if (!response.ok) {
@@ -151,10 +174,7 @@ async function putJson<T>(path: string, body: Record<string, unknown> = {}): Pro
 // DELETE : certains endpoints renvoient un corps (fiche archivée, espace mis
 // à jour), d'autres un 204 vide — `T` peut donc être `void`.
 async function deleteJson<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: "DELETE",
-    headers: authHeaders(),
-  });
+  const response = await authFetch(path, { method: "DELETE" });
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
     throw new Error(errorMessage(payload, path, response.status));
@@ -720,7 +740,7 @@ export function getProjectHistory(projectId: string): Promise<ProjectHistoryEntr
 // l'endpoint exige le token d'auth déjà géré par `authHeaders()` — un simple
 // lien `<a href>` vers l'URL de l'API n'enverrait pas ce header.
 export async function downloadHistoryExport(): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/projects/history/export/`, { headers: authHeaders() });
+  const response = await authFetch("/projects/history/export/");
   if (!response.ok) {
     throw new Error(`Échec de l'export de l'historique (${response.status})`);
   }
@@ -938,10 +958,7 @@ export function markNotificationRead(notificationId: string): Promise<Notificati
 }
 
 export async function markAllNotificationsRead(): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/notifications/mark-all-read/`, {
-    method: "POST",
-    headers: authHeaders(),
-  });
+  const response = await authFetch("/notifications/mark-all-read/", { method: "POST" });
   if (!response.ok) {
     throw new Error(`Échec de la requête /notifications/mark-all-read/ (${response.status})`);
   }

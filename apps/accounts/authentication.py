@@ -23,3 +23,11 @@ class DebugUserIdAuthentication(BaseAuthentication):
             return None
 
         return (user, None)
+
+    def authenticate_header(self, request):
+        # DRF ne lit cet en-tête que sur la PREMIÈRE classe d'authentification
+        # de la liste (celle-ci) : sans lui, un jeton JWT expiré/invalide
+        # répondait 403 au lieu de 401, et le frontend ne pouvait pas
+        # distinguer "session expirée" de "action interdite" (session du
+        # 2026-10-09). Même valeur que `JWTAuthentication`.
+        return 'Bearer realm="api"'
