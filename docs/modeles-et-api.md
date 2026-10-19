@@ -30,10 +30,24 @@ Détail des modèles de données et des endpoints. Référencé depuis CLAUDE.md
 - **Jamais de suppression de version** — cohérent avec la règle transverse.
 
 ### Task
-- Projet parent
+- Projet parent — **optionnel depuis le 2026-10-19** (voir "Tâches personnelles" ci-dessous)
 - **Version du projet** (FK `ProjectVersion`, voir ci-dessus) — attribuée automatiquement à la version courante du projet au moment de la création, jamais choisie manuellement.
 - Titre, description
 - **Type** *(historique — personnalisable depuis le 2026-10-09, voir "Types de tâche personnalisables" ci-dessous)* : `CORRECTION` / `AJOUT` / `ÉVOLUTION` / `TEST` (ajouté session du 2026-09-10)
+
+### Tâches personnelles — sans projet (session du 2026-10-19)
+
+Demande directe : « pouvoir créer des tâches qui n'appartiennent à aucun projet ». Cadrage via `AskUserQuestion` : **tâche perso privée**, **types par défaut**, **jamais rattachée à un projet ensuite**.
+
+- `Task.project` et `Task.version` deviennent nullables ; nouveau `Task.owner` (FK `User`, renseigné **uniquement** pour une tâche personnelle — une tâche de projet relève toujours des rôles `ProjectMembership`). Migration `tasks.0012_personal_tasks`.
+- **Création** : `POST /api/v1/tasks/` sans `project` (ou `project: null`). `create_task` délègue à `_create_personal_task` : `owner = assignee = créateur`, statut directement `assignee` (pas de validation). Un `assignee` différent du créateur → 400. Un compte de service (clé API) doit toujours fournir un projet → 400.
+- **Types** : seulement les 4 types par défaut (`DEFAULT_TASK_TYPES`), non personnalisables — `_ensure_valid_task_type(None, key)` / `resolve_task_type(None, key)`.
+- **Permissions** : le propriétaire tient à la fois le rôle de membre et celui de chef de projet (`_require_task_member` / `_require_task_manager` / `_is_task_manager` aiguillent selon `task.project_id`) — renommer, éditer, échéance, type/priorité, démarrer, clôturer, annuler/réactiver, commenter. **Personne d'autre**, aucun flag `can_*` vrai pour un tiers. `assign` toujours refusé (pas d'autre personne à qui la confier) ; `validate`/`reject`/`claim` inatteignables par construction (statut jamais `en_attente_validation`/`disponible`).
+- **Visibilité** : `TaskViewSet.get_queryset` = tâches des projets accessibles **+** tâches personnelles de l'utilisateur lui-même ; jamais celles des autres (404 en détail). Nouveau filtre `?personal=true`. Exclues de la fiche « charge de travail » d'un membre vue par un admin (`get_assigned_tasks_for_admin`).
+- **Hors projet, donc naturellement absentes** : statistiques projet/globales et Dashboard (filtrés par projet), file « À documenter » (garde explicite dans `apps.documentation.signals`), historique d'un projet.
+- **Export d'historique** (retour direct, même session) : les lignes d'audit d'une tâche personnelle sont marquées `AuditLogEntry.is_private` (nouveau champ, migration `common.0003`, posé via `record_changes`/`record_event(private=True)`) et `get_scoped_history` les exclut **sauf pour leur propre auteur** — un admin d'organisation ne les voit plus. Drapeau générique dans `apps.common` plutôt qu'un filtre sur `Task` : `apps.projects` (où vit l'export) ne peut pas importer `apps.tasks`.
+- **Planning** : planifiable comme toute tâche assignée (`_ensure_can_schedule` ne vérifie l'appartenance au projet que s'il y en a un) ; groupe « Tâches personnelles » en tête du panneau « À planifier ».
+- **Frontend** : bouton « Nouvelle tâche » sur l'écran Tâches global (`TasksListPage`), le sélecteur de projet propose « Aucun — tâche personnelle » (par défaut) ; colonne Projet = « Personnelle ». Constructeur de payload partagé `features/tasks/taskCreatePayload.ts` (aussi utilisé par le Kanban). `useTaskTypes(PERSONAL_SCOPE)` renvoie les types par défaut sans requête.
 
 ### Types de tâche personnalisables (session du 2026-10-09)
 

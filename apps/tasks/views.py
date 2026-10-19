@@ -1,5 +1,5 @@
 from django.core.exceptions import ValidationError
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from django.shortcuts import get_object_or_404
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
@@ -171,9 +171,13 @@ class TaskViewSet(ListOnlyFilterMixin, mixins.ListModelMixin, mixins.RetrieveMod
         # ressort de `TaskFilterSet.filter_status`, pas du queryset de base —
         # sinon une tâche archivée/rejetée resterait invisible même en la
         # demandant explicitement via `?status=archivee`.
-        qs = Task.all_objects.filter(project__in=accessible_projects(self.request.user)).select_related(
-            "project", "assignee", "version"
-        )
+        # Plus les tâches personnelles (sans projet) de l'utilisateur lui-même,
+        # jamais celles des autres (session du 2026-10-19).
+        user = self.request.user
+        scope = Q(project__in=accessible_projects(user))
+        if getattr(user, "is_authenticated", False):
+            scope |= Q(project__isnull=True, owner=user)
+        qs = Task.all_objects.filter(scope).select_related("project", "assignee", "version")
         if self.action == "list":
             # `UserSerializer.get_teams` (assigné) ferait sinon un SELECT par
             # tâche — préchargé une fois ici.
@@ -192,7 +196,7 @@ class TaskViewSet(ListOnlyFilterMixin, mixins.ListModelMixin, mixins.RetrieveMod
         # dépend du rôle de l'acteur sur `task.project`, résolu une seule fois
         # pour tous les projets de la page.
         objects = list(self.filter_queryset(self.get_queryset()))
-        project_ids = {t.project_id for t in objects}
+        project_ids = {t.project_id for t in objects if t.project_id}
         with prefetched_project_roles(request.user, project_ids):
             return Response(self.get_serializer(objects, many=True).data)
 

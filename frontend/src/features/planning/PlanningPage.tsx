@@ -114,18 +114,26 @@ interface PlanningPageProps {
 // Regroupement par projet du panneau "À planifier" (session du 2026-10-08,
 // retour direct : "possible de faire un regroupement par projet ? ce serait
 // plus simple [...] pour s'y retrouver") — trié par nom de projet, groupes
-// repliés par défaut (cliquer un projet déroule/rentre sa liste).
+// repliés par défaut (cliquer un projet déroule/rentre sa liste). Les tâches
+// personnelles (sans projet) forment un groupe à part, placé en tête.
+const PERSONAL_GROUP_ID = "__personal__";
+
 function groupTasksByProject(tasks: Task[]): { projectId: string; projectName: string; tasks: Task[] }[] {
   const groups = new Map<string, { projectId: string; projectName: string; tasks: Task[] }>();
   for (const task of tasks) {
-    const group = groups.get(task.project);
+    const projectId = task.project ?? PERSONAL_GROUP_ID;
+    const group = groups.get(projectId);
     if (group) {
       group.tasks.push(task);
     } else {
-      groups.set(task.project, { projectId: task.project, projectName: task.project_name, tasks: [task] });
+      groups.set(projectId, { projectId, projectName: task.project_name ?? "Tâches personnelles", tasks: [task] });
     }
   }
-  return Array.from(groups.values()).sort((a, b) => a.projectName.localeCompare(b.projectName, "fr"));
+  return Array.from(groups.values()).sort((a, b) => {
+    if (a.projectId === PERSONAL_GROUP_ID) return -1;
+    if (b.projectId === PERSONAL_GROUP_ID) return 1;
+    return a.projectName.localeCompare(b.projectName, "fr");
+  });
 }
 
 export function PlanningPage({ onNavigate }: PlanningPageProps) {

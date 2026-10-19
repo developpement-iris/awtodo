@@ -29,7 +29,10 @@ def _on_task_completed(sender, task, actor, **kwargs):
     # Toute tâche terminée entre dans la file, quel que soit son type
     # (session du 2026-10-09) : les types étant désormais personnalisés par
     # groupe, l'ancien filtre `ajout`/`evolution` n'a plus de sens — le chef
-    # de projet ignore ce qui ne mérite pas de fiche.
+    # de projet ignore ce qui ne mérite pas de fiche. Une tâche personnelle
+    # (sans projet) n'a pas d'espace de documentation.
+    if task.project_id is None:
+        return
     space = DocSpace.objects.filter(project=task.project).first()
     if space is None:
         return

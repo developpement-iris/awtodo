@@ -96,8 +96,23 @@ class Task(UUIDModel, TimeStampedModel, StatusLifecycleModel):
     ]
     ACTIVE_STATUSES = frozenset({"en_attente_validation", "disponible", "assignee", "en_cours"})
 
-    project = models.ForeignKey("projects.Project", on_delete=models.PROTECT, related_name="tasks")
-    version = models.ForeignKey("projects.ProjectVersion", on_delete=models.PROTECT, related_name="tasks")
+    # `project` vide = tâche personnelle (session du 2026-10-19) : privée à
+    # `owner`, assignée d'office à lui, jamais rattachée à un projet ensuite.
+    # `owner` n'est renseigné que dans ce cas — une tâche de projet relève des
+    # rôles `ProjectMembership`, pas d'un propriétaire.
+    project = models.ForeignKey(
+        "projects.Project", null=True, blank=True, on_delete=models.PROTECT, related_name="tasks"
+    )
+    version = models.ForeignKey(
+        "projects.ProjectVersion", null=True, blank=True, on_delete=models.PROTECT, related_name="tasks"
+    )
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="personal_tasks",
+    )
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
     # Clé d'un `TaskType` de la portée du projet (groupe, sinon projet) —

@@ -595,7 +595,8 @@ export function getUsers(): Promise<User[]> {
 }
 
 export interface TaskCreatePayload {
-  project: string;
+  /** `null` = tâche personnelle, sans projet. */
+  project: string | null;
   title: string;
   task_type: Task["task_type"];
   description?: string;

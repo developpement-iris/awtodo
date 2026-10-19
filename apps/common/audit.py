@@ -30,7 +30,7 @@ def _resolve_organisation(actor, organisation):
 
 
 @contextmanager
-def record_changes(instance, *, actor, project=None, team=None, organisation=None):
+def record_changes(instance, *, actor, project=None, team=None, organisation=None, private=False):
     """Capture l'état de chaque champ de `instance` avant le bloc, puis
     journalise dans `AuditLogEntry` tout champ qui a changé après le bloc
     (typiquement une mutation suivie d'un `.save()`). Usage :
@@ -44,7 +44,8 @@ def record_changes(instance, *, actor, project=None, team=None, organisation=Non
     chaque ligne créée pour que l'historique d'un projet/groupe soit une
     requête indexée, pas un recoupement à la lecture. `organisation` est
     déduit de `actor.organisation` si non fourni — obligatoire à préciser
-    explicitement quand `actor=None` (action système).
+    explicitement quand `actor=None` (action système). `private` : objet
+    privé (tâche personnelle), exclu des exports scopés des autres.
 
     Comparaison sur `field.attname` (ex. `assignee_id`), pas `field.name` :
     évite de déclencher une requête pour résoudre l'objet lié juste pour le
@@ -68,6 +69,7 @@ def record_changes(instance, *, actor, project=None, team=None, organisation=Non
             organisation=resolved_organisation,
             project=project,
             team=team,
+            is_private=private,
             verb="field_changed",
             field_name=field.name,
             old_value=_display_value(field, old_raw),
@@ -75,7 +77,7 @@ def record_changes(instance, *, actor, project=None, team=None, organisation=Non
         )
 
 
-def record_event(instance, *, actor, verb, description, project=None, team=None, organisation=None):
+def record_event(instance, *, actor, verb, description, project=None, team=None, organisation=None, private=False):
     """Journalise un événement discret qui n'est pas un diff de champ —
     création, commentaire, ajout/retrait de membre, ligne de budget...
     Mêmes règles de scoping que `record_changes`."""
@@ -87,6 +89,7 @@ def record_event(instance, *, actor, verb, description, project=None, team=None,
         organisation=_resolve_organisation(actor, organisation),
         project=project,
         team=team,
+        is_private=private,
         verb=verb,
         field_name="",
         old_value="",

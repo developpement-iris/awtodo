@@ -28,11 +28,13 @@ class TaskSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     assignee = UserSerializer(read_only=True)
     permissions = serializers.SerializerMethodField()
-    version_label = serializers.CharField(source="version.label", read_only=True)
+    # Méthodes plutôt que `source="project.name"` : `project`/`version` sont
+    # vides sur une tâche personnelle (session du 2026-10-19).
+    version_label = serializers.SerializerMethodField()
     # Regroupement par projet du panneau "À planifier" (session du 2026-10-08)
     # — déjà `select_related("project")` sur les querysets de liste, aucun
     # N+1 introduit.
-    project_name = serializers.CharField(source="project.name", read_only=True)
+    project_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Task
@@ -63,6 +65,12 @@ class TaskSerializer(serializers.ModelSerializer):
             "updated_at",
             "permissions",
         ]
+
+    def get_version_label(self, obj):
+        return obj.version.label if obj.version_id else None
+
+    def get_project_name(self, obj):
+        return obj.project.name if obj.project_id else None
 
     def _task_type(self, obj):
         cache = self.context.setdefault("_task_type_cache", {}) if isinstance(self.context, dict) else None
@@ -153,7 +161,10 @@ class GlobalTaskStatsSerializer(TaskInsightsSerializer):
 
 
 class TaskCreateSerializer(serializers.Serializer):
-    project = serializers.PrimaryKeyRelatedField(queryset=Project.objects.all())
+    # Absent ou `null` = tâche personnelle (session du 2026-10-19).
+    project = serializers.PrimaryKeyRelatedField(
+        queryset=Project.objects.all(), required=False, allow_null=True, default=None
+    )
     title = serializers.CharField(max_length=255)
     description = serializers.CharField(required=False, allow_blank=True, default="")
     # Validé contre les types actifs de la portée du projet par le service.

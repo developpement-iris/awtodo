@@ -34,6 +34,17 @@ export function taskTypeOptions(types: TaskType[], current?: Pick<Task, "task_ty
   return options;
 }
 
+// Tâche personnelle (sans projet, session du 2026-10-19) : les 4 types par
+// défaut, non personnalisables — miroir de `apps.tasks.models.DEFAULT_TASK_TYPES`.
+// Passé à `useTaskTypes` à la place d'un id de projet.
+export const PERSONAL_SCOPE = "__personal__";
+const PERSONAL_TASK_TYPES: TaskType[] = [
+  { id: "correction", key: "correction", label: "Correction", icon: "wrench", status: "active", position: 0 },
+  { id: "ajout", key: "ajout", label: "Ajout", icon: "circle_plus", status: "active", position: 1 },
+  { id: "evolution", key: "evolution", label: "Évolution", icon: "trending_up", status: "active", position: 2 },
+  { id: "test", key: "test", label: "Test", icon: "flask", status: "active", position: 3 },
+];
+
 export function useTaskTypes(projectId: string | null | undefined): TaskType[] {
   const [types, setTypes] = useState<TaskType[]>([]);
   const [version, setVersion] = useState(0);
@@ -49,6 +60,10 @@ export function useTaskTypes(projectId: string | null | undefined): TaskType[] {
   useEffect(() => {
     if (!projectId) {
       setTypes([]);
+      return;
+    }
+    if (projectId === PERSONAL_SCOPE) {
+      setTypes(PERSONAL_TASK_TYPES);
       return;
     }
     let cancelled = false;

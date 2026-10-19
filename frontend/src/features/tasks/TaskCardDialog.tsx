@@ -62,6 +62,11 @@ export function TaskCardDialog({ taskId, onClose, onChanged }: TaskCardDialogPro
       .then((data) => {
         if (cancelled) return;
         setTask(data);
+        // Tâche personnelle : pas de projet, personne d'autre à qui l'attribuer.
+        if (data.project === null) {
+          setProjectName("Tâche personnelle");
+          return;
+        }
         getProject(data.project)
           .then((project) => {
             if (cancelled) return;

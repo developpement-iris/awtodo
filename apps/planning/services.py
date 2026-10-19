@@ -284,8 +284,9 @@ def _task_summary(task):
         "status": task.status,
         "status_display": task.get_status_display(),
         "priority": task.priority,
-        "project_id": str(task.project_id),
-        "project_name": task.project.name,
+        # Vides sur une tâche personnelle (sans projet).
+        "project_id": str(task.project_id) if task.project_id else None,
+        "project_name": task.project.name if task.project_id else None,
     }
 
 
@@ -707,7 +708,7 @@ def _ensure_can_schedule(actor, *, task, incident):
     if task is not None:
         if task.assignee_id != actor.id:
             raise PlanningPermissionError("Vous ne pouvez planifier qu'une tâche qui vous est assignée.")
-        if not is_project_member(actor, task.project):
+        if task.project_id is not None and not is_project_member(actor, task.project):
             raise PlanningPermissionError("Vous n'êtes pas membre du projet de cette tâche.")
     if incident is not None:
         if incident.assigned_to_id != actor.id:

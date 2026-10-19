@@ -18,7 +18,6 @@ import {
   updateTaskEstimatedHours,
   updateTaskPriority,
   updateTaskType,
-  type TaskCreatePayload,
 } from "../../api/client";
 import { CancelDialog } from "../../components/CancelDialog";
 import { CreationCard } from "../../components/CreationCard";
@@ -40,6 +39,7 @@ import { CompleteDialog } from "./CompleteDialog";
 import { RejectDialog } from "./RejectDialog";
 import { TaskCard } from "./TaskCard";
 import { TaskCreateDialog, type TaskCreateFormValues } from "./TaskCreateDialog";
+import { buildTaskCreatePayload } from "./taskCreatePayload";
 import { TaskDrawer } from "./TaskDrawer";
 import { useTaskTransitions } from "./useTaskTransitions";
 import "./KanbanBoard.css";
@@ -82,21 +82,6 @@ function KanbanColumn({ status, tasks, onOpen, onReject, onCancel, onRename, pen
       </div>
     </div>
   );
-}
-
-function buildCreatePayload(values: TaskCreateFormValues): TaskCreatePayload {
-  const payload: TaskCreatePayload = {
-    project: values.project,
-    title: values.title.trim(),
-    task_type: values.task_type,
-    priority: values.priority,
-  };
-  if (values.description.trim()) payload.description = values.description.trim();
-  if (values.deadline) payload.deadline = values.deadline;
-  if (values.external_reference_id.trim()) payload.external_reference_id = values.external_reference_id.trim();
-  if (values.assignee) payload.assignee = values.assignee;
-  if (values.estimated_hours.trim()) payload.estimated_hours = values.estimated_hours.trim();
-  return payload;
 }
 
 interface KanbanBoardProps {
@@ -286,7 +271,7 @@ export function KanbanBoard({ project, versionId }: KanbanBoardProps) {
     setCreateError(null);
 
     try {
-      const created = await createTask(buildCreatePayload(values));
+      const created = await createTask(buildTaskCreatePayload(values));
       setCreatingTask(false);
       // La création cible toujours la version courante, quelle que soit la
       // version affichée (voir docs/modeles-et-api.md > "ProjectVersion") —

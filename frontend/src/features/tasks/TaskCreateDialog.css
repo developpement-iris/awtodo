@@ -146,3 +146,11 @@
     text-align: center;
   }
 }
+
+/* Tâche personnelle : l'assigné n'est pas un choix, juste un rappel. */
+.task-create-dialog__hint {
+  margin: 0;
+  padding: var(--space-2) 0;
+  font-size: 13.5px;
+  color: var(--color-text-muted);
+}

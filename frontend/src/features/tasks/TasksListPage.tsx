@@ -1,7 +1,9 @@
+import { Plus } from "lucide-react";
 import { AnimatePresence } from "motion/react";
 import { Fragment, useEffect, useState } from "react";
 import {
   addTaskComment,
+  createTask,
   getProjects,
   getTask,
   getTasks,
@@ -35,6 +37,8 @@ import { defaultStatusSelection, TASK_STATUS_FILTER_OPTIONS } from "../../lib/st
 import type { AuditLogEntry, Project, Task, TaskComment, Team, User } from "../../types/watodo";
 import { CompleteDialog } from "./CompleteDialog";
 import { RejectDialog } from "./RejectDialog";
+import { TaskCreateDialog, type TaskCreateFormValues } from "./TaskCreateDialog";
+import { buildTaskCreatePayload } from "./taskCreatePayload";
 import { TaskAccordion } from "./TaskAccordion";
 import { useTaskTransitions } from "./useTaskTransitions";
 import "./TasksListPage.css";
@@ -98,6 +102,12 @@ function displayName(user: User): string {
   return `${user.first_name} ${user.last_name}`.trim() || user.username;
 }
 
+// Tâche personnelle (sans projet, session du 2026-10-19) : libellé fixe.
+function projectLabel(task: Task, projectNameById: Map<string, string>): string {
+  if (task.project === null) return "Personnelle";
+  return projectNameById.get(task.project) ?? "";
+}
+
 // Tri par colonne (retour direct : "il faut pouvoir trier selon une
 // colonne... si je clique sur priorité, classement par priorité, par ordre
 // alphabétique pour les autres colonnes"). Priorité par rang (même helper
@@ -136,7 +146,7 @@ function compareTasks(
     case "project":
       return (
         sign *
-        (projectNameById.get(a.project) ?? "").localeCompare(projectNameById.get(b.project) ?? "", "fr")
+        projectLabel(a, projectNameById).localeCompare(projectLabel(b, projectNameById), "fr")
       );
     case "deadline":
       return compareNullableStrings(a.deadline, b.deadline, direction);
@@ -145,7 +155,7 @@ function compareTasks(
     case "time_spent":
       return compareNullableNumbers(a.time_spent, b.time_spent, direction);
     case "version":
-      return sign * a.version_label.localeCompare(b.version_label, "fr");
+      return sign * (a.version_label ?? "").localeCompare(b.version_label ?? "", "fr");
     default:
       return 0;
   }
@@ -181,6 +191,9 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
     TASK_COLUMNS_DEFAULT_VISIBLE,
   );
   const { sortKey, direction, toggle: toggleSort } = useSort<TaskSortKey>();
+  const [creating, setCreating] = useState(false);
+  const [createSubmitting, setCreateSubmitting] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const myTeams = currentUser?.teams ?? [];
   const activeTeam = selectedTeam || myTeams[0] || "";
@@ -363,6 +376,25 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
     }
   }
 
+  async function handleCreate(values: TaskCreateFormValues) {
+    setCreateSubmitting(true);
+    setCreateError(null);
+    try {
+      const created = await createTask(buildTaskCreatePayload(values));
+      setCreating(false);
+      // Visible tout de suite dans « Mes tâches » seulement si elle m'est
+      // assignée (toujours le cas d'une tâche personnelle).
+      if (mode === "mine" && created.assignee?.id === currentUser?.id) {
+        setTasks((current) => (current ? [created, ...current] : current));
+      }
+      showToast("Tâche créée.");
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "La création a échoué.");
+    } finally {
+      setCreateSubmitting(false);
+    }
+  }
+
   async function handleAddComment(content: string) {
     if (!expandedTaskId) return;
     setCommentSubmitting(true);
@@ -450,6 +482,13 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
 
         <StatusFilterDropdown options={TASK_STATUS_FILTER_OPTIONS} selected={statusFilter} onChange={setStatusFilter} />
         <ColumnPicker columns={TASK_COLUMNS} visible={visibleColumns} onChange={setVisibleColumns} />
+
+        {currentUser && (
+          <button type="button" className="tasks-list-page__create" onClick={() => setCreating(true)}>
+            <Plus size={14} strokeWidth={1.75} aria-hidden="true" />
+            Nouvelle tâche
+          </button>
+        )}
       </div>
 
       {!currentUser && (
@@ -559,7 +598,13 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
                         </td>
                       )}
                       {visibleColumns.has("project") && (
-                        <td data-label="Projet">{projectNameById.get(task.project) ?? "—"}</td>
+                        <td data-label="Projet">
+                          {task.project === null ? (
+                            <span className="tasks-list-page__empty-cell">Personnelle</span>
+                          ) : (
+                            projectNameById.get(task.project) ?? "—"
+                          )}
+                        </td>
                       )}
                       {visibleColumns.has("deadline") && (
                         <td data-label="Échéance">{formatDeadline(task.deadline)}</td>
@@ -622,6 +667,20 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
       )}
       {completingTask && (
         <CompleteDialog task={completingTask} onCancel={() => setCompletingTask(null)} onConfirm={handleComplete} />
+      )}
+      {creating && (
+        <TaskCreateDialog
+          projects={projects.filter((project) => project.permissions.can_contribute && project.status === "actif")}
+          users={[]}
+          allowPersonal
+          submitting={createSubmitting}
+          error={createError}
+          onCancel={() => {
+            setCreating(false);
+            setCreateError(null);
+          }}
+          onSubmit={handleCreate}
+        />
       )}
     </div>
   );

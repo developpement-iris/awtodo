@@ -72,6 +72,43 @@ def _require_manager(actor, project):
         raise TaskPermissionError("Seul un chef de projet du projet peut effectuer cette action.")
 
 
+# Tâche personnelle (sans projet, session du 2026-10-19) : son propriétaire
+# tient à la fois le rôle de membre et celui de chef de projet — personne
+# d'autre n'y a accès. Les gardes ci-dessous aiguillent selon le cas.
+
+
+def _require_owner(actor, task):
+    _require_actor(actor)
+    if task.owner_id != actor.id:
+        raise TaskPermissionError("Seul le propriétaire de cette tâche personnelle peut effectuer cette action.")
+
+
+def _require_task_member(actor, task):
+    if task.project_id is None:
+        _require_owner(actor, task)
+    else:
+        _require_member(actor, task.project)
+
+
+def _require_task_manager(actor, task):
+    if task.project_id is None:
+        _require_owner(actor, task)
+    else:
+        _require_manager(actor, task.project)
+
+
+def _is_task_manager(user, task):
+    if task.project_id is None:
+        return task.owner_id == getattr(user, "id", None)
+    return _is_manager(user, task.project)
+
+
+def _record_task_changes(task, actor):
+    # Tâche personnelle : lignes d'audit marquées privées, hors des exports
+    # d'historique des autres (admin d'organisation compris).
+    return record_changes(task, actor=actor, project=task.project, private=task.project_id is None)
+
+
 # --- Types de tâche personnalisables (session du 2026-10-09) ---------------
 # Portée = le groupe du projet s'il en a un (types partagés par tous les
 # projets du groupe), sinon le projet lui-même (projet individuel).
@@ -127,12 +164,14 @@ def resolve_task_type(project, key, cache=None):
     Replis successifs : types propres au projet (un ancien projet individuel
     converti en collaboratif garde ses `TaskType` de portée projet — ses
     anciennes tâches retrouvent ainsi leur libellé même si le groupe ne
-    connaît pas la clé), puis valeurs par défaut, puis clé brute."""
-    task_type = _types_for_scope_key(_scope_cache_key(project), cache).get(key)
-    if task_type is None and project.team_id:
-        task_type = _types_for_scope_key(("project", project.id), cache).get(key)
-    if task_type is not None:
-        return task_type.label, task_type.icon
+    connaît pas la clé), puis valeurs par défaut, puis clé brute. Tâche
+    personnelle (`project` vide) : directement les valeurs par défaut."""
+    if project is not None and project.id is not None:
+        task_type = _types_for_scope_key(_scope_cache_key(project), cache).get(key)
+        if task_type is None and project.team_id:
+            task_type = _types_for_scope_key(("project", project.id), cache).get(key)
+        if task_type is not None:
+            return task_type.label, task_type.icon
     for default_key, label, icon in DEFAULT_TASK_TYPES:
         if default_key == key:
             return label, icon
@@ -140,6 +179,11 @@ def resolve_task_type(project, key, cache=None):
 
 
 def _ensure_valid_task_type(project, key):
+    # Tâche personnelle : les types par défaut, non personnalisables.
+    if project is None:
+        if key not in {default_key for default_key, _, _ in DEFAULT_TASK_TYPES}:
+            raise InvalidTransitionError("Type de tâche invalide.")
+        return
     if not key or not get_task_types(task_type_scope(project)).filter(key=key).exists():
         raise InvalidTransitionError("Type de tâche invalide pour ce projet.")
 
@@ -270,13 +314,13 @@ def restore_task_type(*, actor, task_type):
 
 
 def _ensure_can_rename(actor, task):
-    _require_member(actor, task.project)
+    _require_task_member(actor, task)
 
 
 def _ensure_can_comment(actor, task):
     # Même règle que renommer/éditer la description : tout membre du
     # projet, pas réservé à l'assigné (_ensure_can_rename, ligne 67).
-    _require_member(actor, task.project)
+    _require_task_member(actor, task)
 
 
 def can_comment_task(user, task):
@@ -284,13 +328,13 @@ def can_comment_task(user, task):
 
 
 def _ensure_can_validate(actor, task):
-    _require_manager(actor, task.project)
+    _require_task_manager(actor, task)
     if task.status != "en_attente_validation":
         raise InvalidTransitionError("Seule une tâche en attente de validation peut être validée.")
 
 
 def _ensure_can_reject(actor, task):
-    _require_manager(actor, task.project)
+    _require_task_manager(actor, task)
     if task.status != "en_attente_validation":
         raise InvalidTransitionError("Seule une tâche en attente de validation peut être rejetée.")
 
@@ -300,7 +344,7 @@ def _ensure_can_cancel(actor, task):
     # l'annulation est la même décision de gestion, prise plus tard dans le
     # cycle de vie. `en_attente_validation` est délibérément exclue : c'est
     # le rejet qui couvre ce cas-là, pas d'annulation avant même validation.
-    _require_manager(actor, task.project)
+    _require_task_manager(actor, task)
     if task.status not in {"disponible", "assignee", "en_cours"}:
         raise InvalidTransitionError(
             "Seule une tâche disponible, assignée ou en cours peut être annulée."
@@ -310,19 +354,21 @@ def _ensure_can_cancel(actor, task):
 def _ensure_can_reactivate(actor, task):
     # Même autorité que l'annulation (chef de projet, `_ensure_can_cancel`) —
     # revenir sur une décision de gestion reste une décision de gestion.
-    _require_manager(actor, task.project)
+    _require_task_manager(actor, task)
     if task.status != "annulee":
         raise InvalidTransitionError("Seule une tâche annulée peut être réactivée.")
 
 
 def _ensure_can_claim(actor, task):
-    _require_member(actor, task.project)
+    _require_task_member(actor, task)
     if task.status != "disponible":
         raise InvalidTransitionError("Seule une tâche disponible peut être auto-attribuée.")
 
 
 def _ensure_can_assign(actor, task):
-    _require_manager(actor, task.project)
+    _require_task_manager(actor, task)
+    if task.project_id is None:
+        raise InvalidTransitionError("Une tâche personnelle ne peut pas être attribuée à quelqu'un d'autre.")
     if task.status not in {"disponible", "assignee"}:
         raise InvalidTransitionError(
             "L'attribution manuelle n'est possible que depuis « disponible », ou pour réassigner "
@@ -334,7 +380,7 @@ def _ensure_can_start(actor, task):
     # `_require_member` (= contributeur) en plus du contrôle d'assigné : ferme
     # le cas d'un assigné rétrogradé en `lecteur` après coup, qui resterait
     # sinon `task.assignee_id == actor.id`.
-    _require_member(actor, task.project)
+    _require_task_member(actor, task)
     if task.assignee_id != getattr(actor, "id", None):
         raise TaskPermissionError("Seul l'assigné actuel peut démarrer cette tâche.")
     if task.status != "assignee":
@@ -342,9 +388,9 @@ def _ensure_can_start(actor, task):
 
 
 def _ensure_can_complete(actor, task):
-    _require_member(actor, task.project)
+    _require_task_member(actor, task)
     is_assignee = task.assignee_id == getattr(actor, "id", None)
-    if not is_assignee and not _is_manager(actor, task.project):
+    if not is_assignee and not _is_task_manager(actor, task):
         raise TaskPermissionError("Seul l'assigné actuel ou un chef de projet peut clôturer cette tâche.")
     if task.status != "en_cours":
         raise InvalidTransitionError("Seule une tâche en cours peut être clôturée.")
@@ -400,7 +446,9 @@ def get_assigned_tasks_for_admin(*, actor, target_user):
     if target_user.organisation_id != actor.organisation_id:
         raise TaskPermissionError("Cet utilisateur n'appartient pas à votre organisation.")
 
-    return Task.objects.active().filter(assignee=target_user).select_related("project")
+    # Tâches personnelles exclues : privées à leur propriétaire, même face à
+    # un administrateur.
+    return Task.objects.active().filter(assignee=target_user, project__isnull=False).select_related("project")
 
 
 def get_project_user_stats(*, actor, project):
@@ -627,10 +675,37 @@ def get_task_permissions(user, task):
     }
 
 
+def _create_personal_task(*, actor, task_type, assignee, estimated_hours, **fields):
+    """Tâche sans projet (session du 2026-10-19) : privée au créateur,
+    assignée d'office à lui et directement « assignée » — pas de validation,
+    personne d'autre à qui la confier."""
+    _require_actor(actor)
+    if getattr(actor, "is_service_account", False):
+        raise InvalidTransitionError("Un compte de service doit préciser un projet.")
+    _ensure_valid_task_type(None, task_type)
+    if assignee is not None and assignee.id != actor.id:
+        raise InvalidTransitionError("Une tâche personnelle ne peut être assignée qu'à vous-même.")
+    if estimated_hours is not None:
+        estimated_hours = Decimal(str(estimated_hours))
+
+    task = Task.objects.create(
+        owner=actor,
+        assignee=actor,
+        status="assignee",
+        task_type=task_type,
+        estimated_hours=estimated_hours,
+        **fields,
+    )
+    record_event(
+        task, actor=actor, verb="created", description=f"Tâche personnelle créée : « {task.title} »", private=True
+    )
+    return task
+
+
 def create_task(
     *,
     actor,
-    project,
+    project=None,
     title,
     task_type,
     description="",
@@ -640,6 +715,19 @@ def create_task(
     assignee=None,
     estimated_hours=None,
 ):
+    if project is None:
+        return _create_personal_task(
+            actor=actor,
+            task_type=task_type,
+            assignee=assignee,
+            estimated_hours=estimated_hours,
+            title=title,
+            description=description,
+            priority=priority,
+            deadline=deadline,
+            external_reference_id=external_reference_id,
+        )
+
     _require_member(actor, project)
     _ensure_valid_task_type(project, task_type)
 
@@ -704,7 +792,7 @@ def rename_task(*, actor, task, title):
     if not title or not title.strip():
         raise InvalidTransitionError("Le titre ne peut pas être vide.")
 
-    with record_changes(task, actor=actor, project=task.project):
+    with _record_task_changes(task, actor):
         task.title = title.strip()
         task.save()
     return task
@@ -716,7 +804,7 @@ def update_task_description(*, actor, task, description):
     # seulement l'assigné — cohérent avec le reste du cycle de vie.
     _ensure_can_rename(actor, task)
 
-    with record_changes(task, actor=actor, project=task.project):
+    with _record_task_changes(task, actor):
         task.description = description.strip()
         task.save()
     return task
@@ -727,7 +815,7 @@ def _ensure_can_edit_deadline(actor, task):
     estimé (n'importe quel membre), une échéance engage la planification du
     projet, retour direct : "droit sur la fonction propre au rôle chef de
     projet"."""
-    _require_manager(actor, task.project)
+    _require_task_manager(actor, task)
 
 
 def can_edit_deadline_task(user, task):
@@ -749,7 +837,7 @@ def update_task_deadline(*, actor, task, deadline):
             raise InvalidTransitionError("Date d'échéance invalide (format AAAA-MM-JJ attendu).")
         deadline = parsed
 
-    with record_changes(task, actor=actor, project=task.project):
+    with _record_task_changes(task, actor):
         task.deadline = deadline
         task.save()
     return task
@@ -768,7 +856,7 @@ def update_task_estimated_hours(*, actor, task, estimated_hours):
         # comparaison faite juste après l'appel sans recharger depuis la DB.
         estimated_hours = Decimal(str(estimated_hours))
 
-    with record_changes(task, actor=actor, project=task.project):
+    with _record_task_changes(task, actor):
         task.estimated_hours = estimated_hours
         task.save()
     return task
@@ -780,7 +868,7 @@ def update_task_type(*, actor, task, task_type):
     _ensure_can_rename(actor, task)
     _ensure_valid_task_type(task.project, task_type)
 
-    with record_changes(task, actor=actor, project=task.project):
+    with _record_task_changes(task, actor):
         task.task_type = task_type
         task.save()
     return task
@@ -791,7 +879,7 @@ def update_task_priority(*, actor, task, priority):
     if priority not in dict(PRIORITY_CHOICES):
         raise InvalidTransitionError("Priorité invalide.")
 
-    with record_changes(task, actor=actor, project=task.project):
+    with _record_task_changes(task, actor):
         task.priority = priority
         task.save()
     return task
@@ -800,7 +888,7 @@ def update_task_priority(*, actor, task, priority):
 def validate_task(*, actor, task, assignee=None):
     _ensure_can_validate(actor, task)
 
-    with record_changes(task, actor=actor, project=task.project):
+    with _record_task_changes(task, actor):
         task.status = "assignee" if assignee else "disponible"
         task.assignee = assignee
         task.save()
@@ -814,7 +902,7 @@ def reject_task(*, actor, task, rejection_reason):
     if not rejection_reason:
         raise InvalidTransitionError("Un motif de rejet est obligatoire.")
 
-    with record_changes(task, actor=actor, project=task.project):
+    with _record_task_changes(task, actor):
         task.status = "rejetee"
         task.rejection_reason = rejection_reason
         task.save()
@@ -826,7 +914,7 @@ def cancel_task(*, actor, task, cancellation_reason):
     if not cancellation_reason:
         raise InvalidTransitionError("Un motif d'annulation est obligatoire.")
 
-    with record_changes(task, actor=actor, project=task.project):
+    with _record_task_changes(task, actor):
         task.status = "annulee"
         task.cancellation_reason = cancellation_reason
         task.save()
@@ -841,7 +929,7 @@ def reactivate_task(*, actor, task):
     avec le fait que `rejection_reason` n'est jamais nettoyé non plus."""
     _ensure_can_reactivate(actor, task)
 
-    with record_changes(task, actor=actor, project=task.project):
+    with _record_task_changes(task, actor):
         task.status = "assignee" if task.assignee_id else "disponible"
         task.save()
     return task
@@ -850,7 +938,7 @@ def reactivate_task(*, actor, task):
 def claim_task(*, actor, task):
     _ensure_can_claim(actor, task)
 
-    with record_changes(task, actor=actor, project=task.project):
+    with _record_task_changes(task, actor):
         task.status = "assignee"
         task.assignee = actor
         task.save()
@@ -864,7 +952,7 @@ def assign_task(*, actor, task, assignee):
     if not _is_member(assignee, task.project):
         raise InvalidTransitionError("L'assigné doit être membre du projet.")
 
-    with record_changes(task, actor=actor, project=task.project):
+    with _record_task_changes(task, actor):
         task.status = "assignee"
         task.assignee = assignee
         task.save()
@@ -875,7 +963,7 @@ def assign_task(*, actor, task, assignee):
 def start_task(*, actor, task):
     _ensure_can_start(actor, task)
 
-    with record_changes(task, actor=actor, project=task.project):
+    with _record_task_changes(task, actor):
         task.status = "en_cours"
         task.save()
     return task
@@ -893,7 +981,7 @@ def complete_task(*, actor, task, time_spent):
     if time_spent <= 0:
         raise InvalidTransitionError("Le temps passé doit être un nombre positif.")
 
-    with record_changes(task, actor=actor, project=task.project):
+    with _record_task_changes(task, actor):
         task.status = "archivee"
         task.time_spent = time_spent
         task.save()
@@ -908,5 +996,12 @@ def add_comment(*, actor, task, content):
 
     comment = TaskComment.objects.create(task=task, author=actor, content=content.strip())
     task_commented.send(sender=Task, task=task, comment=comment, actor=actor)
-    record_event(task, actor=actor, verb="commented", description="Commentaire ajouté", project=task.project)
+    record_event(
+        task,
+        actor=actor,
+        verb="commented",
+        description="Commentaire ajouté",
+        project=task.project,
+        private=task.project_id is None,
+    )
     return comment

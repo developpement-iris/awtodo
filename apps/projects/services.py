@@ -702,4 +702,9 @@ def get_scoped_history(*, actor):
             )
             scoped = base.filter(Q(actor=actor) | Q(project_id__in=managed_project_ids))
 
+    # Tâches personnelles (session du 2026-10-19) : privées à leur
+    # propriétaire, y compris face à un admin d'organisation — seules ses
+    # propres lignes restent dans son export.
+    scoped = scoped.exclude(Q(is_private=True) & ~Q(actor=actor))
+
     return scoped.select_related("actor", "project", "team").order_by("-created_at")

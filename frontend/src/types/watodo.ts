@@ -438,10 +438,12 @@ export interface TaskPermissions {
 
 export interface Task {
   id: string;
-  project: string;
-  project_name: string;
-  version: string;
-  version_label: string;
+  /** `null` = tâche personnelle (session du 2026-10-19) : privée à son
+   * créateur, assignée à lui, types par défaut uniquement. */
+  project: string | null;
+  project_name: string | null;
+  version: string | null;
+  version_label: string | null;
   title: string;
   description: string;
   /** Clé d'un `TaskType` de la portée du projet (groupe, sinon projet) —

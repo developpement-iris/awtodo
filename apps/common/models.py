@@ -110,6 +110,10 @@ class AuditLogEntry(UUIDModel, TimeStampedModel):
         "accounts.Team", null=True, blank=True, on_delete=models.PROTECT, related_name="audit_entries"
     )
     verb = models.CharField(max_length=30, default="field_changed")
+    # Ligne portant sur un objet privé (tâche personnelle, session du
+    # 2026-10-19) : exclue des exports d'historique scopés, sauf pour son
+    # propre auteur — voir `apps.projects.services.get_scoped_history`.
+    is_private = models.BooleanField(default=False)
     field_name = models.CharField(max_length=100, blank=True, default="")
     # Valeurs déjà mises en forme lisible (résolution des `choices` faite à
     # l'écriture par `record_changes`, voir apps/common/audit.py) — chaînes

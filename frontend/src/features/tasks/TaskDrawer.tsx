@@ -6,7 +6,7 @@ import { DatePickerField } from "../../components/DatePickerField";
 import { InlineEditableText } from "../../components/InlineEditableText";
 import { StatusBadge } from "../../components/StatusBadge";
 import { TypeBadge } from "../../components/TypeBadge";
-import { taskTypeOptions, useTaskTypes } from "../../hooks/useTaskTypes";
+import { PERSONAL_SCOPE, taskTypeOptions, useTaskTypes } from "../../hooks/useTaskTypes";
 import { priorityTone, statusTone, taskStatusIcon } from "../../lib/badges";
 import { auditFieldLabel } from "../../lib/auditFieldLabels";
 import type { AuditLogEntry, Task, TaskComment, User } from "../../types/watodo";
@@ -76,7 +76,7 @@ export function TaskDrawer({
 }: TaskDrawerProps) {
   const [assigneeSelection, setAssigneeSelection] = useState(task.assignee?.id ?? "");
   const [draft, setDraft] = useState("");
-  const taskTypes = useTaskTypes(task.permissions.can_edit_type ? task.project : null);
+  const taskTypes = useTaskTypes(task.permissions.can_edit_type ? (task.project ?? PERSONAL_SCOPE) : null);
 
   useEffect(() => {
     setAssigneeSelection(task.assignee?.id ?? "");
