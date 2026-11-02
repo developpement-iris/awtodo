@@ -2,6 +2,7 @@ import { Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   createCalendarShare,
+  getUsers,
   listCalendarShares,
   revokeCalendarShare,
   updateCalendarSharePermissions,
@@ -9,7 +10,7 @@ import {
 import { Checkbox } from "../../components/Checkbox";
 import { Combobox, type ComboboxOption } from "../../components/Combobox";
 import { useCurrentUser } from "../../context/CurrentUserContext";
-import type { CalendarShareList } from "../../types/watodo";
+import type { CalendarShareList, User } from "../../types/watodo";
 
 interface SharePanelProps {
   onClose: () => void;
@@ -21,7 +22,11 @@ function displayName(user: { first_name: string; last_name: string; username: st
 }
 
 export function SharePanel({ onClose, onChanged }: SharePanelProps) {
-  const { users, currentUser } = useCurrentUser();
+  const { users: cachedUsers, currentUser } = useCurrentUser();
+  // Liste rechargée à l'ouverture : celle du contexte n'est chargée qu'à la
+  // connexion, un compte ajouté depuis n'y figurait pas (retour direct).
+  const [freshUsers, setFreshUsers] = useState<User[] | null>(null);
+  const users = freshUsers ?? cachedUsers;
   const [shares, setShares] = useState<CalendarShareList | null>(null);
   const [granteeId, setGranteeId] = useState("");
   const [canManageWorkHours, setCanManageWorkHours] = useState(false);
@@ -34,6 +39,12 @@ export function SharePanel({ onClose, onChanged }: SharePanelProps) {
   }
 
   useEffect(reload, []);
+
+  useEffect(() => {
+    getUsers()
+      .then(setFreshUsers)
+      .catch(() => undefined);
+  }, []);
 
   async function handleShare() {
     if (!granteeId) return;
