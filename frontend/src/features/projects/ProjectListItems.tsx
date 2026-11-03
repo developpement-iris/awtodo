@@ -147,6 +147,13 @@ export function ProjectRow(props: ProjectItemProps) {
           <span className="project-row__name">
             {project.name}
             <ArrowUpRight size={15} strokeWidth={1.75} aria-hidden="true" className="project-row__arrow" />
+            {project.status !== "actif" && (
+              <StatusBadge
+                label={project.status_display}
+                tone={projectStatusTone(project.status)}
+                icon={projectStatusIcon(project.status)}
+              />
+            )}
           </span>
           {project.description && <span className="project-row__description">{project.description}</span>}
           <span className="project-row__meta">
@@ -156,8 +163,23 @@ export function ProjectRow(props: ProjectItemProps) {
           </span>
         </span>
       </button>
-      <div className="project-row__badges" data-label="Phase">
-        <ProjectBadges project={project} />
+      <div className="project-row__cell" data-label="Phase">
+        {project.phase ? (
+          <StatusBadge
+            label={project.phase_display ?? project.phase}
+            tone="neutral"
+            icon={projectPhaseIcon(project.phase)}
+          />
+        ) : (
+          <span className="project-row__empty">—</span>
+        )}
+      </div>
+      <div className="project-row__cell" data-label="Priorité">
+        {project.priority ? (
+          <StatusBadge label={project.priority_display ?? project.priority} tone={priorityTone(project.priority)} />
+        ) : (
+          <span className="project-row__empty">—</span>
+        )}
       </div>
       <div className="project-row__progress" data-label="Avancement">
         <span className="project-row__progress-figures">

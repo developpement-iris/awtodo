@@ -474,6 +474,7 @@ export function ProjectsGrid({ onSelectProject, createTrigger = 0 }: ProjectsGri
                   <div className="projects-list__head" aria-hidden="true">
                     <span>Projet</span>
                     <span>Phase</span>
+                    <span>Priorité</span>
                     <span>Avancement</span>
                     <span>Échéance</span>
                     <span>Équipe</span>

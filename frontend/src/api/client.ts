@@ -242,7 +242,7 @@ export async function uploadProjectCover(projectId: string, image: Blob): Promis
   return response.json() as Promise<Project>;
 }
 
-// Une balise <img> n'enverrait pas le jeton : l'image est récupérée avec
+// Une balise image HTML n'enverrait pas le jeton : l'image est récupérée avec
 // authFetch puis exposée en URL locale, mise en cache par (projet, version).
 const coverUrlCache = new Map<string, Promise<string>>();
 

@@ -310,7 +310,7 @@
 .projects-list__head,
 .project-row {
   display: grid;
-  grid-template-columns: minmax(0, 2.8fr) minmax(0, 1.3fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 0.8fr) 72px;
+  grid-template-columns: minmax(0, 2.6fr) minmax(0, 1.1fr) minmax(0, 0.8fr) minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 0.8fr) 72px;
   align-items: center;
   column-gap: var(--space-4);
 }
@@ -418,10 +418,13 @@
   font-variant-numeric: tabular-nums;
 }
 
-.project-row__badges {
+.project-row__cell {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
+  min-width: 0;
+}
+
+.project-row__empty {
+  color: var(--color-text-faint);
 }
 
 .project-row__progress {
@@ -1143,14 +1146,14 @@ button.gantt__label:hover strong {
     align-self: start;
   }
 
-  .project-row__badges,
+  .project-row__cell,
   .project-row__progress,
   .project-row__deadline,
   .project-row__team {
     grid-column: 1 / -1;
   }
 
-  .project-row__badges:empty {
+  .project-row__cell:has(.project-row__empty) {
     display: none;
   }
 
