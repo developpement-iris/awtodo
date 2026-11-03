@@ -1,4 +1,15 @@
-import { FolderKanban, LayoutGrid, List as ListIcon, Plus, SlidersHorizontal, Star, X } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  FolderKanban,
+  LayoutGrid,
+  List as ListIcon,
+  Plus,
+  SlidersHorizontal,
+  Star,
+  X,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   closeProject,
@@ -17,13 +28,13 @@ import { Skeleton } from "../../components/Skeleton";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 import { useToast } from "../../context/ToastContext";
 import { useProjectFavorites } from "../../hooks/useProjectFavorites";
-import { PROJECT_PHASE_OPTIONS, projectPhaseIcon } from "../../lib/badges";
-import { compareNullableStrings } from "../../lib/sortCompare";
+import { PROJECT_PHASE_OPTIONS, priorityRank, projectPhaseIcon } from "../../lib/badges";
 import type { Project, Team } from "../../types/watodo";
 import { ProjectCreateDialog, type ProjectCreateFormValues } from "./ProjectCreateDialog";
 import { ProjectGalleryCard, ProjectRow } from "./ProjectListItems";
 import { ProjectsRoadmap } from "./ProjectsRoadmap";
 import { projectProgress } from "./projectDisplay";
+import "../../components/SortableColumnHeader.css";
 import "./ProjectsGrid.css";
 
 interface ProjectsGridProps {
@@ -32,7 +43,8 @@ interface ProjectsGridProps {
 }
 
 type Lifecycle = "actif" | "cloture" | "tous";
-type SortKey = "recent" | "deadline" | "name" | "progress";
+type SortKey = "recent" | "name" | "phase" | "priority" | "progress" | "deadline" | "members";
+type SortDirection = "asc" | "desc";
 type ViewMode = "list" | "gallery";
 
 const INDIVIDUAL_TEAM = "__individuel";
@@ -46,10 +58,37 @@ const LIFECYCLE_OPTIONS = [
 
 const SORT_OPTIONS = [
   { value: "recent", label: "Derniers ajoutés" },
-  { value: "deadline", label: "Échéance proche" },
   { value: "name", label: "Nom du projet" },
-  { value: "progress", label: "Progression" },
+  { value: "phase", label: "Phase" },
+  { value: "priority", label: "Priorité" },
+  { value: "progress", label: "Avancement" },
+  { value: "deadline", label: "Échéance proche" },
+  { value: "members", label: "Taille de l'équipe" },
 ];
+
+// Sens appliqué au premier clic sur une colonne (puis inversé à chaque clic) :
+// le plus utile d'abord — récents, plus avancés, priorités hautes, grosses
+// équipes en tête ; nom, phase et échéance dans l'ordre naturel.
+const DEFAULT_DIRECTION: Record<SortKey, SortDirection> = {
+  recent: "desc",
+  name: "asc",
+  phase: "asc",
+  priority: "desc",
+  progress: "desc",
+  deadline: "asc",
+  members: "desc",
+};
+
+const LIST_COLUMNS: { key: SortKey; label: string }[] = [
+  { key: "name", label: "Projet" },
+  { key: "phase", label: "Phase" },
+  { key: "priority", label: "Priorité" },
+  { key: "progress", label: "Avancement" },
+  { key: "deadline", label: "Échéance" },
+  { key: "members", label: "Équipe" },
+];
+
+const PHASE_ORDER: string[] = PROJECT_PHASE_OPTIONS.map((option) => option.value);
 
 function statusesFor(lifecycle: Lifecycle): string[] {
   return lifecycle === "tous" ? ["actif", "cloture"] : [lifecycle];
@@ -75,17 +114,40 @@ function buildCreatePayload(values: ProjectCreateFormValues): ProjectCreatePaylo
   return payload;
 }
 
-function compareProjects(a: Project, b: Project, sort: SortKey): number {
-  switch (sort) {
-    case "deadline":
-      return compareNullableStrings(a.deadline, b.deadline, "asc");
+/** Valeur de tri d'un projet ; `null` = non renseigné, toujours en dernier. */
+function sortValue(project: Project, key: SortKey): string | number | null {
+  switch (key) {
+    case "recent":
+      return project.created_at;
     case "name":
-      return a.name.localeCompare(b.name, "fr", { sensitivity: "base" });
+      return project.name;
+    case "phase":
+      return project.phase ? PHASE_ORDER.indexOf(project.phase) : null;
+    case "priority":
+      return project.priority ? priorityRank(project.priority) : null;
     case "progress":
-      return projectProgress(b) - projectProgress(a);
-    default:
-      return b.created_at.localeCompare(a.created_at);
+      return project.tasks_total > 0 ? projectProgress(project) : null;
+    case "deadline":
+      return project.deadline;
+    case "members":
+      return project.members.length;
   }
+}
+
+function compareProjects(a: Project, b: Project, key: SortKey, direction: SortDirection): number {
+  const left = sortValue(a, key);
+  const right = sortValue(b, key);
+  if (left === null || right === null) {
+    if (left !== right) return left === null ? 1 : -1;
+  } else {
+    const diff =
+      typeof left === "number" && typeof right === "number"
+        ? left - right
+        : String(left).localeCompare(String(right), "fr", { sensitivity: "base" });
+    if (diff !== 0) return direction === "asc" ? diff : -diff;
+  }
+  // Égalité : ordre alphabétique, pour un affichage stable.
+  return a.name.localeCompare(b.name, "fr", { sensitivity: "base" });
 }
 
 function readViewMode(): ViewMode {
@@ -111,7 +173,18 @@ export function ProjectsGrid({ onSelectProject, createTrigger = 0 }: ProjectsGri
   const [teamFilter, setTeamFilter] = useState("");
   const [phaseFilter, setPhaseFilter] = useState("");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
-  const [sort, setSort] = useState<SortKey>("recent");
+  const [sort, setSort] = useState<{ key: SortKey; direction: SortDirection }>({
+    key: "recent",
+    direction: DEFAULT_DIRECTION.recent,
+  });
+
+  function sortBy(key: SortKey) {
+    setSort((current) =>
+      current.key === key
+        ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
+        : { key, direction: DEFAULT_DIRECTION[key] },
+    );
+  }
   const [viewMode, setViewMode] = useState<ViewMode>(readViewMode);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersRef = useRef<HTMLButtonElement>(null);
@@ -242,7 +315,7 @@ export function ProjectsGrid({ onSelectProject, createTrigger = 0 }: ProjectsGri
         if (needle && !`${project.name} ${project.description}`.toLowerCase().includes(needle)) return false;
         return true;
       })
-      .sort((a, b) => compareProjects(a, b, sort));
+      .sort((a, b) => compareProjects(a, b, sort.key, sort.direction));
   }, [loaded, query, teamFilter, phaseFilter, favoritesOnly, favorites, sort]);
 
   const favoriteCount = loaded.filter((project) => favorites.has(project.id)).length;
@@ -415,11 +488,24 @@ export function ProjectsGrid({ onSelectProject, createTrigger = 0 }: ProjectsGri
             <span className="projects-toolbar__sort">
               <Combobox
                 options={SORT_OPTIONS}
-                value={sort}
-                onChange={(value) => setSort(value as SortKey)}
+                value={sort.key}
+                onChange={(value) => setSort({ key: value as SortKey, direction: DEFAULT_DIRECTION[value as SortKey] })}
                 clearable={false}
               />
             </span>
+            <button
+              type="button"
+              className="projects-toolbar__button projects-toolbar__direction"
+              onClick={() => sortBy(sort.key)}
+              aria-label={sort.direction === "asc" ? "Ordre croissant — inverser" : "Ordre décroissant — inverser"}
+              title={sort.direction === "asc" ? "Croissant" : "Décroissant"}
+            >
+              {sort.direction === "asc" ? (
+                <ArrowUp size={15} strokeWidth={1.75} aria-hidden="true" />
+              ) : (
+                <ArrowDown size={15} strokeWidth={1.75} aria-hidden="true" />
+              )}
+            </button>
           </div>
         </div>
 
@@ -471,13 +557,36 @@ export function ProjectsGrid({ onSelectProject, createTrigger = 0 }: ProjectsGri
             {shown.length > 0 ? (
               viewMode === "list" ? (
                 <>
-                  <div className="projects-list__head" aria-hidden="true">
-                    <span>Projet</span>
-                    <span>Phase</span>
-                    <span>Priorité</span>
-                    <span>Avancement</span>
-                    <span>Échéance</span>
-                    <span>Équipe</span>
+                  <div className="projects-list__head" role="group" aria-label="Trier par colonne">
+                    {LIST_COLUMNS.map((column) => {
+                      const active = sort.key === column.key;
+                      return (
+                        <button
+                          key={column.key}
+                          type="button"
+                          className={`sortable-header${active ? " sortable-header--active" : ""}`}
+                          onClick={() => sortBy(column.key)}
+                          aria-pressed={active}
+                          aria-label={`Trier par ${column.label.toLowerCase()}${active ? (sort.direction === "asc" ? ", croissant" : ", décroissant") : ""}`}
+                        >
+                          {column.label}
+                          {active ? (
+                            sort.direction === "asc" ? (
+                              <ArrowUp size={12} strokeWidth={1.75} aria-hidden="true" />
+                            ) : (
+                              <ArrowDown size={12} strokeWidth={1.75} aria-hidden="true" />
+                            )
+                          ) : (
+                            <ArrowUpDown
+                              size={12}
+                              strokeWidth={1.75}
+                              aria-hidden="true"
+                              className="sortable-header__idle"
+                            />
+                          )}
+                        </button>
+                      );
+                    })}
                     <span />
                   </div>
                   <div className="projects-list">
