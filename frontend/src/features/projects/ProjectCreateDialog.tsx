@@ -1,10 +1,12 @@
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Checkbox } from "../../components/Checkbox";
 import { Combobox } from "../../components/Combobox";
 import { DatePickerField } from "../../components/DatePickerField";
 import { useCurrentUser } from "../../context/CurrentUserContext";
+import { PROJECT_PHASE_OPTIONS } from "../../lib/badges";
 import type { Project, Team, User } from "../../types/watodo";
+import { CoverPicker } from "./CoverPicker";
 import "./ProjectCreateDialog.css";
 
 // Comptes externes exclus par défense (voir CLAUDE.md — restriction de
@@ -28,6 +30,10 @@ export interface ProjectCreateFormValues {
   deadline: string;
   already_in_production: boolean;
   priority: Exclude<Project["priority"], null> | "";
+  phase: Exclude<Project["phase"], null> | "";
+  cover_image: string;
+  /** Image importée à envoyer juste après la création (déjà compressée). */
+  cover_file: Blob | null;
   team: string;
   member_ids: string[];
 }
@@ -55,9 +61,25 @@ export function ProjectCreateDialog({
     deadline: "",
     already_in_production: false,
     priority: "",
+    phase: "",
+    cover_image: "",
+    cover_file: null,
     team: "",
     member_ids: [],
   });
+
+  // Aperçu local de l'image importée (pas encore envoyée : le projet
+  // n'existe qu'après « Créer le projet »).
+  const [coverPreviewUrl, setCoverPreviewUrl] = useState<string>();
+  useEffect(() => {
+    if (!values.cover_file) {
+      setCoverPreviewUrl(undefined);
+      return;
+    }
+    const url = URL.createObjectURL(values.cover_file);
+    setCoverPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [values.cover_file]);
 
   const needsTeam = values.project_type === "collaboratif";
   const isValid = values.name.trim().length > 0 && (!needsTeam || values.team.length > 0);
@@ -97,6 +119,17 @@ export function ProjectCreateDialog({
             />
           </label>
 
+          <div className="project-create-dialog__field project-create-dialog__field--full">
+            <span>Image d'illustration</span>
+            <CoverPicker
+              project={{ id: "nouveau-projet", name: values.name, cover_updated_at: null }}
+              value={values.cover_image}
+              onChange={(value) => update("cover_image", value)}
+              onImport={(image) => setValues((current) => ({ ...current, cover_image: "upload", cover_file: image }))}
+              pendingPreviewSrc={coverPreviewUrl}
+            />
+          </div>
+
           <label className="project-create-dialog__field">
             <span>Type</span>
             <Combobox
@@ -119,6 +152,19 @@ export function ProjectCreateDialog({
               ]}
               value={values.priority}
               onChange={(value) => update("priority", value as ProjectCreateFormValues["priority"])}
+              placeholder="Non définie"
+            />
+          </label>
+
+          <label className="project-create-dialog__field">
+            <span>Phase</span>
+            <Combobox
+              options={[
+                { value: "", label: "Non définie" },
+                ...PROJECT_PHASE_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+              ]}
+              value={values.phase}
+              onChange={(value) => update("phase", value as ProjectCreateFormValues["phase"])}
               placeholder="Non définie"
             />
           </label>

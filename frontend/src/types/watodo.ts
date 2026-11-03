@@ -149,6 +149,8 @@ export interface ProjectPermissions {
   can_edit_spec: boolean;
   can_edit_notepad: boolean;
   can_manage_members: boolean;
+  // Modifier nom/description/échéance/priorité/phase (onglet Administration).
+  can_edit_details: boolean;
   can_convert_to_collaborative: boolean;
   can_close: boolean;
   can_reopen: boolean;
@@ -361,6 +363,8 @@ export interface PublicDocs {
 
 export type ProjectStatus = "actif" | "cloture";
 
+export type ProjectPhase = "a_l_etude" | "en_ecriture" | "developpement" | "livraison";
+
 export interface Project {
   id: string;
   name: string;
@@ -369,6 +373,13 @@ export interface Project {
   project_type_display: string;
   status: ProjectStatus;
   status_display: string;
+  // Phase d'avancement, distincte du statut actif/clôturé (session du 2026-11-03).
+  phase: ProjectPhase | null;
+  phase_display: string | null;
+  // Clé d'image de la bibliothèque (`lib/projectCovers.ts`), "" = monogramme.
+  cover_image: string;
+  // Version de l'image importée (`cover_image === "upload"`), clé de cache.
+  cover_updated_at: string | null;
   deadline: string | null;
   already_in_production: boolean;
   priority: "basse" | "moyenne" | "haute" | "critique" | null;
@@ -382,6 +393,7 @@ export interface Project {
   members: ProjectMembership[];
   permissions: ProjectPermissions;
   current_version_id: string | null;
+  created_at: string;
 }
 
 // Cahier des charges — voir docs/modeles-et-api.md > "Projets — Hub complet"

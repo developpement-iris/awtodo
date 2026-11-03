@@ -5,7 +5,7 @@ import { closeProject, reopenProject } from "../../api/client";
 import { SectionSidebar } from "../../components/SectionSidebar";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useToast } from "../../context/ToastContext";
-import { projectStatusIcon, projectStatusTone } from "../../lib/badges";
+import { projectPhaseIcon, projectStatusIcon, projectStatusTone } from "../../lib/badges";
 import { CommunicationTab } from "../communication/CommunicationTab";
 import { IncidentsPage } from "../incidents/IncidentsPage";
 import { TasksTab } from "../tasks/TasksTab";
@@ -135,6 +135,13 @@ export function ProjectDetailView({ project: initialProject, onBack }: ProjectDe
             tone={projectStatusTone(project.status)}
             icon={projectStatusIcon(project.status)}
           />
+          {project.phase && (
+            <StatusBadge
+              label={project.phase_display ?? project.phase}
+              tone="neutral"
+              icon={projectPhaseIcon(project.phase)}
+            />
+          )}
           {project.permissions.can_close && (
             <motion.button
               type="button"

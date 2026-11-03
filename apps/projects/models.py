@@ -16,17 +16,47 @@ class Project(UUIDModel, TimeStampedModel, StatusLifecycleModel):
         ("cloture", "Clôturé"),
     ]
     ACTIVE_STATUSES = frozenset({"actif"})
+    # Phase d'avancement (session du 2026-11-03) — axe distinct de `status`
+    # (cycle de vie actif/clôturé, qui porte la règle "aucune suppression
+    # physique") : un projet actif peut être à n'importe quelle phase. Choix
+    # libre, aucune transition imposée. `null` = non renseignée (projets
+    # existants, ou création sans choix).
+    PHASE_CHOICES = [
+        ("a_l_etude", "À l'étude"),
+        ("en_ecriture", "En écriture"),
+        ("developpement", "Développement"),
+        ("livraison", "Livraison"),
+    ]
+
+    # Image d'illustration (session du 2026-11-03) — choisie dans une
+    # bibliothèque d'images livrée avec le frontend (`frontend/public/covers/`),
+    # en attendant un vrai stockage de fichiers (bloqué avant l'infra AWS).
+    # Seule la clé est stockée ; vide = couverture générée (monogramme).
+    # Ajouter une image = déposer le fichier + ajouter sa clé ici et dans
+    # `frontend/src/lib/projectCovers.ts`.
+    COVER_IMAGE_CHOICES = [
+        ("refonte-site-web", "Site web"),
+        ("application-mobile", "Application mobile"),
+        ("identite-de-marque", "Identité de marque"),
+        ("campagne-lancement", "Campagne"),
+        ("portail-client", "Portail client"),
+        ("dashboard-analytics", "Tableau de bord"),
+        # Image importée par le chef de projet (`ProjectCoverUpload`) — posée
+        # uniquement par `upload_project_cover`, jamais choisie directement.
+        ("upload", "Image importée"),
+    ]
 
     name = models.CharField(max_length=200)
+    cover_image = models.CharField(max_length=40, choices=COVER_IMAGE_CHOICES, blank=True, default="")
     description = models.TextField(blank=True, default="")
     project_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default="collaboratif")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="actif")
+    phase = models.CharField(max_length=20, choices=PHASE_CHOICES, null=True, blank=True)
     deadline = models.DateField(null=True, blank=True)
     # "Déjà en production" : le projet suit quelque chose de déjà en ligne
     # (maintenance / évolutions), il n'a pas de date de livraison cible.
-    # Choisi à la création, incompatible avec `deadline` (validé dans
-    # `create_project`). Pas d'écran d'édition après coup pour l'instant,
-    # comme `project_type`.
+    # Incompatible avec `deadline` (validé dans `create_project` et
+    # `update_project_details`).
     already_in_production = models.BooleanField(default=False)
     priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, null=True, blank=True)
     team = models.ForeignKey(
@@ -42,6 +72,9 @@ class Project(UUIDModel, TimeStampedModel, StatusLifecycleModel):
     # est structuré en sous-sections — voir `SpecSection` ci-dessous.
     notepad_content = models.TextField(blank=True, default="")
     notepad_updated_at = models.DateTimeField(null=True, blank=True)
+    # Horodatage de la dernière image importée : sert de clé de cache au
+    # frontend (l'image elle-même n'est jamais dans la liste des projets).
+    cover_updated_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         default_manager_name = "all_objects"
@@ -94,6 +127,28 @@ class SpecSection(UUIDModel, TimeStampedModel):
 
     def __str__(self):
         return f"{self.project} — {self.get_section_key_display()}"
+
+
+class ProjectCoverUpload(UUIDModel, TimeStampedModel):
+    """Image d'illustration importée pour un projet (session du 2026-11-03),
+    stockée en base faute de stockage de fichiers avant l'infra AWS (même
+    principe que les images des pages de documentation). Le navigateur la
+    compresse avant envoi (WebP ~960px), plafond serveur
+    `MAX_COVER_UPLOAD_BYTES`. Une seule ligne par projet, **écrasée** à
+    chaque nouvel import (jamais supprimée) : revenir à une image de la
+    bibliothèque ne fait que changer `Project.cover_image`. Table séparée
+    pour que les octets ne soient jamais chargés avec la liste des projets."""
+
+    project = models.OneToOneField(Project, on_delete=models.PROTECT, related_name="cover_upload")
+    data = models.BinaryField()
+    content_type = models.CharField(max_length=40)
+    size = models.PositiveIntegerField()
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+
+    def __str__(self):
+        return f"Couverture de {self.project}"
 
 
 class ProjectVersion(UUIDModel, TimeStampedModel):

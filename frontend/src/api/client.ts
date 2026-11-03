@@ -209,9 +209,59 @@ export interface ProjectCreatePayload {
   deadline?: string;
   already_in_production?: boolean;
   priority?: Exclude<Project["priority"], null>;
+  phase?: Exclude<Project["phase"], null>;
+  cover_image?: string;
   team?: string;
   member_ids?: string[];
   [key: string]: unknown;
+}
+
+// Mise à jour partielle (onglet Administration, chef de projet) — seules les
+// clés présentes changent. `null` vide un champ (échéance, priorité, phase).
+export interface ProjectDetailsUpdatePayload {
+  name?: string;
+  description?: string;
+  deadline?: string | null;
+  already_in_production?: boolean;
+  priority?: Project["priority"];
+  phase?: Project["phase"];
+  cover_image?: string;
+  [key: string]: unknown;
+}
+
+// Image d'illustration importée (session du 2026-11-03) — déjà compressée
+// côté navigateur (`lib/imageCompress.ts`).
+export async function uploadProjectCover(projectId: string, image: Blob): Promise<Project> {
+  const body = new FormData();
+  body.append("file", image, "cover.webp");
+  const path = `/projects/${projectId}/cover/`;
+  const response = await authFetch(path, { method: "POST", body });
+  if (!response.ok) {
+    throw new Error(errorMessage(await response.json().catch(() => null), path, response.status));
+  }
+  return response.json() as Promise<Project>;
+}
+
+// Une balise <img> n'enverrait pas le jeton : l'image est récupérée avec
+// authFetch puis exposée en URL locale, mise en cache par (projet, version).
+const coverUrlCache = new Map<string, Promise<string>>();
+
+export function getProjectCoverUrl(projectId: string, version: string): Promise<string> {
+  const key = `${projectId}:${version}`;
+  let pending = coverUrlCache.get(key);
+  if (!pending) {
+    pending = authFetch(`/projects/${projectId}/cover/`).then(async (response) => {
+      if (!response.ok) throw new Error(`Image indisponible (${response.status})`);
+      return URL.createObjectURL(await response.blob());
+    });
+    pending.catch(() => coverUrlCache.delete(key));
+    coverUrlCache.set(key, pending);
+  }
+  return pending;
+}
+
+export function updateProjectDetails(projectId: string, payload: ProjectDetailsUpdatePayload): Promise<Project> {
+  return postJson<Project>(`/projects/${projectId}/update-details/`, payload);
 }
 
 export function createProject(payload: ProjectCreatePayload): Promise<Project> {

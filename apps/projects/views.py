@@ -4,6 +4,7 @@ from django.db.models import Count, Prefetch, Q
 from django.http import HttpResponse
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
 from apps.accounts.models import TeamMembership
@@ -17,6 +18,7 @@ from .serializers import (
     NON_REJECTED_TASK_STATUSES,
     ProjectConvertToCollaborativeSerializer,
     ProjectCreateSerializer,
+    ProjectDetailsUpdateSerializer,
     ProjectInviteExternalSerializer,
     ProjectMemberAddSerializer,
     ProjectMemberRemoveSerializer,
@@ -29,6 +31,7 @@ from .serializers import (
     SpecSectionUpdateSerializer,
 )
 from .services import (
+    MAX_COVER_UPLOAD_BYTES,
     ProjectPermissionError,
     ProjectValidationError,
     accessible_projects,
@@ -38,12 +41,15 @@ from .services import (
     convert_to_collaborative as convert_project_to_collaborative,
     create_project,
     create_project_version,
+    get_project_cover,
     get_project_history,
     get_scoped_history,
     get_spec_sections,
     prefetched_project_roles,
     remove_project_member,
     reopen_project,
+    update_project_details,
+    upload_project_cover,
     update_project_notepad,
     update_spec_section,
 )
@@ -243,6 +249,55 @@ class ProjectViewSet(
 
         try:
             change_project_member_role(actor=request.user, membership=membership, role=serializer.validated_data["role"])
+        except ProjectPermissionError as exc:
+            return Response({"detail": str(exc)}, status=403)
+        except ProjectValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
+
+        return Response(self.get_serializer(project).data)
+
+    @action(detail=True, methods=["post"], url_path="update-details")
+    def update_details(self, request, pk=None):
+        project = self.get_object()
+        serializer = ProjectDetailsUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            update_project_details(actor=request.user, project=project, **serializer.validated_data)
+        except ProjectPermissionError as exc:
+            return Response({"detail": str(exc)}, status=403)
+        except ProjectValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
+
+        return Response(self.get_serializer(project).data)
+
+    @action(detail=True, methods=["get", "post"], url_path="cover", parser_classes=[MultiPartParser])
+    def cover(self, request, pk=None):
+        """Image d'illustration importée (session du 2026-11-03). GET : les
+        octets de l'image (membres du projet). POST multipart `file` :
+        importe/remplace l'image (chef de projet)."""
+        project = self.get_object()
+
+        if request.method == "GET":
+            try:
+                upload = get_project_cover(actor=request.user, project=project)
+            except ProjectPermissionError as exc:
+                return Response({"detail": str(exc)}, status=403)
+            if upload is None:
+                return Response({"detail": "Aucune image importée."}, status=404)
+            response = HttpResponse(bytes(upload.data), content_type=upload.content_type)
+            response["Cache-Control"] = "private, max-age=86400"
+            response["X-Content-Type-Options"] = "nosniff"
+            return response
+
+        file = request.FILES.get("file")
+        if file is not None and file.size > MAX_COVER_UPLOAD_BYTES:
+            # Refusé avant lecture : inutile de charger un gros fichier en mémoire.
+            return Response(
+                {"detail": f"Image trop lourde — {MAX_COVER_UPLOAD_BYTES // 1024} Ko maximum."}, status=400
+            )
+        try:
+            upload_project_cover(actor=request.user, project=project, data=file.read() if file else b"")
         except ProjectPermissionError as exc:
             return Response({"detail": str(exc)}, status=403)
         except ProjectValidationError as exc:

@@ -85,6 +85,16 @@
   --incident-status-inprogress-bg: #CBE6E6;
   --incident-status-inprogress-text: #194D4D;
 
+  /* Couverture de projet (session du 2026-11-03) — teinte d'identité, pas un
+     axe de sens : réservée au visuel généré des projets (ProjectCover.tsx),
+     attribuée de façon stable par projet. Jamais sur un badge. */
+  --project-cover-1-bg: #F1DEDA; --project-cover-1-ink: #753030;
+  --project-cover-2-bg: #EFE5D3; --project-cover-2-ink: #7A5A22;
+  --project-cover-3-bg: #DFE8DF; --project-cover-3-ink: #3E5E45;
+  --project-cover-4-bg: #DDE3EA; --project-cover-4-ink: #3A4C63;
+  --project-cover-5-bg: #E7DDE7; --project-cover-5-ink: #5E3A5C;
+  --project-cover-6-bg: #E6E6D4; --project-cover-6-ink: #5C5C2E;
+
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -174,6 +184,13 @@
     --incident-status-inprogress-bg: #284848;
     --incident-status-inprogress-text: #D7EAEA;
 
+    --project-cover-1-bg: #4A2A2A; --project-cover-1-ink: #F0C9C2;
+    --project-cover-2-bg: #43382A; --project-cover-2-ink: #E8D3AE;
+    --project-cover-3-bg: #2D3A30; --project-cover-3-ink: #C3DCC7;
+    --project-cover-4-bg: #2C3440; --project-cover-4-ink: #C5D1E0;
+    --project-cover-5-bg: #3A2C3A; --project-cover-5-ink: #DCC4DA;
+    --project-cover-6-bg: #3A3A28; --project-cover-6-ink: #D9D9B4;
+
     --shadow-resting: 0 1px 2px rgba(0, 0, 0, 0.3), 0 3px 10px rgba(0, 0, 0, 0.28);
     --shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.35), 0 12px 28px rgba(0, 0, 0, 0.4);
     --shadow-overlay: 0 16px 24px rgba(0, 0, 0, 0.45), 0 40px 72px rgba(0, 0, 0, 0.55);
@@ -219,6 +236,13 @@
   --incident-status-inprogress-bg: #284848;
   --incident-status-inprogress-text: #D7EAEA;
 
+  --project-cover-1-bg: #4A2A2A; --project-cover-1-ink: #F0C9C2;
+  --project-cover-2-bg: #43382A; --project-cover-2-ink: #E8D3AE;
+  --project-cover-3-bg: #2D3A30; --project-cover-3-ink: #C3DCC7;
+  --project-cover-4-bg: #2C3440; --project-cover-4-ink: #C5D1E0;
+  --project-cover-5-bg: #3A2C3A; --project-cover-5-ink: #DCC4DA;
+  --project-cover-6-bg: #3A3A28; --project-cover-6-ink: #D9D9B4;
+
   --shadow-resting: 0 1px 2px rgba(0, 0, 0, 0.3), 0 3px 10px rgba(0, 0, 0, 0.28);
   --shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.35), 0 12px 28px rgba(0, 0, 0, 0.4);
   --shadow-overlay: 0 16px 24px rgba(0, 0, 0, 0.45), 0 40px 72px rgba(0, 0, 0, 0.55);
@@ -262,6 +286,16 @@
   --incident-status-reported-text: #2E6363;
   --incident-status-inprogress-bg: #CBE6E6;
   --incident-status-inprogress-text: #194D4D;
+
+  /* Couverture de projet (session du 2026-11-03) — teinte d'identité, pas un
+     axe de sens : réservée au visuel généré des projets (ProjectCover.tsx),
+     attribuée de façon stable par projet. Jamais sur un badge. */
+  --project-cover-1-bg: #F1DEDA; --project-cover-1-ink: #753030;
+  --project-cover-2-bg: #EFE5D3; --project-cover-2-ink: #7A5A22;
+  --project-cover-3-bg: #DFE8DF; --project-cover-3-ink: #3E5E45;
+  --project-cover-4-bg: #DDE3EA; --project-cover-4-ink: #3A4C63;
+  --project-cover-5-bg: #E7DDE7; --project-cover-5-ink: #5E3A5C;
+  --project-cover-6-bg: #E6E6D4; --project-cover-6-ink: #5C5C2E;
 
   --shadow-resting: 0 1px 2px rgba(25, 16, 51, 0.05), 0 3px 10px rgba(25, 16, 51, 0.06);
   --shadow-hover: 0 2px 4px rgba(25, 16, 51, 0.08), 0 10px 24px rgba(25, 16, 51, 0.12);

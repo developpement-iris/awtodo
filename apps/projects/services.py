@@ -10,7 +10,7 @@ from apps.common.audit import get_project_audit_log, record_changes, record_even
 from apps.common.models import AuditLogEntry
 from apps.common.permissions import check_permission
 
-from .models import Project, ProjectMembership, ProjectVersion, SpecSection
+from .models import Project, ProjectCoverUpload, ProjectMembership, ProjectVersion, SpecSection
 
 
 # --- Cache d'appartenances pour la sérialisation d'une liste --------------
@@ -198,6 +198,10 @@ def _ensure_can_edit_notes(actor, project):
     _require_contributor(actor, project)
 
 
+def _ensure_can_edit_details(actor, project):
+    _require_manager(actor, project)
+
+
 def _ensure_can_manage_members(actor, project):
     _require_manager(actor, project)
 
@@ -273,6 +277,10 @@ def can_manage_members(user, project):
     return _check(_ensure_can_manage_members, user, project)
 
 
+def can_edit_details(user, project):
+    return _check(_ensure_can_edit_details, user, project)
+
+
 def can_convert_to_collaborative(user, project):
     # Même garde que `can_manage_members` (chef de projet) + n'a de sens que
     # sur un projet encore individuel — pas de fonction de garde dédiée, la
@@ -326,6 +334,7 @@ def get_project_permissions(user, project):
         "can_edit_spec": can_edit_spec(user, project),
         "can_edit_notepad": can_edit_notepad(user, project),
         "can_manage_members": can_manage_members(user, project),
+        "can_edit_details": can_edit_details(user, project),
         "can_convert_to_collaborative": can_convert_to_collaborative(user, project),
         "can_close": can_close(user, project),
         "can_reopen": can_reopen(user, project),
@@ -391,6 +400,8 @@ def create_project(
     team=None,
     member_ids=None,
     already_in_production=False,
+    phase=None,
+    cover_image="",
 ):
     _require_actor(actor)
 
@@ -432,6 +443,8 @@ def create_project(
         deadline=deadline,
         already_in_production=already_in_production,
         priority=priority,
+        phase=phase,
+        cover_image=cover_image,
         team=team,
         organisation=actor.organisation,
     )
@@ -447,6 +460,109 @@ def create_project(
         project, actor=actor, verb="created", description=f"Projet créé : « {project.name} »", project=project
     )
     return project
+
+
+EDITABLE_DETAIL_FIELDS = (
+    "name",
+    "description",
+    "deadline",
+    "already_in_production",
+    "priority",
+    "phase",
+    "cover_image",
+)
+
+
+def update_project_details(*, actor, project, **changes):
+    """Modification des informations d'un projet déjà créé (session du
+    2026-11-03), depuis l'onglet Administration — chef de projet uniquement.
+    Mise à jour partielle : seules les clés fournies changent. Le type et le
+    groupe ne sont pas ici (`convert_to_collaborative`), ni le statut
+    actif/clôturé (`close_project`/`reopen_project`)."""
+    _ensure_can_edit_details(actor, project)
+
+    unknown = set(changes) - set(EDITABLE_DETAIL_FIELDS)
+    if unknown:
+        raise ProjectValidationError(f"Champ(s) non modifiable(s) : {', '.join(sorted(unknown))}.")
+
+    if "name" in changes:
+        name = (changes["name"] or "").strip()
+        if not name:
+            raise ProjectValidationError("Le nom du projet est obligatoire.")
+        changes["name"] = name
+
+    if changes.get("cover_image") == "upload" and not ProjectCoverUpload.objects.filter(project=project).exists():
+        raise ProjectValidationError("Aucune image importée pour ce projet.")
+
+    already_in_production = changes.get("already_in_production", project.already_in_production)
+    deadline = changes.get("deadline", project.deadline)
+    if already_in_production and deadline is not None:
+        if "already_in_production" in changes and "deadline" not in changes:
+            # Cocher "déjà en production" retire l'échéance existante.
+            changes["deadline"] = None
+        else:
+            raise ProjectValidationError(
+                "Un projet déjà en production n'a pas de date d'échéance — l'un ou l'autre, pas les deux."
+            )
+
+    with record_changes(project, actor=actor, project=project):
+        for field, value in changes.items():
+            setattr(project, field, value)
+        if changes:
+            project.save(update_fields=list(changes))
+    return project
+
+
+MAX_COVER_UPLOAD_BYTES = 300 * 1024
+
+# Format reconnu aux premiers octets, jamais d'après le type annoncé par le
+# client — et c'est ce type-là qui est renvoyé à la lecture.
+_IMAGE_SIGNATURES = (
+    (bytes.fromhex("89504e470d0a1a0a"), "image/png"),
+    (bytes.fromhex("ffd8ff"), "image/jpeg"),
+)
+
+
+def _detect_image_type(data):
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    for signature, content_type in _IMAGE_SIGNATURES:
+        if data.startswith(signature):
+            return content_type
+    return None
+
+
+def upload_project_cover(*, actor, project, data):
+    """Importe (ou remplace) l'image d'illustration d'un projet — chef de
+    projet uniquement, même garde que les autres informations du projet."""
+    _ensure_can_edit_details(actor, project)
+    if not data:
+        raise ProjectValidationError("Aucune image reçue.")
+    if len(data) > MAX_COVER_UPLOAD_BYTES:
+        raise ProjectValidationError(
+            f"Image trop lourde ({len(data) // 1024} Ko) — {MAX_COVER_UPLOAD_BYTES // 1024} Ko maximum."
+        )
+    content_type = _detect_image_type(data)
+    if content_type is None:
+        raise ProjectValidationError("Format non reconnu — WebP, JPEG ou PNG uniquement.")
+
+    ProjectCoverUpload.objects.update_or_create(
+        project=project,
+        defaults={"data": data, "content_type": content_type, "size": len(data), "uploaded_by": actor},
+    )
+    with record_changes(project, actor=actor, project=project):
+        project.cover_image = "upload"
+        project.cover_updated_at = timezone.now()
+        project.save(update_fields=["cover_image", "cover_updated_at"])
+    return project
+
+
+def get_project_cover(*, actor, project):
+    _require_member(actor, project)
+    upload = ProjectCoverUpload.objects.filter(project=project).first()
+    if upload is None or project.cover_image != "upload":
+        return None
+    return upload
 
 
 def _ensure_not_last_manager(project, exclude_membership):

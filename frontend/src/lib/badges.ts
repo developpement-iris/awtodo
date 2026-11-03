@@ -6,10 +6,15 @@ import {
   CheckCircle2,
   CircleDot,
   Clock,
+  Code2,
+  PenLine,
   RefreshCw,
+  Rocket,
+  Search,
   User,
   XCircle,
 } from "lucide-react";
+import type { ProjectPhase } from "../types/watodo";
 
 /*
  * Une couleur = un seul axe de sens (règle CLAUDE.md). Chaque axe a sa
@@ -123,4 +128,25 @@ export function incidentStatusIcon(status: string): LucideIcon | undefined {
 
 export function projectStatusIcon(status: string): LucideIcon | undefined {
   return PROJECT_STATUS_ICONS[status];
+}
+
+// Phase d'avancement d'un projet (session du 2026-11-03) — badge neutre +
+// icône : aucun tone dédié, pour ne pas ouvrir un nouvel axe de couleur qui
+// entrerait en collision avec statut/priorité sur la même carte.
+export const PROJECT_PHASE_OPTIONS: { value: ProjectPhase; label: string }[] = [
+  { value: "a_l_etude", label: "À l'étude" },
+  { value: "en_ecriture", label: "En écriture" },
+  { value: "developpement", label: "Développement" },
+  { value: "livraison", label: "Livraison" },
+];
+
+const PROJECT_PHASE_ICONS: Record<string, LucideIcon> = {
+  a_l_etude: Search,
+  en_ecriture: PenLine,
+  developpement: Code2,
+  livraison: Rocket,
+};
+
+export function projectPhaseIcon(phase: string): LucideIcon | undefined {
+  return PROJECT_PHASE_ICONS[phase];
 }

@@ -13,6 +13,7 @@ import { invalidateTaskTypes } from "../../hooks/useTaskTypes";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 import { useToast } from "../../context/ToastContext";
 import type { Project, ProjectMembership, ProjectRole, Team } from "../../types/watodo";
+import { ProjectDetailsForm } from "./ProjectDetailsForm";
 import "./ProjectAdminTab.css";
 
 const ROLE_OPTIONS: { value: ProjectRole; label: string }[] = [
@@ -181,6 +182,8 @@ export function ProjectAdminTab({ project, onUpdated }: ProjectAdminTabProps) {
 
   return (
     <div className="project-admin-tab">
+      {project.permissions.can_edit_details && <ProjectDetailsForm project={project} onUpdated={onUpdated} />}
+
       {error && <p className="project-admin-tab__message project-admin-tab__message--error">{error}</p>}
 
       <table className="project-admin-tab__table">

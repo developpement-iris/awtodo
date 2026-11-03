@@ -1,0 +1,100 @@
+.project-cover {
+  --cover-bg: var(--project-cover-1-bg);
+  --cover-ink: var(--project-cover-1-ink);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  overflow: hidden;
+  background: var(--cover-bg);
+  color: var(--cover-ink);
+  border-radius: var(--radius-sm);
+}
+
+/* Bande oblique — même motif que le panneau d'accueil/de connexion. */
+.project-cover::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--cover-ink);
+  opacity: 0.1;
+  clip-path: polygon(58% 0, 100% 0, 100% 100%, 34% 100%);
+}
+
+.project-cover--tone-1 { --cover-bg: var(--project-cover-1-bg); --cover-ink: var(--project-cover-1-ink); }
+.project-cover--tone-2 { --cover-bg: var(--project-cover-2-bg); --cover-ink: var(--project-cover-2-ink); }
+.project-cover--tone-3 { --cover-bg: var(--project-cover-3-bg); --cover-ink: var(--project-cover-3-ink); }
+.project-cover--tone-4 { --cover-bg: var(--project-cover-4-bg); --cover-ink: var(--project-cover-4-ink); }
+.project-cover--tone-5 { --cover-bg: var(--project-cover-5-bg); --cover-ink: var(--project-cover-5-ink); }
+.project-cover--tone-6 { --cover-bg: var(--project-cover-6-bg); --cover-ink: var(--project-cover-6-ink); }
+
+.project-cover--image::before {
+  display: none;
+}
+
+.project-cover__image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Pastille de phase lisible sur une photo. */
+.project-cover--image .project-cover__phase {
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  opacity: 0.9;
+}
+
+.project-cover__monogram {
+  position: relative;
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.project-cover__phase {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  display: inline-flex;
+  opacity: 0.75;
+}
+
+.project-cover--row {
+  width: 72px;
+  height: 52px;
+}
+
+.project-cover--row .project-cover__monogram {
+  font-size: 20px;
+}
+
+.project-cover--gallery {
+  width: 100%;
+  aspect-ratio: 16 / 7;
+  border-radius: 0;
+}
+
+.project-cover--gallery .project-cover__monogram {
+  font-size: 44px;
+}
+
+.project-cover--gallery .project-cover__phase {
+  right: var(--space-3);
+  bottom: var(--space-3);
+}
+
+.project-cover--mini {
+  width: 32px;
+  height: 32px;
+}
+
+.project-cover--mini .project-cover__monogram {
+  font-size: 12px;
+}

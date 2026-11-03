@@ -12,6 +12,10 @@ from .services import get_project_permissions
 # été acceptée comme travail à faire. Dupliqué en littéral plutôt qu'importé
 # de `apps.tasks` : `projects` est en dessous de `tasks` dans la hiérarchie
 # de dépendances du projet (voir CLAUDE.md), l'import serait interdit.
+# Choix directs d'image : la bibliothèque seulement — "upload" n'est posé que
+# par l'endpoint d'import (`upload_project_cover`).
+LIBRARY_COVER_CHOICES = [choice for choice in Project.COVER_IMAGE_CHOICES if choice[0] != "upload"]
+
 NON_REJECTED_TASK_STATUSES = [
     "en_attente_validation",
     "disponible",
@@ -34,6 +38,7 @@ class ProjectSerializer(serializers.ModelSerializer):
     project_type_display = serializers.CharField(source="get_project_type_display", read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     priority_display = serializers.CharField(source="get_priority_display", read_only=True)
+    phase_display = serializers.CharField(source="get_phase_display", read_only=True)
     team = serializers.PrimaryKeyRelatedField(read_only=True)
     team_name = serializers.SerializerMethodField()
     tasks_total = serializers.SerializerMethodField()
@@ -52,6 +57,10 @@ class ProjectSerializer(serializers.ModelSerializer):
             "project_type_display",
             "status",
             "status_display",
+            "phase",
+            "phase_display",
+            "cover_image",
+            "cover_updated_at",
             "deadline",
             "already_in_production",
             "priority",
@@ -65,7 +74,9 @@ class ProjectSerializer(serializers.ModelSerializer):
             "members",
             "permissions",
             "current_version_id",
+            "created_at",
         ]
+        read_only_fields = ["created_at", "cover_updated_at"]
 
     def get_permissions(self, obj):
         request = self.context.get("request")
@@ -116,8 +127,23 @@ class ProjectCreateSerializer(serializers.Serializer):
     deadline = serializers.DateField(required=False, allow_null=True)
     already_in_production = serializers.BooleanField(required=False, default=False)
     priority = serializers.ChoiceField(choices=PRIORITY_CHOICES, required=False, allow_null=True)
+    phase = serializers.ChoiceField(choices=Project.PHASE_CHOICES, required=False, allow_null=True)
+    cover_image = serializers.ChoiceField(choices=LIBRARY_COVER_CHOICES, required=False, allow_blank=True)
     team = serializers.PrimaryKeyRelatedField(queryset=Team.objects.all(), required=False, allow_null=True)
     member_ids = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), many=True, required=False)
+
+
+class ProjectDetailsUpdateSerializer(serializers.Serializer):
+    """Mise à jour partielle — seules les clés présentes dans le body sont
+    transmises au service (`validated_data` n'inclut pas les champs absents)."""
+
+    name = serializers.CharField(max_length=200, required=False, allow_blank=True)
+    description = serializers.CharField(required=False, allow_blank=True)
+    deadline = serializers.DateField(required=False, allow_null=True)
+    already_in_production = serializers.BooleanField(required=False)
+    priority = serializers.ChoiceField(choices=PRIORITY_CHOICES, required=False, allow_null=True)
+    phase = serializers.ChoiceField(choices=Project.PHASE_CHOICES, required=False, allow_null=True)
+    cover_image = serializers.ChoiceField(choices=Project.COVER_IMAGE_CHOICES, required=False, allow_blank=True)
 
 
 class ProjectNotepadUpdateSerializer(serializers.Serializer):
