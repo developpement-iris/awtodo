@@ -43,6 +43,10 @@ INSTALLED_APPS = [
     "apps.planning",
     "apps.communication",
     "apps.dashboards",
+    # Avant oauth2_provider : ses gabarits (`oauth2_provider/authorize.html`)
+    # remplacent ceux du toolkit.
+    "apps.mcp",
+    "oauth2_provider",
 ]
 
 MIDDLEWARE = [
@@ -228,3 +232,36 @@ PASSWORD_RESET_DIRECT_LINK = env.bool("PASSWORD_RESET_DIRECT_LINK", default=Fals
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="memory://")
 CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", default=True)
 CELERY_TASK_EAGER_PROPAGATES = env.bool("CELERY_TASK_EAGER_PROPAGATES", default=False)
+
+# Serveur MCP / connecteur Claude (apps.mcp) — django-oauth-toolkit sert de
+# serveur d'autorisation OAuth 2.1 : claude.ai découvre les endpoints via les
+# métadonnées RFC 9728/8414, s'enregistre seul (RFC 7591) et obtient un jeton
+# au nom de la personne qui se connecte. Claude agit alors avec SES droits.
+LOGIN_URL = "oauth2_provider:mcp-login"
+
+# Seules URL de retour acceptées à l'enregistrement d'un client (voir
+# apps.mcp.oauth.AllowlistedRedirectDCRPermission).
+MCP_OAUTH_ALLOWED_REDIRECT_URIS = env.list(
+    "MCP_OAUTH_ALLOWED_REDIRECT_URIS",
+    default=[
+        "https://claude.ai/api/mcp/auth_callback",
+        "https://claude.com/api/mcp/auth_callback",
+    ],
+)
+
+OAUTH2_PROVIDER = {
+    "SCOPES": {"mcp": "Utiliser Awtodo depuis Claude, avec vos droits"},
+    "DEFAULT_SCOPES": ["mcp"],
+    "PKCE_REQUIRED": True,
+    "COMPLIANT_BCP_RFC9700_PKCE_METHOD": True,  # S256 uniquement
+    "ACCESS_TOKEN_EXPIRE_SECONDS": 3600,
+    "REFRESH_TOKEN_EXPIRE_SECONDS": 30 * 24 * 3600,
+    "ROTATE_REFRESH_TOKEN": True,
+    "OAUTH2_RESPONSE_TYPES_SUPPORTED": ["code"],
+    "OAUTH2_GRANT_TYPES_SUPPORTED": ["authorization_code", "refresh_token"],
+    "OAUTH2_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED": ["none", "client_secret_post", "client_secret_basic"],
+    "DCR_ENABLED": True,
+    "DCR_REGISTRATION_PERMISSION_CLASSES": ("apps.mcp.oauth.AllowlistedRedirectDCRPermission",),
+    "ALLOWED_REDIRECT_URI_SCHEMES": ["https"],
+    "OAUTH2_PROTECTED_RESOURCE_NAME": "Awtodo",
+}

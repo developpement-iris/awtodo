@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Awtodo{% endblock %}</title>
+  <style>
+    :root {
+      --bg: #F5EFEC; --surface: #FFFFFF; --text: #2A2020; --muted: #6B5A57;
+      --border: #E2D6D2; --accent: #753030; --accent-contrast: #FFFFFF; --error: #A12C2C;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #241C1C; --surface: #332828; --text: #EDE3DF; --muted: #B8A7A2;
+        --border: #4A3A38; --accent: #8F4040; --accent-contrast: #FFFFFF; --error: #E58080;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 16px; background: var(--bg); color: var(--text);
+      font-family: -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 15px; line-height: 1.5;
+    }
+    .card {
+      width: 100%; max-width: 400px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; padding: 28px 24px;
+    }
+    .brand { margin: 0 0 4px; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+    h1 { margin: 0 0 16px; font-size: 22px; line-height: 1.3; }
+    p { margin: 0 0 12px; }
+    .muted { color: var(--muted); }
+    label { display: block; margin: 14px 0 4px; font-weight: 600; }
+    input[type=text], input[type=password] {
+      width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 4px;
+      background: var(--bg); color: var(--text); font: inherit;
+    }
+    input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .actions { display: flex; gap: 8px; margin-top: 20px; }
+    button {
+      flex: 1; padding: 10px 12px; border-radius: 4px; font: inherit; font-weight: 600; cursor: pointer;
+      border: 1px solid var(--border); background: transparent; color: var(--text);
+    }
+    button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
+    .error { color: var(--error); margin-top: 12px; }
+    ul { margin: 0 0 12px; padding-left: 20px; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <p class="brand">Awtodo</p>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

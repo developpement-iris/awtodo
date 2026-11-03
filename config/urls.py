@@ -22,6 +22,11 @@ urlpatterns = [
     path("api/health/", health),
     path("admin/", admin.site.urls),
     path("api/v1/", include(api_v1_patterns)),
+    # Serveur MCP pour le connecteur Claude + son serveur d'autorisation
+    # OAuth (apps.mcp). Avant le fallback SPA, qui attraperait sinon /mcp,
+    # /o/... et /.well-known/....
+    path("", include("apps.mcp.urls")),
+    path("", include("apps.mcp.oauth_urls")),
     # Fallback SPA (staging : Django sert le build Vite). Toute route qui
     # n'est ni l'API, ni l'admin, ni un statique renvoie index.html.
     re_path(r"^(?!api/|admin/|static/).*$", spa_index),

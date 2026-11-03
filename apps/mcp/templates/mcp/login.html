@@ -1,0 +1,18 @@
+{% extends "mcp/base.html" %}
+{% block title %}Connexion — Awtodo{% endblock %}
+{% block content %}
+  <h1>Connexion pour Claude</h1>
+  <p class="muted">Connectez-vous avec votre compte Awtodo pour autoriser le connecteur Claude.</p>
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <label for="username">Identifiant</label>
+    <input id="username" name="username" type="text" autocomplete="username" value="{{ username|default:'' }}" required autofocus>
+    <label for="password">Mot de passe</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+    <div class="actions">
+      <button type="submit" class="primary">Se connecter</button>
+    </div>
+  </form>
+{% endblock %}

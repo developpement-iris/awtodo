@@ -14,3 +14,9 @@ requests==2.32.3
 msal==1.31.1
 whitenoise==6.12.0
 gunicorn==23.0.0
+# Serveur d'autorisation OAuth du connecteur Claude (apps.mcp).
+django-oauth-toolkit==3.4.1
+# Épinglés pour rester compatibles avec msal (synchro Outlook), qui exige
+# cryptography<46 : jwcrypto>=1.6 en exige >=49.
+jwcrypto==1.5.6
+cryptography>=44,<46

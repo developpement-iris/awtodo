@@ -1150,3 +1150,39 @@ Certaines métriques/certains regroupements révèlent des données sur **d'autr
 - Constructeur personnalisé à un seul niveau d'agrégation (pas de moyenne-de-sommes-par-groupe) — suffisant pour construire librement n'importe quelle métrique "X par Y" demandée, pas pour des ratios à deux niveaux.
 - Pas de validation de taille de grille (un widget peut être redimensionné à une taille illisible) — non demandé, pas bloquant pour une v1 personnelle.
 - Vérification UI réelle non faite en environnement de développement (pas d'accès navigateur) — `tsc`/`build`/`lint` et les tests backend (820 tests, tous verts) couvrent la logique, pas le rendu visuel.
+
+## Serveur MCP — connecteur Claude (session du 2026-11-02)
+
+Nouvelle app `apps/mcp` (label `awtodo_mcp`, dépend de tout via l'API, rien ne dépend d'elle — même position qu'`integrations`). Permet d'ajouter Awtodo comme **connecteur personnalisé dans claude.ai** (web/mobile) : Claude agit **au nom de la personne connectée, avec exactement ses droits**.
+
+**Cadrage (`AskUserQuestion`)** : client claude.ai (donc serveur distant + OAuth, pas de serveur local Claude Desktop) ; portée « tout ce que l'API permet » ; code dans une app Django.
+
+### Transport
+- `POST /mcp` — JSON-RPC MCP, transport « Streamable HTTP » **sans état**, réponses JSON directes (pas de SSE, `GET`/`DELETE` → 405). Méthodes : `initialize`, `ping`, `tools/list`, `tools/call` ; les notifications répondent 202. Versions de protocole acceptées : 2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05.
+- **Protocole écrit à la main** (`apps/mcp/protocol.py`), pas le SDK Python `mcp` : celui-ci est bâti sur ASGI/Starlette alors qu'Awtodo tourne en WSGI (gunicorn).
+
+### Outils (4, génériques)
+| Outil | Rôle |
+|---|---|
+| `awtodo_whoami` | `GET accounts/me/` |
+| `awtodo_list_endpoints` | catalogue dérivé du schéma OpenAPI drf-spectacular (`catalog.py`, calculé une fois par processus) — par domaine (`area`) ou mot-clé (`search`) |
+| `awtodo_api_read` | `GET` sur `/api/v1/<path>` (annoté `readOnlyHint`) |
+| `awtodo_api_write` | `POST/PUT/PATCH/DELETE` (annoté `destructiveHint`) — claude.ai peut demander confirmation pour celui-ci seulement |
+
+Un outil par endpoint (~170) aurait noyé Claude. **Exécution en interne** (`dispatch.py`) : l'appel est résolu par `django.urls.resolve` et passe par la **vraie vue DRF** (`APIRequestFactory` + `force_authenticate`) — scoping, permissions par objet, serializers, services et signaux s'appliquent tels quels, aucune règle dupliquée. Réponse tronquée au-delà de 60 000 caractères (invite à filtrer). **Endpoints refusés** (`DENIED_PREFIXES`) : `accounts/login/`, `accounts/me/change-password/`, `accounts/password-reset/`, `integrations/api-keys/` (une clé en clair finirait dans l'historique de la conversation).
+
+### OAuth 2.1 — django-oauth-toolkit 3.4.1 (nouvelle dépendance)
+- Métadonnées : `/.well-known/oauth-protected-resource/mcp` (RFC 9728) et `/.well-known/oauth-authorization-server` (RFC 8414). Un `401` sur `/mcp` renvoie `WWW-Authenticate: Bearer resource_metadata="…"`.
+- Endpoints : `/o/authorize/`, `/o/token/`, `/o/revoke_token/`, `/o/register/` (enregistrement dynamique RFC 7591), `/o/register/<client_id>/` (RFC 7592, **GET/DELETE seulement**).
+- **Enregistrement dynamique ouvert sans compte mais limité** aux URL de retour de `MCP_OAUTH_ALLOWED_REDIRECT_URIS` (défaut : `https://claude.ai/api/mcp/auth_callback`, `https://claude.com/api/mcp/auth_callback` ; surchargeable par variable d'env) — `AllowlistedRedirectDCRPermission`. Sinon n'importe qui pourrait enregistrer un client pointant chez lui et récupérer un code d'autorisation via un lien envoyé à un collègue. Le PUT RFC 7592 est retiré pour la même raison.
+- PKCE obligatoire, S256 uniquement ; grant types `authorization_code` + `refresh_token` ; scope unique `mcp` ; jeton d'accès 1 h, refresh 30 jours (rotation).
+- **Connexion** : page Django `/o/login/` (`LOGIN_URL`), identifiant + mot de passe via `authenticate_user` — le frontend React s'authentifie en JWT, mais l'écran d'autorisation du toolkit attend une session Django. Session limitée à 15 min. Comptes de service refusés.
+- **Consentement** : gabarit `oauth2_provider/authorize.html` remplacé (`apps/mcp/templates/`), CSP de la page élargie à `form-action` claude.ai/claude.com (Chrome applique `form-action` à la redirection qui suit l'envoi du formulaire ; la CSP globale s'arrête à `'self'`).
+- Un compte désactivé (`account_status != "active"` ou `is_active=False`) perd l'accès immédiatement, même avec un jeton encore valide.
+- Les tables du toolkit (applications, jetons) ne suivent pas la règle « aucune suppression physique » : ce ne sont pas des entités métier, le toolkit supprime les jetons expirés/révoqués.
+
+### Dépendances
+`django-oauth-toolkit==3.4.1` ; `jwcrypto==1.5.6` et `cryptography>=44,<46` épinglés — `jwcrypto>=1.6` exige `cryptography>=49`, incompatible avec `msal` (synchro Outlook, `<46`).
+
+### Ajouter le connecteur dans claude.ai
+Paramètres → Connecteurs → Ajouter un connecteur personnalisé → URL `https://<domaine-awtodo>/mcp` (ex. `https://awtodo.onrender.com/mcp`). claude.ai s'enregistre seul, ouvre la page de connexion Awtodo puis l'écran de consentement. Nécessite un déploiement HTTPS joignable depuis Internet (Render actuel), pas un `localhost`.

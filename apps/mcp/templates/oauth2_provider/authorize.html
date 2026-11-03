@@ -1,0 +1,21 @@
+{% extends "mcp/base.html" %}
+{% block title %}Autoriser Claude — Awtodo{% endblock %}
+{% block content %}
+  {% if not error %}
+    <h1>Autoriser {{ application.name|default:"Claude" }} ?</h1>
+    <p>Connecté en tant que <strong>{{ request.user.get_full_name|default:request.user.username }}</strong>.</p>
+    <p class="muted">Claude pourra consulter et modifier vos projets, tâches, incidents et planning, avec exactement vos droits Awtodo. Vous pourrez retirer le connecteur à tout moment depuis Claude.</p>
+    <form id="authorizationForm" method="post">
+      {% csrf_token %}
+      {% for field in form %}{% if field.is_hidden %}{{ field }}{% endif %}{% endfor %}
+      {% if form.errors or form.non_field_errors %}<div class="error" role="alert">{{ form.errors }}{{ form.non_field_errors }}</div>{% endif %}
+      <div class="actions">
+        <button type="submit">Refuser</button>
+        <button type="submit" name="allow" value="Autoriser" class="primary">Autoriser</button>
+      </div>
+    </form>
+  {% else %}
+    <h1>Autorisation impossible</h1>
+    <p>{{ error.description|default:error.error }}</p>
+  {% endif %}
+{% endblock %}
