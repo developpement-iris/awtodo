@@ -1024,10 +1024,13 @@ export interface CalendarQuery {
   to: string;
   owners?: string[];
   projects?: string[];
+  /** Ajoute la superposition des rendez-vous Outlook (lecture seule). */
+  outlook?: boolean;
 }
 
 export function getCalendar(query: CalendarQuery): Promise<CalendarBundle> {
   const params = new URLSearchParams({ from: query.from, to: query.to });
+  if (query.outlook) params.set("outlook", "1");
   if (query.owners?.length) params.set("owners", query.owners.join(","));
   if (query.projects?.length) params.set("projects", query.projects.join(","));
   return getJson<CalendarBundle>(`/planning/calendar/?${params.toString()}`);

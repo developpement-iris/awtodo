@@ -89,6 +89,7 @@ class CalendarView(_PlanningExceptionMixin, APIView):
             window_end=end,
             owner_ids=_id_list(request, "owners"),
             project_ids=_id_list(request, "projects"),
+            include_outlook=request.query_params.get("outlook") in ("1", "true"),
         )
         return Response(data)
 

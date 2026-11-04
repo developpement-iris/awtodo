@@ -1,10 +1,14 @@
 import type {
   CalendarEventOccurrence,
+  OutlookBusySlot,
   ProjectPlanningOccurrence,
   ScheduledBlock,
 } from "../../types/watodo";
 
-export type CalendarItemKind = "event" | "block" | "project_entry" | "shared";
+export type CalendarItemKind = "event" | "block" | "project_entry" | "shared" | "outlook";
+
+/** `calendarId` de la superposition Outlook (masquable comme un calendrier). */
+export const OUTLOOK_CALENDAR_ID = "outlook";
 
 /** Représentation unifiée d'une occurrence pour la grille. */
 export interface CalendarItem {
@@ -22,7 +26,7 @@ export interface CalendarItem {
   calendarId: string;
   /** Couleur d'identité du calendrier (calendrier partagé uniquement). */
   color?: string;
-  raw: CalendarEventOccurrence | ScheduledBlock | ProjectPlanningOccurrence;
+  raw: CalendarEventOccurrence | ScheduledBlock | ProjectPlanningOccurrence | OutlookBusySlot;
 }
 
 /** Palette de couleurs d'identité de calendrier — couleurs "text" sobres,
@@ -78,6 +82,22 @@ export function blockToItem(
     calendarId: shared ? (opts.calendarId ?? "mine") : "mine",
     color: opts.color,
     raw: block,
+  };
+}
+
+export function outlookToItem(slot: OutlookBusySlot): CalendarItem {
+  return {
+    key: `outlook:${slot.id}`,
+    kind: "outlook",
+    id: slot.id,
+    title: slot.title,
+    subtitle: "Outlook",
+    start: slot.start,
+    end: slot.end,
+    allDay: slot.all_day,
+    editable: false,
+    calendarId: OUTLOOK_CALENDAR_ID,
+    raw: slot,
   };
 }
 

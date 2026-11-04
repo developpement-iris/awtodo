@@ -905,6 +905,17 @@ export interface CalendarBundle {
     occurrences: CalendarEventOccurrence[];
     blocks: ScheduledBlock[];
   }[];
+  /** Rendez-vous Outlook de l'utilisateur, lecture seule — présent seulement
+   * si demandé (`outlook: true`). `disabled` = synchro non activée. */
+  outlook?: { status: "ok" | "disabled" | "error"; items: OutlookBusySlot[] };
+}
+
+export interface OutlookBusySlot {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  all_day: boolean;
 }
 
 export interface ProjectPlanningBundle {

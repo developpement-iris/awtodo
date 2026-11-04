@@ -1027,6 +1027,18 @@ Aucun appel si le modèle (ou la copie du destinataire visé) n'a pas encore d'`
 
 L'id Graph retourné est stocké dans `BlockOutlookSync.outlook_event_id` (une ligne par `(block, destinataire)`), pas sur `ScheduledBlock` lui-même.
 
+### Rendez-vous Outlook en lecture seule sur le planning (session du 2026-11-03)
+
+Seul flux Outlook → Awtodo, **affichage uniquement** : pour ne pas planifier une tâche sur un créneau déjà pris. La sync bilatérale complète a été écartée : abonnements Graph à renouveler tous les ~3 jours (pas de planificateur sans Redis), boucles d'écho, conflits avec les droits Awtodo (organisateur seul, chef de projet seul), traduction inverse des récurrences.
+
+- `GET /planning/calendar/?…&outlook=1` ajoute `outlook: { status, items }` à la réponse. `status` vaut `ok`, `disabled` (opt-in `outlook_calendar_sync_enabled` désactivé ou `O365Connection` incomplète) ou `error` (Graph en échec ou délai dépassé, le reste du planning s'affiche normalement). `items` = `[{ id, title, start, end, all_day }]`. Sans `outlook=1`, la clé est absente et aucun appel Graph n'est fait (l'onglet Planning d'un projet ne la demande pas).
+- `GET /users/{upn}/calendarView` (`Prefer: outlook.timezone="UTC"`, `$select` minimal, 5 pages de 200 au plus, délai 3 s), `graph_client.list_graph_busy_slots`. Les créneaux `showAs=free` et les annulés sont ignorés.
+- **Rien n'est stocké.** Le résultat est mis en cache (cache Django) par utilisateur × fenêtre : 120 s, ou 60 s après un échec pour ne pas relancer Graph à chaque navigation. Un RDV créé dans Outlook peut donc mettre jusqu'à 2 min à apparaître.
+- **Les copies poussées par Awtodo sont masquées** : tout id (ou `seriesMasterId`) présent dans `CalendarEvent`/`ScheduledBlock.outlook_event_id` ou dans les tables `*OutlookSync` de l'utilisateur n'est pas renvoyé, sinon ce serait un doublon.
+- **Visible par soi seul**, jamais diffusé par un `CalendarShare` (décision utilisateur).
+- Exception actée à la règle n°2 de CLAUDE.md (pas d'appel externe synchrone dans le flux HTTP). Justification : c'est une lecture, avec un délai court et un cache, et un échec n'empêche jamais l'affichage du planning.
+- Frontend : `kind: "outlook"` (`outlookToItem`), non modifiable (pas de glisser-déposer, clic → toast), hachures neutres. Entrée « Mes RDV Outlook » masquable dans la liste des calendriers, affichée seulement si `status !== "disabled"`.
+
 ### Plusieurs assignés sur une entrée de planning projet + synchro Outlook (session du 2026-10-05)
 
 **Statut : implémenté.** Deux demandes directes liées : (1) pouvoir assigner une entrée du planning d'un **projet** à plusieurs personnes (cases à cocher) ; (2) corriger le fait que ces entrées, qui se superposent déjà en lecture sur le planning personnel de tout membre du projet (`get_calendar`), ne se synchronisaient **jamais** sur Outlook — contrairement aux autres types d'événements du module. Diagnostic : ce n'était pas un bug de câblage mais un trou complet — aucun signal, aucune tâche Celery, aucun modèle de synchro n'existait pour `ProjectPlanningEntry`.

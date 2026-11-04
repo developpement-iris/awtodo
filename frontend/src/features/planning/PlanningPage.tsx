@@ -58,6 +58,8 @@ import {
   blockToItem,
   calendarUserLabel,
   eventToItem,
+  OUTLOOK_CALENDAR_ID,
+  outlookToItem,
   PLANNING_PALETTE,
   projectEntryToItem,
   type CalendarItem,
@@ -203,7 +205,7 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
     let cancelled = false;
     setBundle(null);
     setError(null);
-    getCalendar({ from: range.from.toISOString(), to: range.to.toISOString() })
+    getCalendar({ from: range.from.toISOString(), to: range.to.toISOString(), outlook: true })
       .then((data) => {
         if (!cancelled) setBundle(data);
       })
@@ -254,6 +256,7 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
       ...bundle.events.map((occ) => eventToItem(occ, { color: myColor })),
       ...bundle.blocks.map((block) => blockToItem(block, { color: myColor })),
       ...bundle.project_entries.map((occ) => projectEntryToItem(occ)),
+      ...(bundle.outlook?.items ?? []).map(outlookToItem),
       ...bundle.shared.flatMap((group) => {
         const color = colorByCalendar.get(group.owner.id);
         return [
@@ -418,6 +421,8 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
       // déjà sur l'item, chargé avec le calendrier — même traitement que les
       // créneaux partagés ci-dessous.
       showToast(`${item.title} — ${item.subtitle ?? "calendrier partagé"}`);
+    } else if (item.kind === "outlook") {
+      showToast(`${item.title} — rendez-vous Outlook (lecture seule)`);
     } else if (item.kind === "block") {
       // Créneau d'un calendrier partagé : lecture seule, pas d'édition.
       if (!item.editable) {
@@ -525,6 +530,22 @@ export function PlanningPage({ onNavigate }: PlanningPageProps) {
                     Mon calendrier
                   </label>
                 </li>
+                {bundle?.outlook && bundle.outlook.status !== "disabled" && (
+                  <li>
+                    <label className="planning-calendars__item">
+                      <Checkbox
+                        checked={!hiddenCalendars.has(OUTLOOK_CALENDAR_ID)}
+                        onCheckedChange={() => toggleCalendar(OUTLOOK_CALENDAR_ID)}
+                        aria-label="Afficher mes rendez-vous Outlook"
+                      />
+                      <span className="planning-calendars__swatch planning-calendars__swatch--outlook" />
+                      Mes RDV Outlook
+                    </label>
+                    {bundle.outlook.status === "error" && (
+                      <p className="planning-side__empty">Outlook momentanément indisponible.</p>
+                    )}
+                  </li>
+                )}
                 {sharedCalendars.map((cal) => (
                   <li key={cal.id}>
                     <label className="planning-calendars__item">

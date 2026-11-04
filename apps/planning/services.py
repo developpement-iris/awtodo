@@ -6,21 +6,29 @@ des dicts de réponse), les vues ne font que router et traduire les exceptions
 projet : `_ensure_can_X` lève, `can_X` renvoie un booléen via `_check`.
 """
 
+import logging
+
 from dateutil.rrule import rrulestr
+from django.core.cache import cache
 from django.db.models import Q
 from django.utils import timezone
 
 from apps.common.audit import record_changes, record_event
 from apps.common.permissions import check_permission
+from apps.communication.services import get_o365_connection
 from apps.projects.models import ProjectMembership
 from apps.projects.services import is_project_manager, is_project_member
 
+from .graph_client import list_graph_busy_slots
 from .models import (
     CalendarEvent,
     CalendarEventOccurrenceOverride,
     CalendarShare,
+    EventOccurrenceOutlookSync,
     EventParticipant,
+    EventParticipantOutlookSync,
     ProjectPlanningEntry,
+    ProjectPlanningEntryOutlookSync,
     ScheduledBlock,
     WorkingHoursDay,
     WorkingHoursOverrideDay,
@@ -348,7 +356,72 @@ def _member_project_ids(actor):
     )
 
 
-def get_calendar(*, actor, window_start, window_end, owner_ids=None, project_ids=None):
+OUTLOOK_BUSY_CACHE_SECONDS = 120
+OUTLOOK_BUSY_ERROR_CACHE_SECONDS = 60
+_OUTLOOK_ERROR = "error"
+
+logger = logging.getLogger(__name__)
+
+
+def _awtodo_outlook_ids(actor):
+    """Ids Graph des copies qu'Awtodo a lui-même poussées sur l'Outlook de
+    `actor` — à masquer de la superposition, déjà affichées en tant
+    qu'événement/créneau Awtodo."""
+    ids = set(CalendarEvent.all_objects.filter(owner=actor).values_list("outlook_event_id", flat=True))
+    ids |= set(ScheduledBlock.all_objects.filter(owner=actor).values_list("outlook_event_id", flat=True))
+    for model in (EventParticipantOutlookSync, ProjectPlanningEntryOutlookSync, EventOccurrenceOutlookSync):
+        ids |= set(model.objects.filter(user=actor).values_list("outlook_event_id", flat=True))
+    ids.discard("")
+    return ids
+
+
+def get_outlook_busy(*, actor, window_start, window_end):
+    """Rendez-vous Outlook de l'acteur, en lecture seule, pour éviter de
+    planifier par-dessus (session du 2026-11-03). Réservé à soi-même : jamais
+    diffusé via un `CalendarShare`. Conditionné au même opt-in que la synchro
+    (`outlook_calendar_sync_enabled`) et à une `O365Connection` prête.
+
+    Appel Graph synchrone pendant la requête — exception actée à la règle
+    "aucun appel externe dans le flux HTTP" : délai court, résultat mis en
+    cache par utilisateur × fenêtre, et un échec ne casse jamais le
+    planning (`status="error"`, liste vide)."""
+    connection = get_o365_connection(actor.organisation) if actor.outlook_calendar_sync_enabled else None
+    if connection is None or not (
+        connection.is_enabled and connection.tenant_id and connection.client_id and connection.client_secret
+    ):
+        return {"status": "disabled", "items": []}
+
+    key = f"planning:outlook-busy:{actor.id}:{window_start.isoformat()}:{window_end.isoformat()}"
+    slots = cache.get(key)
+    if slots is None:
+        try:
+            slots = list_graph_busy_slots(connection, actor.email, window_start, window_end)
+            cache.set(key, slots, OUTLOOK_BUSY_CACHE_SECONDS)
+        except Exception as exc:  # GraphSyncError, requests.Timeout, msal…
+            logger.warning("Lecture Outlook impossible pour %s : %s", actor.id, exc)
+            slots = _OUTLOOK_ERROR
+            cache.set(key, slots, OUTLOOK_BUSY_ERROR_CACHE_SECONDS)
+    if slots == _OUTLOOK_ERROR:
+        return {"status": "error", "items": []}
+
+    own_ids = _awtodo_outlook_ids(actor)
+    return {
+        "status": "ok",
+        "items": [
+            {
+                "id": slot["id"],
+                "title": slot["title"],
+                "start": _iso(slot["start"]),
+                "end": _iso(slot["end"]),
+                "all_day": slot["all_day"],
+            }
+            for slot in slots
+            if slot["id"] not in own_ids and slot["series_master_id"] not in own_ids
+        ],
+    }
+
+
+def get_calendar(*, actor, window_start, window_end, owner_ids=None, project_ids=None, include_outlook=False):
     _require_actor(actor)
     _validate_window(window_start, window_end)
 
@@ -420,7 +493,7 @@ def get_calendar(*, actor, window_start, window_end, owner_ids=None, project_ids
             }
         )
 
-    return {
+    data = {
         "window_start": _iso(window_start),
         "window_end": _iso(window_end),
         "events": [_event_occurrence_dict(occ, actor=actor) for occ in event_occs],
@@ -428,6 +501,9 @@ def get_calendar(*, actor, window_start, window_end, owner_ids=None, project_ids
         "project_entries": [_project_entry_occurrence_dict(occ, actor=actor) for occ in entry_occs],
         "shared": shared,
     }
+    if include_outlook:
+        data["outlook"] = get_outlook_busy(actor=actor, window_start=window_start, window_end=window_end)
+    return data
 
 
 # --- Événements personnels ----------------------------------------------

@@ -204,6 +204,18 @@
   background: var(--color-accent);
 }
 
+/* Rendez-vous Outlook en lecture seule (session du 2026-11-03) : hachures
+   neutres = "créneau déjà pris", distinct de tout item Awtodo. */
+.planning-calendars__swatch--outlook,
+.week-grid__item--outlook,
+.month-grid__chip--outlook {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--tone-neutral-bg) 0 6px,
+    color-mix(in srgb, var(--tone-neutral-text) 14%, var(--tone-neutral-bg)) 6px 12px
+  );
+}
+
 /* Sous-accordéon "par projet" imbriqué dans la section Tâches (session du
    2026-10-08) — plus compact que l'accordéon de premier niveau (Tâches/
    Incidents), pour rester visuellement subordonné. */
@@ -473,6 +485,12 @@
   color: var(--tone-neutral-text);
 }
 
+.week-grid__item--outlook {
+  border-color: var(--tone-neutral-text);
+  color: var(--color-text-muted);
+  cursor: default;
+}
+
 .week-grid__item--shared {
   background: color-mix(in srgb, var(--color-accent) 8%, transparent);
   border-style: dashed;
@@ -702,6 +720,7 @@
 .month-grid__chip--block { border-color: var(--task-status-assigned-text); }
 .month-grid__chip--project_entry { border-color: var(--tone-neutral-text); }
 .month-grid__chip--shared { border-style: dashed; }
+.month-grid__chip--outlook { border-color: var(--tone-neutral-text); color: var(--color-text-muted); }
 
 .month-grid__more {
   border: none;

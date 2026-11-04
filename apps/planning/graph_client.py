@@ -1,5 +1,7 @@
 """Client Microsoft Graph minimal pour la synchronisation Outlook (session du
-2026-09-22, sens unique Awtodo → Outlook). Permission d'application
+2026-09-22, sens unique Awtodo → Outlook ; seule exception, la lecture des
+rendez-vous pour les afficher en lecture seule, voir
+`list_graph_busy_slots`). Permission d'application
 `Calendars.ReadWrite` (flux client credentials, `msal`), même modèle que
 `Mail.Send` pour `apps.communication` — un seul jeu d'identifiants par
 organisation (`O365Connection`), pas de consentement par utilisateur."""
@@ -195,6 +197,65 @@ def create_graph_event(connection, upn, event):
 
 def update_graph_event(connection, upn, outlook_event_id, event):
     _patch_event(connection, upn, outlook_event_id, _event_payload(event))
+
+
+# --- Lecture des rendez-vous Outlook (session du 2026-11-03) --------------
+#
+# Seul appel dans le sens Outlook → Awtodo : afficher les créneaux déjà
+# occupés en lecture seule sur le planning, pour ne pas planifier une tâche
+# par-dessus. Rien n'est stocké côté Awtodo. Appelé pendant la requête HTTP
+# (exception actée à la règle "aucun appel externe synchrone"), d'où un délai
+# court et un nombre de pages plafonné — l'appelant met le résultat en cache.
+
+_BUSY_REQUEST_TIMEOUT = 3
+_BUSY_MAX_PAGES = 5
+_BUSY_SELECT = "id,seriesMasterId,subject,start,end,isAllDay,showAs,isCancelled"
+
+
+def _parse_graph_utc(value):
+    # Graph renvoie "2026-11-03T08:00:00.0000000" (7 décimales, sans offset)
+    # dans le fuseau demandé par l'en-tête `Prefer` — ici UTC.
+    return datetime.fromisoformat(value[:19]).replace(tzinfo=dt_timezone.utc)
+
+
+def list_graph_busy_slots(connection, upn, window_start, window_end):
+    """Rendez-vous Outlook de `upn` dans la fenêtre (occurrences de séries
+    déjà dépliées par `calendarView`). Ignore les créneaux marqués "libre"
+    et les annulés. Renvoie des dicts `{id, series_master_id, title, start,
+    end, all_day}` (datetimes UTC)."""
+    headers = {**_headers(connection), "Prefer": 'outlook.timezone="UTC"'}
+    url = f"{GRAPH_BASE_URL}/users/{upn}/calendarView"
+    params = {
+        "startDateTime": window_start.astimezone(dt_timezone.utc).isoformat(),
+        "endDateTime": window_end.astimezone(dt_timezone.utc).isoformat(),
+        "$select": _BUSY_SELECT,
+        "$top": 200,
+    }
+    slots = []
+    for _ in range(_BUSY_MAX_PAGES):
+        response = requests.get(url, headers=headers, params=params, timeout=_BUSY_REQUEST_TIMEOUT)
+        if response.status_code >= 400:
+            raise GraphSyncError(f"Lecture Outlook échouée ({response.status_code}) : {response.text[:300]}")
+        data = response.json()
+        for item in data.get("value", []):
+            if item.get("isCancelled") or item.get("showAs") == "free":
+                continue
+            slots.append(
+                {
+                    "id": item["id"],
+                    "series_master_id": item.get("seriesMasterId"),
+                    "title": item.get("subject") or "Occupé",
+                    "start": _parse_graph_utc(item["start"]["dateTime"]),
+                    "end": _parse_graph_utc(item["end"]["dateTime"]),
+                    "all_day": bool(item.get("isAllDay")),
+                }
+            )
+        # `@odata.nextLink` porte déjà tous les paramètres de la requête.
+        url = data.get("@odata.nextLink")
+        params = None
+        if not url:
+            break
+    return slots
 
 
 # --- Créneaux de tâche/incident (`ScheduledBlock`) -------------------------
