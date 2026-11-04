@@ -182,6 +182,11 @@ export function ProjectAdminTab({ project, onUpdated }: ProjectAdminTabProps) {
 
   return (
     <div className="project-admin-tab">
+      <p className="project-admin-tab__hint">
+        Projet créé le{" "}
+        {new Date(project.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
+      </p>
+
       {project.permissions.can_edit_details && <ProjectDetailsForm project={project} onUpdated={onUpdated} />}
 
       {error && <p className="project-admin-tab__message project-admin-tab__message--error">{error}</p>}
