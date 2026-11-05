@@ -123,8 +123,11 @@ def update_space_appearance(
     par zone et mention Awtodo le 2026-11-05) — mise à jour partielle, comme
     `apps.accounts.services.update_planning_preferences` : chaîne vide
     valide (retire la personnalisation de ce champ), `None` = champ non
-    fourni. `theme_colors` se fusionne zone par zone."""
-    space = _space_for_manager(actor, project)
+    fourni. `theme_colors` se fusionne zone par zone. Ouvert aussi aux clés
+    API de l'organisation : une automatisation modifie ainsi une page publique
+    sans intervention humaine, d'où la trace dans l'historique du projet."""
+    _require_automation_writer(actor, project)
+    space = _automation_space(project)
     update_fields = []
     if accent_color is not None:
         if accent_color:
@@ -154,7 +157,16 @@ def update_space_appearance(
         update_fields.append("footer_content")
     if update_fields:
         space.save(update_fields=[*update_fields, "updated_at"])
+        record_event(
+            space, actor=actor, verb="appearance_updated", description="Personnalisation de la documentation modifiée",
+            project=project, organisation=project.organisation,
+        )
     return space
+
+
+def get_space_for_appearance(*, actor, project):
+    _require_automation_reader(actor, project)
+    return _automation_space(project)
 
 
 # --- Pages -------------------------------------------------------------------
@@ -266,8 +278,8 @@ def archive_page(*, actor, project, page_id):
 
 # --- Pièces jointes du « Support d'utilisation » --------------------------
 # Déposables par un chef de projet ou par une clé API de l'organisation du
-# projet (session du 2026-11-05). La clé API n'a accès qu'à ces endpoints-là,
-# pas au reste de la documentation.
+# projet (session du 2026-11-05). La clé API n'a accès qu'à ces endpoints-là
+# et à la personnalisation, pas au reste de la documentation.
 
 
 MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
@@ -307,20 +319,21 @@ def _is_org_service_account(actor, project):
     )
 
 
-def attachment_projects(actor):
-    """Portée des endpoints de pièces jointes : celle de la documentation pour
-    une personne, les projets de son organisation pour une clé API."""
+def automation_projects(actor):
+    """Portée des endpoints ouverts aux automatisations (pièces jointes,
+    personnalisation) : celle de la documentation pour une personne, les
+    projets de son organisation pour une clé API."""
     if getattr(actor, "is_service_account", False) and getattr(actor, "is_authenticated", False):
         return Project.all_objects.filter(organisation_id=actor.organisation_id)
     return contributor_projects(actor)
 
 
-def _require_attachment_reader(actor, project):
+def _require_automation_reader(actor, project):
     if not _is_org_service_account(actor, project):
         _require_member(actor, project)
 
 
-def _require_attachment_writer(actor, project):
+def _require_automation_writer(actor, project):
     if not _is_org_service_account(actor, project):
         _require_manager(actor, project)
 
@@ -346,14 +359,14 @@ def _detect_attachment_type(filename, data):
     return content_type
 
 
-def _attachment_space(project):
+def _automation_space(project):
     space, _ = DocSpace.objects.get_or_create(project=project)
     return space
 
 
 def upload_attachment(*, actor, project, page_id, filename, data):
-    _require_attachment_writer(actor, project)
-    page = _get_page(_attachment_space(project), page_id)
+    _require_automation_writer(actor, project)
+    page = _get_page(_automation_space(project), page_id)
     if page.section != "support" or page.status == "archive":
         raise DocsValidationError("Les pièces jointes ne concernent que les pages actives du support d'utilisation.")
     if not data:
@@ -380,12 +393,12 @@ def _get_attachment(project, page_id, attachment_id):
 
 
 def get_attachment(*, actor, project, page_id, attachment_id):
-    _require_attachment_reader(actor, project)
+    _require_automation_reader(actor, project)
     return _get_attachment(project, page_id, attachment_id)
 
 
 def archive_attachment(*, actor, project, page_id, attachment_id):
-    _require_attachment_writer(actor, project)
+    _require_automation_writer(actor, project)
     attachment = _get_attachment(project, page_id, attachment_id)
     attachment.status = "archive"
     attachment.save(update_fields=["status", "updated_at"])
@@ -399,8 +412,8 @@ def archive_attachment(*, actor, project, page_id, attachment_id):
 def list_support_pages(*, actor, project):
     """Pages du support et leurs pièces jointes, sans le contenu Markdown —
     permet à un appelant API de retrouver l'id de la page visée."""
-    _require_attachment_reader(actor, project)
-    space = _attachment_space(project)
+    _require_automation_reader(actor, project)
+    space = _automation_space(project)
     attachments = _attachments_by_page(page__space=space)
     pages = DocPage.all_objects.filter(space=space, section="support").exclude(status="archive")
     return [

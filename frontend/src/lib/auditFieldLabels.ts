@@ -40,6 +40,7 @@ const AUDIT_VERB_LABELS: Record<string, string> = {
   removed: "Retiré",
   sent: "Envoyé",
   archived: "Archivé",
+  appearance_updated: "Personnalisation modifiée",
 };
 
 export function auditVerbLabel(verb: string): string {
@@ -59,6 +60,8 @@ const AUDIT_ENTITY_LABELS: Record<string, string> = {
   communicationmessage: "Communication",
   docpage: "Page de documentation",
   docentry: "Fiche de documentation",
+  docattachment: "Pièce jointe",
+  docspace: "Documentation",
   projectplanningentry: "Entrée de planning",
 };
 

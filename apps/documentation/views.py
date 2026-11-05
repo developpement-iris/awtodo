@@ -117,13 +117,14 @@ class DocSpaceViewSet(viewsets.GenericViewSet):
         return Response(services._page_dict(page))
 
     # --- Pièces jointes du « Support d'utilisation » ------------------
-    # Seuls endpoints de documentation ouverts à une clé API (`_attachment_project`).
-    def _attachment_project(self, request, project_id):
-        return get_object_or_404(services.attachment_projects(request.user), id=project_id)
+    # `_automation_project` : ouvert aussi à une clé API de l'organisation du
+    # projet — uniquement ces endpoints et la personnalisation.
+    def _automation_project(self, request, project_id):
+        return get_object_or_404(services.automation_projects(request.user), id=project_id)
 
     @action(detail=True, methods=["get"], url_path="support-pages")
     def support_pages(self, request, project_id=None):
-        project = self._attachment_project(request, project_id)
+        project = self._automation_project(request, project_id)
         return Response(services.list_support_pages(actor=request.user, project=project))
 
     @extend_schema(
@@ -143,7 +144,7 @@ class DocSpaceViewSet(viewsets.GenericViewSet):
         parser_classes=[MultiPartParser],
     )
     def page_attachments(self, request, project_id=None, page_id=None):
-        project = self._attachment_project(request, project_id)
+        project = self._automation_project(request, project_id)
         file = request.FILES.get("file")
         if file is not None and file.size > services.MAX_ATTACHMENT_BYTES:
             # Refusé avant lecture : inutile de charger un gros fichier en mémoire.
@@ -165,7 +166,7 @@ class DocSpaceViewSet(viewsets.GenericViewSet):
         url_path=r"pages/(?P<page_id>[^/.]+)/attachments/(?P<attachment_id>[^/.]+)",
     )
     def page_attachment_detail(self, request, project_id=None, page_id=None, attachment_id=None):
-        project = self._attachment_project(request, project_id)
+        project = self._automation_project(request, project_id)
         if request.method == "DELETE":
             services.archive_attachment(
                 actor=request.user, project=project, page_id=page_id, attachment_id=attachment_id
@@ -285,9 +286,13 @@ class DocSpaceViewSet(viewsets.GenericViewSet):
         return Response({"space": services._space_dict(space, request)})
 
     # --- Personnalisation (couleur, en-tête, pied de page) -------------
-    @action(detail=True, methods=["patch"], url_path="appearance")
+    @extend_schema(methods=["PATCH"], request=DocSpaceAppearanceSerializer, responses=OpenApiTypes.OBJECT)
+    @action(detail=True, methods=["get", "patch"], url_path="appearance")
     def appearance(self, request, project_id=None):
-        project = self._project(request, project_id)
+        project = self._automation_project(request, project_id)
+        if request.method == "GET":
+            space = services.get_space_for_appearance(actor=request.user, project=project)
+            return Response({"space": services._space_dict(space, request)})
         serializer = DocSpaceAppearanceSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         space = services.update_space_appearance(actor=request.user, project=project, **serializer.validated_data)

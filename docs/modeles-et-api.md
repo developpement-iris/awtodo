@@ -591,7 +591,7 @@ Cadrage via `AskUserQuestion`.
 
 - **Pièces jointes du « Support d'utilisation ».** Nouveau modèle `DocAttachment` (`page`, `filename`, `content_type`, `size`, `data`, `uploaded_by`, statut `active`/`archive`, jamais supprimé physiquement), stocké **en base** faute de stockage de fichiers avant AWS. **5 Mo par fichier**, pages actives de la section `support` uniquement. Les listes passent par `.defer("data")` : les octets ne sont lus qu'au téléchargement.
   - **Formats** (`services._ATTACHMENT_FORMATS`, liste blanche par extension) : PDF, PNG, JPEG, GIF, WebP, Word, Excel, PowerPoint, ZIP, TXT, CSV, MD. La signature des octets doit correspondre à l'extension ; pour le texte, seule l'absence d'octet nul est contrôlée. Le type annoncé par le client est ignoré. HTML et SVG sont refusés (script embarqué possible), et tout fichier est servi en `Content-Disposition: attachment` avec `nosniff`.
-  - **Droits** : chef de projet, ou **clé API de l'organisation du projet** (`attachment_projects`, `_is_org_service_account`). Une clé API n'a accès qu'à ces endpoints, pas au reste de la documentation (404). Dépôt et retrait journalisés dans l'historique du projet.
+  - **Droits** : chef de projet, ou **clé API de l'organisation du projet** (`automation_projects`, `_is_org_service_account`). Une clé API n'a accès qu'à ces endpoints et à la personnalisation (`GET`/`PATCH .../appearance/`), pas au reste de la documentation (404). Sa réponse `space` contient le jeton du lien public. Dépôt et retrait journalisés dans l'historique du projet.
   - **Connecteur MCP** : ne peut pas déposer de fichier (il n'envoie que du JSON, l'endpoint attend du multipart).
   - **Public** : fichier accessible seulement si la page est publiée, le lien actif et la pièce non retirée.
   - **Pas de quota par projet** : chaque fichier compte sur les 500 Mo de Supabase. À migrer vers S3 avec l'infra AWS.
@@ -654,7 +654,7 @@ Deux signaux Django **nouveaux**, consommés par `apps/documentation/signals.py`
 | `POST .../pending/{pending_id}/ignore/` | pending → `ignoree` (204) |
 | `POST .../public-link/` · `POST .../public-link/rotate/` · `DELETE .../public-link/` | active / régénère / révoque le lien public — renvoie `{ space }` |
 | `PATCH .../public-link/slug/` | change le préfixe lisible du lien (`slug`), régénère `public_token` si un lien est déjà actif — session du 2026-09-23 |
-| `PATCH .../appearance/` | personnalisation de la page publique (`accent_color?`, `theme_colors?`, `header_content?`, `footer_content?`, `show_powered_by?`) — sessions du 2026-09-23 et du 2026-11-05 |
+| `GET .../appearance/` · `PATCH .../appearance/` | lit · modifie la personnalisation de la page publique (`accent_color?`, `theme_colors?`, `header_content?`, `footer_content?`, `show_powered_by?`) — **membre ou clé API** en lecture, **chef de projet ou clé API** en écriture, toute modification journalisée (`appearance_updated`) |
 | `GET .../support-pages/` | pages du support et leurs pièces jointes, sans le contenu — **chef de projet/membre ou clé API** |
 | `POST .../pages/{page_id}/attachments/` | dépose une pièce jointe (multipart, champ `file`, 5 Mo max) — **chef de projet ou clé API** |
 | `GET .../pages/{page_id}/attachments/{attachment_id}/` · `DELETE` | télécharge · retire (statut `archive`, 204) — **membre ou clé API** en lecture, **chef de projet ou clé API** en retrait |

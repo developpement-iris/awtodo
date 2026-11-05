@@ -1,5 +1,6 @@
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
+from drf_spectacular.generators import SchemaGenerator
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import Organisation, User
@@ -253,7 +254,7 @@ class AttachmentApiTests(AttachmentFixtureMixin, APITestCase):
         base = f"/api/v1/docs/{self.project.id}/"
         self.assertEqual(self.client.get(base).status_code, 404)
         self.assertEqual(self.client.post(f"{base}pages/", {"title": "X"}, format="json").status_code, 404)
-        self.assertEqual(self.client.patch(f"{base}appearance/", {"accent_color": ""}, format="json").status_code, 404)
+        self.assertEqual(self.client.post(f"{base}public-link/").status_code, 404)
 
     def test_public_download_endpoint(self):
         attachment = self._upload()
@@ -340,3 +341,57 @@ class AppearanceApiTests(AttachmentFixtureMixin, APITestCase):
         self.client.patch(self.url, {"show_powered_by": False}, format="json")
         response = self.client.patch(self.url, {"header_content": "Salut"}, format="json")
         self.assertFalse(response.data["space"]["show_powered_by"])
+
+    def test_change_is_audited_on_the_project(self):
+        self.client.patch(self.url, {"header_content": "Salut"}, format="json")
+        self.assertTrue(AuditLogEntry.objects.filter(project=self.project, verb="appearance_updated").exists())
+
+    def test_openapi_documents_the_appearance_fields(self):
+        schema = SchemaGenerator().get_schema(request=None, public=True)
+        body = schema["paths"]["/api/v1/docs/{project_id}/appearance/"]["patch"]["requestBody"]
+        name = body["content"]["application/json"]["schema"]["$ref"].split("/")[-1]
+        properties = schema["components"]["schemas"][name]["properties"]
+        self.assertLessEqual(
+            {"accent_color", "theme_colors", "header_content", "footer_content", "show_powered_by"}, set(properties)
+        )
+
+
+@override_settings(DEBUG=True)
+class AppearanceApiKeyTests(AttachmentFixtureMixin, APITestCase):
+    def setUp(self):
+        self._set_up_project()
+        self.url = f"/api/v1/docs/{self.project.id}/appearance/"
+        self.admin = User.objects.create(username="admin", organisation_role="admin")
+        _, raw_key = generate_api_key(actor=self.admin, organisation=self.project.organisation, name="QWEASE")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Api-Key {raw_key}")
+
+    def test_api_key_updates_appearance_of_a_project_of_its_organisation(self):
+        response = self.client.patch(
+            self.url, {"theme_colors": {"sidebar": "#112233"}, "header_content": "Salut"}, format="json"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["space"]["theme_colors"], {"sidebar": "#112233"})
+        self.assertEqual(response.data["space"]["header_content"], "Salut")
+
+    def test_api_key_reads_appearance(self):
+        self.client.patch(self.url, {"accent_color": "#0E7C86"}, format="json")
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["space"]["accent_color"], "#0E7C86")
+
+    def test_api_key_invalid_color_is_400(self):
+        response = self.client.patch(self.url, {"theme_colors": {"sidebar": "rouge"}}, format="json")
+        self.assertEqual(response.status_code, 400)
+
+    def test_api_key_of_another_organisation_gets_404(self):
+        other_org = Organisation.objects.create(name="Autre organisation")
+        other_admin = User.objects.create(username="admin2", organisation=other_org, organisation_role="admin")
+        _, other_key = generate_api_key(actor=other_admin, organisation=other_org, name="Autre")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Api-Key {other_key}")
+        response = self.client.patch(self.url, {"accent_color": "#0E7C86"}, format="json")
+        self.assertEqual(response.status_code, 404)
+
+    def test_member_still_cannot_update_appearance(self):
+        self.client.credentials(HTTP_X_DEBUG_USER_ID=str(self.member.id))
+        response = self.client.patch(self.url, {"accent_color": "#0E7C86"}, format="json")
+        self.assertEqual(response.status_code, 403)
