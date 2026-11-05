@@ -255,6 +255,18 @@ export type DocEntryKind = "fonctionnalite" | "resolution";
 // 2026-10-06) — voir DocPage.SECTION_CHOICES côté backend.
 export type DocPageSection = "documentation" | "support";
 
+// Pièces jointes des pages "Support d'utilisation" (session du 2026-11-05).
+export interface DocAttachment {
+  id: string;
+  filename: string;
+  content_type: string;
+  size: number;
+  created_at: string;
+}
+
+export type DocThemeZone = "background" | "content" | "sidebar" | "tabs" | "header" | "footer";
+export type DocThemeColors = Partial<Record<DocThemeZone, string>>;
+
 export interface DocPage {
   id: string;
   parent_id: string | null;
@@ -267,6 +279,7 @@ export interface DocPage {
   status_display: string;
   created_at: string;
   updated_at: string;
+  attachments: DocAttachment[];
   children: DocPage[];
 }
 
@@ -317,6 +330,8 @@ export interface DocSpace {
   accent_color: string;
   header_content: string;
   footer_content: string;
+  theme_colors: DocThemeColors;
+  show_powered_by: boolean;
 }
 
 export interface DocumentationBundle {
@@ -337,6 +352,7 @@ export interface PublicDocsNode {
   title: string;
   slug: string;
   content: string;
+  attachments: DocAttachment[];
   children: PublicDocsNode[];
 }
 
@@ -359,6 +375,8 @@ export interface PublicDocs {
   accent_color: string;
   header_content: string;
   footer_content: string;
+  theme_colors: DocThemeColors;
+  show_powered_by: boolean;
 }
 
 export type ProjectStatus = "actif" | "cloture";

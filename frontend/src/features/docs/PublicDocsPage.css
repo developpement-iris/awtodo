@@ -2,8 +2,47 @@
    visiteur via les jetons globaux. Voir docs/charte-graphique.md. */
 
 .public-docs-shell {
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
   background: var(--sidebar-bg);
+}
+
+/* Bandeaux d'en-tête et de pied de page (Markdown, session du 2026-11-05). */
+.public-docs__banner {
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  /* Sans ça, un bandeau foncé s'imprime en texte blanc sur page blanche. */
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+.public-docs__banner--header {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.public-docs__banner--footer {
+  border-top: 1px solid var(--color-border);
+}
+
+.public-docs__banner .markdown-view {
+  max-width: none;
+}
+
+.public-docs__banner img {
+  max-height: 72px;
+  width: auto;
+}
+
+.public-docs__powered-by {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.public-docs__banner .markdown-view + .public-docs__powered-by {
+  margin-top: var(--space-2);
 }
 
 /* Les onglets "classeur" (session du 2026-10-06) réutilisent directement les
@@ -15,13 +54,14 @@
 
 .public-docs {
   display: flex;
-  min-height: calc(100vh - 44px);
+  flex: 1;
   background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-sans);
 }
 
 .public-docs--center {
+  min-height: 100vh;
   align-items: center;
   justify-content: center;
   text-align: center;
@@ -61,22 +101,10 @@
   padding: 0 var(--space-4) var(--space-4);
 }
 
-.public-docs__header-note,
-.public-docs__footer-note {
+.public-docs__nav-note {
   padding: 0 var(--space-4) var(--space-3);
   font-size: 12px;
   color: var(--color-text-muted);
-  white-space: pre-wrap;
-}
-
-.public-docs__footer-note {
-  margin-top: auto;
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--color-border);
-}
-
-.public-docs__footer-note + .public-docs__footer {
-  margin-top: 0;
 }
 
 .public-docs__nav-item {
@@ -102,19 +130,71 @@
   font-weight: 600;
 }
 
-.public-docs__footer {
-  margin-top: auto;
-  padding: var(--space-4);
-  font-size: 11px;
-  color: var(--color-text-muted);
-}
-
 .public-docs__content {
   flex: 1;
   min-width: 0;
   display: flex;
   justify-content: center;
+  align-items: flex-start;
   padding: var(--space-6) var(--space-5);
+}
+
+.public-docs__screen {
+  width: 100%;
+  max-width: 720px;
+}
+
+.public-docs__screen--sheet {
+  max-width: 784px;
+  padding: var(--space-5);
+  border-radius: var(--radius-md);
+}
+
+.public-docs__attachments {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.public-docs__attachments h2 {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+}
+
+.public-docs__attachments ul {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.public-docs__attachments li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  font-size: 13.5px;
+}
+
+.public-docs__attachments a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-accent);
+}
+
+.public-docs__attachments a svg {
+  flex: none;
+}
+
+.public-docs__attachments span {
+  flex: none;
+  font-size: 12px;
+  color: var(--color-text-muted);
 }
 
 .public-docs__article {
@@ -241,6 +321,14 @@
     padding: var(--space-4) var(--space-4) var(--space-6);
   }
 
+  .public-docs__banner {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .public-docs__screen--sheet {
+    padding: var(--space-4);
+  }
+
   .public-docs__article h1 {
     font-size: 21px;
   }
@@ -257,6 +345,16 @@
     display: none;
   }
 
+  .public-docs-shell {
+    background: none;
+  }
+
+  .public-docs {
+    /* Le fond personnalisé ne s'imprime pas : le texte du corps repasse en
+       foncé sur page blanche, quelle que soit la couleur choisie à l'écran. */
+    background: none !important;
+  }
+
   .public-docs__content {
     padding: 0;
     display: block;
@@ -268,6 +366,12 @@
 
   .public-docs__print-only {
     display: block;
+    --color-text: #1a1a1a;
+    --color-text-muted: #555555;
+    --color-border: #cccccc;
+    --tone-neutral-bg: #eeeeee;
+    --tone-neutral-text: #1a1a1a;
+    color: #1a1a1a;
   }
 
   .public-docs__print-only .public-docs__article {

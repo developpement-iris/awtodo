@@ -22,9 +22,11 @@ import type {
   ScheduledBlock,
   DocEntry,
   DocEntryKind,
+  DocAttachment,
   DocPage,
   DocPageSection,
   DocSpace,
+  DocThemeColors,
   DocumentationBundle,
   GlobalTaskStats,
   Incident,
@@ -787,6 +789,17 @@ export function getProjectHistory(projectId: string): Promise<ProjectHistoryEntr
   return getJson<ProjectHistoryEntry[]>(`/projects/${projectId}/history/`);
 }
 
+function saveBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 // Téléchargement direct (pas `getJson`/blob JSON) : l'export est du CSV, et
 // l'endpoint exige le token d'auth déjà géré par `authHeaders()` — un simple
 // lien `<a href>` vers l'URL de l'API n'enverrait pas ce header.
@@ -795,15 +808,7 @@ export async function downloadHistoryExport(): Promise<void> {
   if (!response.ok) {
     throw new Error(`Échec de l'export de l'historique (${response.status})`);
   }
-  const blob = await response.blob();
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "historique.csv";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  saveBlob(await response.blob(), "historique.csv");
 }
 
 export function createProjectVersion(projectId: string, label: string): Promise<ProjectVersion> {
@@ -991,9 +996,48 @@ export function setDocPublicSlug(projectId: string, slug: string): Promise<{ spa
 
 export function updateDocSpaceAppearance(
   projectId: string,
-  payload: { accent_color?: string; header_content?: string; footer_content?: string },
+  payload: {
+    accent_color?: string;
+    header_content?: string;
+    footer_content?: string;
+    theme_colors?: DocThemeColors;
+    show_powered_by?: boolean;
+  },
 ): Promise<{ space: DocSpace }> {
   return patchJson<{ space: DocSpace }>(`/docs/${projectId}/appearance/`, payload);
+}
+
+// Adresse absolue de dépôt, affichée pour configurer un outil externe.
+export function docAttachmentApiUrl(projectId: string, pageId: string): string {
+  return new URL(`${API_BASE_URL}/docs/${projectId}/pages/${pageId}/attachments/`, window.location.origin).href;
+}
+
+export async function uploadDocAttachment(projectId: string, pageId: string, file: File): Promise<DocAttachment> {
+  const body = new FormData();
+  body.append("file", file);
+  const path = `/docs/${projectId}/pages/${pageId}/attachments/`;
+  const response = await authFetch(path, { method: "POST", body });
+  if (!response.ok) {
+    throw new Error(errorMessage(await response.json().catch(() => null), path, response.status));
+  }
+  return response.json() as Promise<DocAttachment>;
+}
+
+export async function downloadDocAttachment(projectId: string, pageId: string, attachment: DocAttachment): Promise<void> {
+  const path = `/docs/${projectId}/pages/${pageId}/attachments/${attachment.id}/`;
+  const response = await authFetch(path);
+  if (!response.ok) {
+    throw new Error(`Échec de la requête ${path} (${response.status})`);
+  }
+  saveBlob(await response.blob(), attachment.filename);
+}
+
+export function archiveDocAttachment(projectId: string, pageId: string, attachmentId: string): Promise<void> {
+  return deleteJson<void>(`/docs/${projectId}/pages/${pageId}/attachments/${attachmentId}/`);
+}
+
+export function publicDocAttachmentUrl(token: string, attachmentId: string): string {
+  return `${API_BASE_URL}/docs/public/${token}/attachments/${attachmentId}/`;
 }
 
 export function getNotifications(): Promise<Notification[]> {

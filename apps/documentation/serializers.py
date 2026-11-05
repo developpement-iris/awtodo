@@ -53,6 +53,12 @@ class DocSpaceAppearanceSerializer(serializers.Serializer):
     accent_color = serializers.CharField(max_length=7, required=False, allow_blank=True)
     header_content = serializers.CharField(required=False, allow_blank=True)
     footer_content = serializers.CharField(required=False, allow_blank=True)
+    # Mise à jour partielle par zone : zone absente = inchangée, "" = retour
+    # à la couleur par défaut (voir `services.update_space_appearance`).
+    theme_colors = serializers.DictField(
+        child=serializers.CharField(allow_blank=True, max_length=7), required=False
+    )
+    show_powered_by = serializers.BooleanField(required=False)
 
     def validate(self, attrs):
         if not attrs:

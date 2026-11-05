@@ -1,7 +1,10 @@
+import { Paperclip } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { getPublicDocs } from "../../api/client";
+import { getPublicDocs, publicDocAttachmentUrl } from "../../api/client";
 import { MarkdownView } from "../../components/MarkdownView";
+import { formatFileSize } from "../../lib/formatFileSize";
 import type { PublicDocs, PublicDocsNode } from "../../types/watodo";
+import { buildDocTheme } from "./docTheme";
 import "./PublicDocsPage.css";
 
 type Section = "documentation" | "support";
@@ -80,18 +83,29 @@ export function PublicDocsPage({ token }: { token: string }) {
   const currentPage =
     selection?.kind === "page" ? activePages.find((row) => row.node.id === selection.id)?.node : null;
 
-  // Personnalisation par projet (session du 2026-09-23) — override du jeton
-  // d'accent en cascade CSS pure, vide = habillage Awtodo par défaut.
-  const themeStyle = docs.accent_color ? ({ "--color-accent": docs.accent_color } as React.CSSProperties) : undefined;
+  // Personnalisation par projet — voir `docTheme.ts` ; zone vide = habillage
+  // Awtodo par défaut.
+  const theme = buildDocTheme(docs.accent_color, docs.theme_colors);
 
   return (
-    <div className="public-docs-shell" style={themeStyle}>
+    <div className="public-docs-shell" style={theme.shell}>
+      {docs.header_content && (
+        <header className="public-docs__banner public-docs__banner--header" style={theme.header}>
+          <MarkdownView content={docs.header_content} />
+        </header>
+      )}
+
       {/* Deux onglets "classeur", même habillage que la navigation interne
           Awtodo (binder-tabs) — demande explicite (session du 2026-10-06) de
           reprendre exactement ce design sur la page publique. Les classes
           sont réutilisées directement plutôt que le composant `BinderTabs`,
           couplé à la navigation interne (`ViewName`). */}
-      <div className="binder-tabs public-docs__top-tabs" role="tablist" aria-label="Sections de la documentation publique">
+      <div
+        className="binder-tabs public-docs__top-tabs"
+        role="tablist"
+        aria-label="Sections de la documentation publique"
+        style={theme.tabs}
+      >
         <button
           type="button"
           role="tab"
@@ -112,10 +126,9 @@ export function PublicDocsPage({ token }: { token: string }) {
         </button>
       </div>
 
-      <div className="public-docs">
-        <aside className="public-docs__nav">
+      <div className="public-docs" style={theme.main}>
+        <aside className="public-docs__nav" style={theme.sidebar}>
           <div className="public-docs__brand">{docs.project_name}</div>
-          {docs.header_content && <p className="public-docs__header-note">{docs.header_content}</p>}
           {activePages.map(({ node, depth }) => (
             <button
               key={node.id}
@@ -165,18 +178,35 @@ export function PublicDocsPage({ token }: { token: string }) {
             </button>
           )}
           {activeSection === "support" && activePages.length === 0 && (
-            <p className="public-docs__header-note">Pas encore de support d'utilisation publié.</p>
+            <p className="public-docs__nav-note">Pas encore de support d'utilisation publié.</p>
           )}
-          {docs.footer_content && <p className="public-docs__footer-note">{docs.footer_content}</p>}
-          <p className="public-docs__footer">Documentation propulsée par Awtodo</p>
         </aside>
 
         <main className="public-docs__content">
-          <div className="public-docs__screen">
+          <div
+            className={`public-docs__screen${docs.theme_colors.content ? " public-docs__screen--sheet" : ""}`}
+            style={theme.content}
+          >
             {currentPage && (
               <article className="public-docs__article">
                 <h1>{currentPage.title}</h1>
                 <MarkdownView content={currentPage.content} />
+                {currentPage.attachments.length > 0 && (
+                  <section className="public-docs__attachments" aria-label="Pièces jointes">
+                    <h2>Pièces jointes</h2>
+                    <ul>
+                      {currentPage.attachments.map((attachment) => (
+                        <li key={attachment.id}>
+                          <a href={publicDocAttachmentUrl(token, attachment.id)} download={attachment.filename}>
+                            <Paperclip size={14} strokeWidth={1.75} aria-hidden="true" />
+                            {attachment.filename}
+                          </a>
+                          <span>{formatFileSize(attachment.size)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
               </article>
             )}
             {selection?.kind === "features" && (
@@ -218,6 +248,13 @@ export function PublicDocsPage({ token }: { token: string }) {
           </div>
         </main>
       </div>
+
+      {(docs.footer_content || docs.show_powered_by) && (
+        <footer className="public-docs__banner public-docs__banner--footer" style={theme.footer}>
+          {docs.footer_content && <MarkdownView content={docs.footer_content} />}
+          {docs.show_powered_by && <p className="public-docs__powered-by">Documentation propulsée par Awtodo</p>}
+        </footer>
+      )}
     </div>
   );
 }

@@ -423,7 +423,214 @@
   gap: var(--space-2);
 }
 
+.doc-tab__attachments {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.doc-tab__attachments .doc-tab__list-head {
+  padding: 0;
+}
+
+.doc-tab__attachments .doc-tab__image-btn {
+  font-size: 13px;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.doc-tab__attachment-list {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.doc-tab__attachment-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+}
+
+.doc-tab__attachment-name {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 13px;
+  color: var(--color-accent);
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.doc-tab__attachment-name:hover {
+  text-decoration: underline;
+}
+
+.doc-tab__attachment-size {
+  flex: none;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.doc-tab__api-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.doc-tab__api-row code {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.doc-tab__appearance {
+  display: flex;
+  gap: var(--space-5);
+  align-items: flex-start;
+}
+
+.doc-tab__color-list {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.doc-tab__color-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.doc-tab__color-row input[type="color"] {
+  flex: none;
+  width: 32px;
+  height: 28px;
+  padding: 0;
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.doc-tab__color-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.doc-tab__color-value {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.doc-tab__switch-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+/* Aperçu schématique : mêmes styles en ligne que la page publique
+   (`buildDocTheme`), mêmes valeurs par défaut pour une zone sans couleur. */
+.doc-tab__theme-preview {
+  flex: 0 0 280px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 11px;
+  color: var(--color-text);
+}
+
+.doc-tab__theme-preview-header,
+.doc-tab__theme-preview-footer {
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.doc-tab__theme-preview-tabs {
+  display: flex;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3) 0;
+  background: var(--sidebar-bg);
+  color: var(--sidebar-muted);
+}
+
+.doc-tab__theme-preview-tab,
+.doc-tab__theme-preview-tab--idle {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  font-weight: 600;
+}
+
+.doc-tab__theme-preview-tab {
+  background: var(--color-bg);
+  color: var(--color-accent);
+}
+
+.doc-tab__theme-preview-main {
+  display: flex;
+  min-height: 120px;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.doc-tab__theme-preview-sidebar {
+  flex: 0 0 96px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border-right: 1px solid var(--color-border);
+}
+
+.doc-tab__theme-preview-link {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.doc-tab__theme-preview-body {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-3);
+}
+
+.doc-tab__theme-preview-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
 @media (max-width: 860px) {
+  .doc-tab__appearance {
+    flex-direction: column;
+  }
+
+  .doc-tab__theme-preview {
+    flex: none;
+    width: 100%;
+  }
+
   .doc-tab__layout,
   .doc-tab__split {
     flex-direction: column;

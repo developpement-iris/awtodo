@@ -585,6 +585,20 @@ Les segments de la frise sont peu contrastés (remplissage sombre proche de la c
 
 App `apps/documentation/` (label `documentation`). Onglet « Documentation » du hub projet, **visible uniquement pour un chef de projet** (`permissions.can_edit_documentation`, ajouté à `get_project_permissions`). Objectif : de la **documentation utilisateur** du produit, hébergée dans Awtodo et partageable en lecture publique.
 
+### Améliorations du 2026-11-05 — pièces jointes par API, couleurs par zone, bandeaux
+
+Cadrage via `AskUserQuestion`.
+
+- **Pièces jointes du « Support d'utilisation ».** Nouveau modèle `DocAttachment` (`page`, `filename`, `content_type`, `size`, `data`, `uploaded_by`, statut `active`/`archive`, jamais supprimé physiquement), stocké **en base** faute de stockage de fichiers avant AWS. **5 Mo par fichier**, pages actives de la section `support` uniquement. Les listes passent par `.defer("data")` : les octets ne sont lus qu'au téléchargement.
+  - **Formats** (`services._ATTACHMENT_FORMATS`, liste blanche par extension) : PDF, PNG, JPEG, GIF, WebP, Word, Excel, PowerPoint, ZIP, TXT, CSV, MD. La signature des octets doit correspondre à l'extension ; pour le texte, seule l'absence d'octet nul est contrôlée. Le type annoncé par le client est ignoré. HTML et SVG sont refusés (script embarqué possible), et tout fichier est servi en `Content-Disposition: attachment` avec `nosniff`.
+  - **Droits** : chef de projet, ou **clé API de l'organisation du projet** (`attachment_projects`, `_is_org_service_account`). Une clé API n'a accès qu'à ces endpoints, pas au reste de la documentation (404). Dépôt et retrait journalisés dans l'historique du projet.
+  - **Connecteur MCP** : ne peut pas déposer de fichier (il n'envoie que du JSON, l'endpoint attend du multipart).
+  - **Public** : fichier accessible seulement si la page est publiée, le lien actif et la pièce non retirée.
+  - **Pas de quota par projet** : chaque fichier compte sur les 500 Mo de Supabase. À migrer vers S3 avec l'infra AWS.
+- **Couleurs par zone de la page publique.** `DocSpace.theme_colors` (`{zone: "#RRGGBB"}`, zones `background`/`content`/`sidebar`/`tabs`/`header`/`footer`), fusionné zone par zone (`""` rétablit la valeur par défaut). `accent_color` est désormais validé (`#RRGGBB`). Une couleur choisie s'impose quel que soit le thème clair/sombre du visiteur ; une zone vide suit le thème. Voir `docs/charte-graphique.md`.
+- **Bandeaux d'en-tête et de pied de page.** `header_content`/`footer_content` sont désormais du Markdown, rendus en bandeaux pleine largeur (auparavant du texte brut dans la barre latérale). `DocSpace.show_powered_by` (défaut vrai) masque la mention « Documentation propulsée par Awtodo », qui passe dans le pied de page.
+- **Correctif — images Markdown.** `MarkdownView` n'affichait pas les images (`![x](…)` donnait « ! » suivi d'un lien), y compris celles insérées dans les pages depuis le 2026-09-23. Elles s'affichent maintenant (`http(s)` et `data:image/` seulement), partout où ce composant est utilisé.
+
 ### Améliorations du 2026-10-06
 
 Trois demandes directes groupées dans une même session.
@@ -640,13 +654,18 @@ Deux signaux Django **nouveaux**, consommés par `apps/documentation/signals.py`
 | `POST .../pending/{pending_id}/ignore/` | pending → `ignoree` (204) |
 | `POST .../public-link/` · `POST .../public-link/rotate/` · `DELETE .../public-link/` | active / régénère / révoque le lien public — renvoie `{ space }` |
 | `PATCH .../public-link/slug/` | change le préfixe lisible du lien (`slug`), régénère `public_token` si un lien est déjà actif — session du 2026-09-23 |
-| `PATCH .../appearance/` | couleur/en-tête/pied de page de la page publique (`accent_color?`, `header_content?`, `footer_content?`) — session du 2026-09-23 |
+| `PATCH .../appearance/` | personnalisation de la page publique (`accent_color?`, `theme_colors?`, `header_content?`, `footer_content?`, `show_powered_by?`) — sessions du 2026-09-23 et du 2026-11-05 |
+| `GET .../support-pages/` | pages du support et leurs pièces jointes, sans le contenu — **chef de projet/membre ou clé API** |
+| `POST .../pages/{page_id}/attachments/` | dépose une pièce jointe (multipart, champ `file`, 5 Mo max) — **chef de projet ou clé API** |
+| `GET .../pages/{page_id}/attachments/{attachment_id}/` · `DELETE` | télécharge · retire (statut `archive`, 204) — **membre ou clé API** en lecture, **chef de projet ou clé API** en retrait |
 | `POST .../contributors/generate/` | (re)génère la fiche unique "Contributeurs au projet" — remet `contributor_rows` à `null` (écrase une personnalisation manuelle) |
 | `PATCH .../contributors/` | remplace la liste personnalisée (`rows: [{name, role}]`) — session du 2026-10-06 |
 
 ### API — endpoint public (`AllowAny`, sans authentification)
 
 `GET /api/v1/docs/public/{token}/` → `{ project_name, pages (arbre "documentation", publiées seulement), support_pages (arbre "support", publiées seulement), features, resolutions, contributors }`. `404` si token vide, inconnu, ou `is_public=False`. **Seul le contenu `status="publie"` est exposé** ; une page publiée dont le parent ne l'est pas est remontée à la racine. Aucune donnée de gestion (tâches, membres, budget, incidents) n'est jamais renvoyée. Voir `CLAUDE.md` > Stack technique > Auth pour l'exception au garde-fou « connexion obligatoire ».
+
+`GET /api/v1/docs/public/{token}/attachments/{attachment_id}/` (`AllowAny`) télécharge une pièce jointe d'une page publiée du support ; `404` dans tous les autres cas. Le JSON public expose aussi `theme_colors`, `show_powered_by` et, sur chaque page, `attachments` (sans les octets).
 
 Toute la logique est dans `apps/documentation/services.py` (y compris la mise en forme des dicts de réponse) ; les vues ne font que router et traduire les exceptions.
 

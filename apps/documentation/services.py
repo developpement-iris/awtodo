@@ -1,13 +1,15 @@
+import os
 import re
 import secrets
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils.text import slugify
 
 from apps.common.audit import record_event
-from apps.projects.models import SpecSection
+from apps.projects.models import Project, SpecSection
 from apps.projects.services import contributor_projects, is_project_manager, is_project_member
 
-from .models import DocEntry, DocPage, DocSpace, PendingDocEntry
+from .models import DocAttachment, DocEntry, DocPage, DocSpace, PendingDocEntry
 
 
 class DocsPermissionError(Exception):
@@ -104,17 +106,46 @@ def set_public_slug(*, actor, project, slug):
     return space
 
 
-def update_space_appearance(*, actor, project, accent_color=None, header_content=None, footer_content=None):
-    """Personnalisation de la page publique (session du 2026-09-23) —
-    couleur d'accent, en-tête, pied de page. Mise à jour partielle, comme
+THEME_COLOR_ZONES = frozenset({"background", "content", "sidebar", "tabs", "header", "footer"})
+_HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def _ensure_hex_color(value):
+    if not _HEX_COLOR_RE.match(value):
+        raise DocsValidationError(f"Couleur invalide : « {value} » (format attendu : #RRGGBB).")
+
+
+def update_space_appearance(
+    *, actor, project, accent_color=None, header_content=None, footer_content=None,
+    theme_colors=None, show_powered_by=None,
+):
+    """Personnalisation de la page publique (session du 2026-09-23, couleurs
+    par zone et mention Awtodo le 2026-11-05) — mise à jour partielle, comme
     `apps.accounts.services.update_planning_preferences` : chaîne vide
     valide (retire la personnalisation de ce champ), `None` = champ non
-    fourni."""
+    fourni. `theme_colors` se fusionne zone par zone."""
     space = _space_for_manager(actor, project)
     update_fields = []
     if accent_color is not None:
+        if accent_color:
+            _ensure_hex_color(accent_color)
         space.accent_color = accent_color
         update_fields.append("accent_color")
+    if theme_colors is not None:
+        merged = dict(space.theme_colors)
+        for zone, color in theme_colors.items():
+            if zone not in THEME_COLOR_ZONES:
+                raise DocsValidationError(f"Zone de couleur inconnue : « {zone} ».")
+            if color:
+                _ensure_hex_color(color)
+                merged[zone] = color
+            else:
+                merged.pop(zone, None)
+        space.theme_colors = merged
+        update_fields.append("theme_colors")
+    if show_powered_by is not None:
+        space.show_powered_by = show_powered_by
+        update_fields.append("show_powered_by")
     if header_content is not None:
         space.header_content = header_content
         update_fields.append("header_content")
@@ -143,7 +174,7 @@ def _unique_slug(space, title):
 def _get_page(space, page_id):
     try:
         return DocPage.all_objects.get(space=space, id=page_id)
-    except DocPage.DoesNotExist:
+    except (DocPage.DoesNotExist, DjangoValidationError):
         raise DocsValidationError("Page introuvable.")
 
 
@@ -231,6 +262,158 @@ def archive_page(*, actor, project, page_id):
     DocPage.all_objects.filter(parent=page).update(parent=page.parent)
     page.status = "archive"
     page.save(update_fields=["status", "updated_at"])
+
+
+# --- Pièces jointes du « Support d'utilisation » --------------------------
+# Déposables par un chef de projet ou par une clé API de l'organisation du
+# projet (session du 2026-11-05). La clé API n'a accès qu'à ces endpoints-là,
+# pas au reste de la documentation.
+
+
+MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
+
+_ZIP_SIGNATURES = (b"PK\x03\x04",)
+_OLE_SIGNATURES = (bytes.fromhex("d0cf11e0a1b11ae1"),)
+_OFFICE = "application/vnd.openxmlformats-officedocument"
+
+# Extension -> (type renvoyé au téléchargement, signatures acceptées). Le type
+# annoncé par le client n'est jamais repris. `None` : format texte sans
+# signature. HTML et SVG exclus : ils peuvent embarquer du script.
+_ATTACHMENT_FORMATS = {
+    ".pdf": ("application/pdf", (b"%PDF-",)),
+    ".png": ("image/png", (bytes.fromhex("89504e470d0a1a0a"),)),
+    ".jpg": ("image/jpeg", (bytes.fromhex("ffd8ff"),)),
+    ".jpeg": ("image/jpeg", (bytes.fromhex("ffd8ff"),)),
+    ".gif": ("image/gif", (b"GIF87a", b"GIF89a")),
+    ".webp": ("image/webp", (b"RIFF",)),
+    ".docx": (f"{_OFFICE}.wordprocessingml.document", _ZIP_SIGNATURES),
+    ".xlsx": (f"{_OFFICE}.spreadsheetml.sheet", _ZIP_SIGNATURES),
+    ".pptx": (f"{_OFFICE}.presentationml.presentation", _ZIP_SIGNATURES),
+    ".doc": ("application/msword", _OLE_SIGNATURES),
+    ".xls": ("application/vnd.ms-excel", _OLE_SIGNATURES),
+    ".ppt": ("application/vnd.ms-powerpoint", _OLE_SIGNATURES),
+    ".zip": ("application/zip", _ZIP_SIGNATURES),
+    ".txt": ("text/plain", None),
+    ".csv": ("text/csv", None),
+    ".md": ("text/markdown", None),
+}
+
+
+def _is_org_service_account(actor, project):
+    return (
+        getattr(actor, "is_service_account", False)
+        and getattr(actor, "is_authenticated", False)
+        and actor.organisation_id == project.organisation_id
+    )
+
+
+def attachment_projects(actor):
+    """Portée des endpoints de pièces jointes : celle de la documentation pour
+    une personne, les projets de son organisation pour une clé API."""
+    if getattr(actor, "is_service_account", False) and getattr(actor, "is_authenticated", False):
+        return Project.all_objects.filter(organisation_id=actor.organisation_id)
+    return contributor_projects(actor)
+
+
+def _require_attachment_reader(actor, project):
+    if not _is_org_service_account(actor, project):
+        _require_member(actor, project)
+
+
+def _require_attachment_writer(actor, project):
+    if not _is_org_service_account(actor, project):
+        _require_manager(actor, project)
+
+
+def _clean_filename(filename):
+    base = (filename or "").replace("\\", "/").rsplit("/", 1)[-1]
+    base = "".join(char for char in base if char.isprintable()).strip()
+    stem, extension = os.path.splitext(base)
+    return f"{stem[:200]}{extension}"
+
+
+def _detect_attachment_type(filename, data):
+    extension = os.path.splitext(filename)[1].lower()
+    known = _ATTACHMENT_FORMATS.get(extension)
+    if known is None:
+        raise DocsValidationError(
+            "Format non accepté — PDF, image (PNG, JPEG, GIF, WebP), Word, Excel, PowerPoint, ZIP ou texte."
+        )
+    content_type, signatures = known
+    matches = b"\0" not in data if signatures is None else data.startswith(signatures)
+    if not matches:
+        raise DocsValidationError("Le contenu de ce fichier ne correspond pas à son extension.")
+    return content_type
+
+
+def _attachment_space(project):
+    space, _ = DocSpace.objects.get_or_create(project=project)
+    return space
+
+
+def upload_attachment(*, actor, project, page_id, filename, data):
+    _require_attachment_writer(actor, project)
+    page = _get_page(_attachment_space(project), page_id)
+    if page.section != "support" or page.status == "archive":
+        raise DocsValidationError("Les pièces jointes ne concernent que les pages actives du support d'utilisation.")
+    if not data:
+        raise DocsValidationError("Aucun fichier reçu.")
+    if len(data) > MAX_ATTACHMENT_BYTES:
+        raise DocsValidationError(f"Fichier trop lourd — {MAX_ATTACHMENT_BYTES // (1024 * 1024)} Mo maximum.")
+    cleaned = _clean_filename(filename)
+    content_type = _detect_attachment_type(cleaned, data)
+    attachment = DocAttachment.objects.create(
+        page=page, filename=cleaned, content_type=content_type, size=len(data), data=data, uploaded_by=actor
+    )
+    record_event(
+        attachment, actor=actor, verb="created", description=f"Pièce jointe ajoutée : « {cleaned} »",
+        project=project, organisation=project.organisation,
+    )
+    return attachment
+
+
+def _get_attachment(project, page_id, attachment_id):
+    try:
+        return DocAttachment.objects.get(id=attachment_id, page_id=page_id, page__space__project=project)
+    except (DocAttachment.DoesNotExist, DjangoValidationError):
+        raise DocsValidationError("Pièce jointe introuvable.")
+
+
+def get_attachment(*, actor, project, page_id, attachment_id):
+    _require_attachment_reader(actor, project)
+    return _get_attachment(project, page_id, attachment_id)
+
+
+def archive_attachment(*, actor, project, page_id, attachment_id):
+    _require_attachment_writer(actor, project)
+    attachment = _get_attachment(project, page_id, attachment_id)
+    attachment.status = "archive"
+    attachment.save(update_fields=["status", "updated_at"])
+    record_event(
+        attachment, actor=actor, verb="removed", description=f"Pièce jointe retirée : « {attachment.filename} »",
+        project=project, organisation=project.organisation,
+    )
+    return attachment
+
+
+def list_support_pages(*, actor, project):
+    """Pages du support et leurs pièces jointes, sans le contenu Markdown —
+    permet à un appelant API de retrouver l'id de la page visée."""
+    _require_attachment_reader(actor, project)
+    space = _attachment_space(project)
+    attachments = _attachments_by_page(page__space=space)
+    pages = DocPage.all_objects.filter(space=space, section="support").exclude(status="archive")
+    return [
+        {
+            "id": str(page.id),
+            "parent_id": str(page.parent_id) if page.parent_id else None,
+            "title": page.title,
+            "slug": page.slug,
+            "status": page.status,
+            "attachments": attachments.get(page.id, []),
+        }
+        for page in pages.order_by("order", "created_at")
+    ]
 
 
 # --- Fiches (DocEntry) -----------------------------------------------------
@@ -532,9 +715,11 @@ def _public_pages(space, section):
         DocPage.all_objects.filter(space=space, section=section, status="publie").order_by("order", "created_at")
     )
     ids = {p.id for p in pages}
+    attachments = _attachments_by_page(page__in=ids)
 
     def node(pg):
         return {"id": str(pg.id), "title": pg.title, "slug": pg.slug, "content": pg.content,
+                "attachments": attachments.get(pg.id, []),
                 "children": [node(c) for c in pages if c.parent_id == pg.id]}
 
     return [node(p) for p in pages if p.parent_id is None or p.parent_id not in ids]
@@ -574,7 +759,23 @@ def get_public_docs(token):
         "accent_color": space.accent_color,
         "header_content": space.header_content,
         "footer_content": space.footer_content,
+        "theme_colors": space.theme_colors,
+        "show_powered_by": space.show_powered_by,
     }
+
+
+def get_public_attachment(token, attachment_id):
+    """Fichier d'une page publiée d'un espace public, `None` dans tous les
+    autres cas (lien révoqué, brouillon, pièce retirée, autre projet)."""
+    if not token:
+        return None
+    return DocAttachment.objects.filter(
+        id=attachment_id,
+        page__status="publie",
+        page__section="support",
+        page__space__public_token=token,
+        page__space__is_public=True,
+    ).first()
 
 
 # --- Présentation (dicts sérialisés pour l'API authentifiée) --------------
@@ -582,7 +783,26 @@ def get_public_docs(token):
 # la vue se contente d'appeler le service et de renvoyer `Response(...)`.
 
 
-def _page_dict(page, children=None):
+def attachment_dict(attachment):
+    return {
+        "id": str(attachment.id),
+        "filename": attachment.filename,
+        "content_type": attachment.content_type,
+        "size": attachment.size,
+        "created_at": attachment.created_at.isoformat(),
+    }
+
+
+def _attachments_by_page(**filters):
+    grouped = {}
+    for attachment in DocAttachment.objects.filter(**filters).defer("data").order_by("created_at"):
+        grouped.setdefault(attachment.page_id, []).append(attachment_dict(attachment))
+    return grouped
+
+
+def _page_dict(page, children=None, attachments=None):
+    if attachments is None:
+        attachments = _attachments_by_page(page=page).get(page.id, [])
     return {
         "id": str(page.id),
         "parent_id": str(page.parent_id) if page.parent_id else None,
@@ -595,6 +815,7 @@ def _page_dict(page, children=None):
         "status_display": page.get_status_display(),
         "created_at": page.created_at.isoformat(),
         "updated_at": page.updated_at.isoformat(),
+        "attachments": attachments,
         "children": children or [],
     }
 
@@ -607,9 +828,10 @@ def _pages_tree(space, section):
     by_parent = {}
     for page in pages:
         by_parent.setdefault(page.parent_id, []).append(page)
+    attachments = _attachments_by_page(page__space=space, page__section=section)
 
     def node(page):
-        return _page_dict(page, [node(child) for child in by_parent.get(page.id, [])])
+        return _page_dict(page, [node(child) for child in by_parent.get(page.id, [])], attachments.get(page.id, []))
 
     return [node(page) for page in by_parent.get(None, [])]
 
@@ -658,6 +880,8 @@ def _space_dict(space, request=None):
         "accent_color": space.accent_color,
         "header_content": space.header_content,
         "footer_content": space.footer_content,
+        "theme_colors": space.theme_colors,
+        "show_powered_by": space.show_powered_by,
     }
 
 

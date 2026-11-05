@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 from apps.common.models import StatusLifecycleModel, TimeStampedModel, UUIDModel
@@ -27,6 +28,11 @@ class DocSpace(UUIDModel, TimeStampedModel):
     accent_color = models.CharField(max_length=7, blank=True, default="")
     header_content = models.TextField(blank=True, default="")
     footer_content = models.TextField(blank=True, default="")
+    # Couleurs par zone de la page publique (session du 2026-11-05) —
+    # `{zone: "#RRGGBB"}`, zones dans `services.THEME_COLOR_ZONES` ; zone
+    # absente = couleur du thème par défaut.
+    theme_colors = models.JSONField(blank=True, default=dict)
+    show_powered_by = models.BooleanField(default=True)
 
     def __str__(self):
         return f"Documentation — {self.project.name}"
@@ -43,9 +49,9 @@ class DocPage(UUIDModel, TimeStampedModel, StatusLifecycleModel):
     # publique les présente comme deux onglets séparés façon "classeur"
     # (même design que `BinderTabs` côté app authentifiée) : "Documentation"
     # (le contenu existant) et "Support d'utilisation" (nouveau, pensé pour
-    # un guide/tutoriel — pièces jointes et génération de page enrichie
-    # prévues plus tard, voir CLAUDE.md > Reste à faire). Un parent doit
-    # appartenir à la même section que son enfant (voir `create_page`).
+    # un guide/tutoriel, avec pièces jointes — voir `DocAttachment`). Un
+    # parent doit appartenir à la même section que son enfant (voir
+    # `create_page`).
     SECTION_CHOICES = [
         ("documentation", "Documentation"),
         ("support", "Support d'utilisation"),
@@ -76,6 +82,38 @@ class DocPage(UUIDModel, TimeStampedModel, StatusLifecycleModel):
 
     def __str__(self):
         return f"{self.space.project.name} — {self.title}"
+
+
+class DocAttachment(UUIDModel, TimeStampedModel, StatusLifecycleModel):
+    """Pièce jointe d'une page « Support d'utilisation » (session du
+    2026-11-05), stockée en base faute de stockage de fichiers avant l'infra
+    AWS (même principe que `ProjectCoverUpload`). Plafond et formats acceptés
+    dans `services`. Les listes passent par `.defer("data")` : les octets ne
+    sont chargés qu'au téléchargement."""
+
+    STATUS_CHOICES = [
+        ("active", "Active"),
+        ("archive", "Archivée"),
+    ]
+    ACTIVE_STATUSES = frozenset({"active"})
+
+    page = models.ForeignKey(DocPage, on_delete=models.PROTECT, related_name="attachments")
+    filename = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=120)
+    size = models.PositiveIntegerField()
+    data = models.BinaryField()
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active")
+
+    class Meta:
+        default_manager_name = "all_objects"
+        base_manager_name = "all_objects"
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.page} — {self.filename}"
 
 
 class DocEntry(UUIDModel, TimeStampedModel, StatusLifecycleModel):

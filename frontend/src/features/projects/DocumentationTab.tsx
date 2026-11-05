@@ -1,11 +1,14 @@
-import { Check, Copy, FileDown, Paperclip, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
+import { Check, Copy, FileDown, ImagePlus, Paperclip, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  archiveDocAttachment,
   archiveDocEntry,
   archiveDocPage,
   createDocEntry,
   createDocPage,
   createEntryFromPending,
+  docAttachmentApiUrl,
+  downloadDocAttachment,
   enablePublicDocLink,
   generateContributorsEntry,
   getDocumentation,
@@ -23,23 +26,30 @@ import {
   updateDocEntry,
   updateDocPage,
   updateDocSpaceAppearance,
+  uploadDocAttachment,
 } from "../../api/client";
+import { Checkbox } from "../../components/Checkbox";
 import { Combobox } from "../../components/Combobox";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { MarkdownView } from "../../components/MarkdownView";
 import { PromptDialog } from "../../components/PromptDialog";
 import { SkeletonRows } from "../../components/Skeleton";
 import { useToast } from "../../context/ToastContext";
+import { formatFileSize } from "../../lib/formatFileSize";
 import type {
   ContributorRow,
+  DocAttachment,
   DocEntry,
   DocEntryKind,
   DocPage,
   DocPageSection,
+  DocThemeColors,
+  DocThemeZone,
   DocumentationBundle,
   Project,
   ProjectVersion,
 } from "../../types/watodo";
+import { buildDocTheme } from "../docs/docTheme";
 import { exportDocsToDocx } from "../docs/exportDocx";
 import "./DocumentationTab.css";
 
@@ -465,6 +475,10 @@ function PagesView({ projectId, pages, section, busy, run }: PagesViewProps) {
                 </button>
               </div>
             )}
+
+            {section === "support" && (
+              <AttachmentsPanel projectId={projectId} page={selected} busy={busy} run={run} />
+            )}
           </>
         )}
       </div>
@@ -513,6 +527,123 @@ function PagesView({ projectId, pages, section, busy, run }: PagesViewProps) {
         />
       )}
     </div>
+  );
+}
+
+// --- Pièces jointes du support d'utilisation ------------------------------
+
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+
+interface AttachmentsPanelProps {
+  projectId: string;
+  page: DocPage;
+  busy: boolean;
+  run: (action: () => Promise<unknown>, successMessage?: string) => Promise<void>;
+}
+
+function AttachmentsPanel({ projectId, page, busy, run }: AttachmentsPanelProps) {
+  const { showToast } = useToast();
+  const [archiveTarget, setArchiveTarget] = useState<DocAttachment | null>(null);
+  const [copied, setCopied] = useState(false);
+  const apiUrl = docAttachmentApiUrl(projectId, page.id);
+
+  function upload(file: File | undefined) {
+    if (!file) return;
+    if (file.size > MAX_UPLOAD_BYTES) {
+      showToast("Fichier trop lourd — 5 Mo maximum.");
+      return;
+    }
+    void run(() => uploadDocAttachment(projectId, page.id, file), "Pièce jointe ajoutée.");
+  }
+
+  async function copyApiUrl() {
+    try {
+      await navigator.clipboard.writeText(apiUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      showToast("Copie impossible — sélectionnez l'adresse à la main.");
+    }
+  }
+
+  return (
+    <section className="doc-tab__attachments" aria-label="Pièces jointes">
+      <div className="doc-tab__list-head">
+        <span>Pièces jointes</span>
+        <label className="doc-tab__ghost-btn doc-tab__image-btn">
+          <Paperclip size={13} strokeWidth={1.75} aria-hidden="true" />
+          Ajouter un fichier
+          <input
+            type="file"
+            hidden
+            disabled={busy}
+            accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt,.csv,.md"
+            onChange={(e) => {
+              upload(e.target.files?.[0]);
+              e.target.value = "";
+            }}
+          />
+        </label>
+      </div>
+
+      {page.attachments.length === 0 ? (
+        <p className="doc-tab__empty">Aucune pièce jointe.</p>
+      ) : (
+        <ul className="doc-tab__attachment-list">
+          {page.attachments.map((attachment) => (
+            <li key={attachment.id}>
+              <button
+                type="button"
+                className="doc-tab__attachment-name"
+                onClick={() =>
+                  void downloadDocAttachment(projectId, page.id, attachment).catch((err: unknown) =>
+                    showToast(err instanceof Error ? err.message : "Le téléchargement a échoué."),
+                  )
+                }
+              >
+                {attachment.filename}
+              </button>
+              <span className="doc-tab__attachment-size">{formatFileSize(attachment.size)}</span>
+              <button
+                type="button"
+                className="doc-tab__icon-btn"
+                onClick={() => setArchiveTarget(attachment)}
+                disabled={busy}
+                aria-label={`Retirer ${attachment.filename}`}
+              >
+                <Trash2 size={13} strokeWidth={1.75} aria-hidden="true" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="doc-tab__api-row">
+        <code>POST {apiUrl}</code>
+        <button
+          type="button"
+          className="doc-tab__icon-btn"
+          onClick={() => void copyApiUrl()}
+          aria-label="Copier l'adresse API de dépôt"
+        >
+          {copied ? <Check size={13} strokeWidth={2} /> : <Copy size={13} strokeWidth={1.75} />}
+        </button>
+      </div>
+
+      {archiveTarget && (
+        <ConfirmDialog
+          title={`Retirer « ${archiveTarget.filename} » ?`}
+          confirmLabel="Retirer"
+          danger
+          onCancel={() => setArchiveTarget(null)}
+          onConfirm={() => {
+            const attachment = archiveTarget;
+            setArchiveTarget(null);
+            void run(() => archiveDocAttachment(projectId, page.id, attachment.id), "Pièce jointe retirée.");
+          }}
+        />
+      )}
+    </section>
   );
 }
 
@@ -1084,19 +1215,134 @@ function ContributorsView({ projectId, entry, busy, run }: ContributorsViewProps
 
 // --- Personnalisation -----------------------------------------------------
 
+// `token` : valeur montrée dans le sélecteur tant que la zone suit le thème.
+const THEME_ZONES: { zone: DocThemeZone; label: string; token: string }[] = [
+  { zone: "background", label: "Fond de page", token: "--color-bg" },
+  { zone: "content", label: "Zone de contenu", token: "--color-surface" },
+  { zone: "sidebar", label: "Barre latérale", token: "--color-bg" },
+  { zone: "tabs", label: "Onglets", token: "--sidebar-bg" },
+  { zone: "header", label: "En-tête", token: "--color-surface" },
+  { zone: "footer", label: "Pied de page", token: "--color-surface" },
+];
+
+function themeTokenColor(token: string): string {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+  return /^#[0-9a-f]{6}$/i.test(value) ? value : "#888888";
+}
+
+function ColorField({
+  label,
+  value,
+  token,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  token: string;
+  disabled: boolean;
+  onChange: (color: string) => void;
+}) {
+  return (
+    <div className="doc-tab__color-row">
+      <input
+        type="color"
+        value={value || themeTokenColor(token)}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        aria-label={label}
+      />
+      <span className="doc-tab__color-label">{label}</span>
+      <code className="doc-tab__color-value">{value || "Par défaut"}</code>
+      <button type="button" className="doc-tab__ghost-btn" onClick={() => onChange("")} disabled={disabled || !value}>
+        Réinitialiser
+      </button>
+    </div>
+  );
+}
+
+function BannerField({
+  label,
+  value,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  disabled: boolean;
+  onChange: (markdown: string) => void;
+}) {
+  const { showToast } = useToast();
+
+  async function insertImage(file: File | undefined) {
+    if (!file) return;
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      showToast("Image trop lourde (max ~1,5 Mo).");
+      return;
+    }
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      onChange(`${value}${value ? "\n\n" : ""}![${file.name}](${dataUrl})`);
+    } catch {
+      showToast("Impossible de lire ce fichier.");
+    }
+  }
+
+  return (
+    <div className="doc-tab__field">
+      <span>{label}</span>
+      <textarea
+        className="doc-tab__textarea"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={3}
+        placeholder="Markdown : **gras**, [lien](https://…), ![logo](https://…)"
+        aria-label={label}
+        disabled={disabled}
+      />
+      <label className="doc-tab__ghost-btn doc-tab__image-btn">
+        <ImagePlus size={13} strokeWidth={1.75} aria-hidden="true" />
+        Insérer une image
+        <input
+          type="file"
+          accept="image/*"
+          hidden
+          disabled={disabled}
+          onChange={(e) => {
+            void insertImage(e.target.files?.[0]);
+            e.target.value = "";
+          }}
+        />
+      </label>
+    </div>
+  );
+}
+
 function AppearanceView({ projectId, bundle, busy, run }: PanelProps) {
   const { space } = bundle;
   const [accentColor, setAccentColor] = useState(space.accent_color);
+  const [colors, setColors] = useState<DocThemeColors>(space.theme_colors);
   const [header, setHeader] = useState(space.header_content);
   const [footer, setFooter] = useState(space.footer_content);
+  const [showPoweredBy, setShowPoweredBy] = useState(space.show_powered_by);
 
   useEffect(() => {
     setAccentColor(space.accent_color);
+    setColors(space.theme_colors);
     setHeader(space.header_content);
     setFooter(space.footer_content);
-  }, [space.accent_color, space.header_content, space.footer_content]);
+    setShowPoweredBy(space.show_powered_by);
+  }, [space.accent_color, space.theme_colors, space.header_content, space.footer_content, space.show_powered_by]);
 
-  const dirty = accentColor !== space.accent_color || header !== space.header_content || footer !== space.footer_content;
+  const colorsDirty = THEME_ZONES.some(({ zone }) => (colors[zone] ?? "") !== (space.theme_colors[zone] ?? ""));
+  const dirty =
+    colorsDirty ||
+    accentColor !== space.accent_color ||
+    header !== space.header_content ||
+    footer !== space.footer_content ||
+    showPoweredBy !== space.show_powered_by;
+
+  const theme = buildDocTheme(accentColor, colors);
 
   return (
     <div className="doc-tab__form">
@@ -1104,43 +1350,62 @@ function AppearanceView({ projectId, bundle, busy, run }: PanelProps) {
         S'applique uniquement à la page publique — l'écran d'édition garde l'habillage Awtodo.
       </p>
 
-      <label className="doc-tab__field">
-        <span>Couleur d'accent</span>
-        <div className="doc-tab__link-row">
-          <input
-            type="color"
-            value={accentColor || "#753030"}
-            onChange={(e) => setAccentColor(e.target.value)}
+      <div className="doc-tab__appearance">
+        <div className="doc-tab__color-list">
+          {THEME_ZONES.map(({ zone, label, token }) => (
+            <ColorField
+              key={zone}
+              label={label}
+              value={colors[zone] ?? ""}
+              token={token}
+              disabled={busy}
+              onChange={(color) => setColors((current) => ({ ...current, [zone]: color }))}
+            />
+          ))}
+          <ColorField
+            label="Couleur d'accent"
+            value={accentColor}
+            token="--color-accent"
             disabled={busy}
-            aria-label="Couleur d'accent de la documentation"
+            onChange={setAccentColor}
           />
-          <button type="button" className="doc-tab__ghost-btn" onClick={() => setAccentColor("")} disabled={busy}>
-            Par défaut
-          </button>
         </div>
-      </label>
 
-      <label className="doc-tab__field">
-        <span>En-tête (affiché en haut de la page publique)</span>
-        <textarea
-          className="doc-tab__textarea"
-          value={header}
-          onChange={(e) => setHeader(e.target.value)}
-          rows={3}
-          disabled={busy}
-        />
-      </label>
+        <div className="doc-tab__theme-preview" style={theme.shell} aria-label="Aperçu des couleurs" role="img">
+          <div className="doc-tab__theme-preview-header" style={theme.header}>En-tête</div>
+          <div className="doc-tab__theme-preview-tabs" style={theme.tabs}>
+            <span className="doc-tab__theme-preview-tab">Documentation</span>
+            <span className="doc-tab__theme-preview-tab--idle">Support</span>
+          </div>
+          <div className="doc-tab__theme-preview-main" style={theme.main}>
+            <div className="doc-tab__theme-preview-sidebar" style={theme.sidebar}>
+              <strong>Sommaire</strong>
+              <span className="doc-tab__theme-preview-link">Page active</span>
+              <span>Autre page</span>
+            </div>
+            <div className="doc-tab__theme-preview-body">
+              <div className="doc-tab__theme-preview-sheet" style={theme.content}>
+                <strong>Titre de la page</strong>
+                <span>Texte du contenu</span>
+              </div>
+            </div>
+          </div>
+          <div className="doc-tab__theme-preview-footer" style={theme.footer}>Pied de page</div>
+        </div>
+      </div>
 
-      <label className="doc-tab__field">
-        <span>Pied de page</span>
-        <textarea
-          className="doc-tab__textarea"
-          value={footer}
-          onChange={(e) => setFooter(e.target.value)}
-          rows={3}
+      <BannerField label="En-tête" value={header} disabled={busy} onChange={setHeader} />
+      <BannerField label="Pied de page" value={footer} disabled={busy} onChange={setFooter} />
+
+      <div className="doc-tab__switch-row">
+        <Checkbox
+          checked={showPoweredBy}
+          onCheckedChange={setShowPoweredBy}
           disabled={busy}
+          aria-labelledby="doc-powered-by-label"
         />
-      </label>
+        <span id="doc-powered-by-label">Afficher « Documentation propulsée par Awtodo »</span>
+      </div>
 
       <div className="doc-tab__form-actions">
         <button
@@ -1151,8 +1416,11 @@ function AppearanceView({ projectId, bundle, busy, run }: PanelProps) {
               () =>
                 updateDocSpaceAppearance(projectId, {
                   accent_color: accentColor,
+                  // Envoie aussi les zones vidées : le serveur fusionne par zone.
+                  theme_colors: Object.fromEntries(THEME_ZONES.map(({ zone }) => [zone, colors[zone] ?? ""])),
                   header_content: header,
                   footer_content: footer,
+                  show_powered_by: showPoweredBy,
                 }),
               "Personnalisation enregistrée.",
             )

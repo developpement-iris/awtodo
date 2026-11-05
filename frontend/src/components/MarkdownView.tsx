@@ -5,14 +5,19 @@ import "./MarkdownView.css";
 // charges / Bloc-notes) : pas d'éditeur WYSIWYG, rendu en lecture seule.
 // Génère des éléments React plutôt que du HTML injecté — pas de surface XSS,
 // pas de dépendance ajoutée pour un sous-ensemble de syntaxe volontairement
-// restreint (titres, gras/italique, code inline, liens, listes).
+// restreint (titres, gras/italique, code inline, liens, images, listes).
 
-const INLINE_PATTERN = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g;
+const INLINE_PATTERN = /(!\[[^\]]*\]\([^)]+\)|\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g;
+const IMAGE_SOURCE = /^(https?:\/\/|data:image\/)/i;
 
 function renderInline(text: string, keyPrefix: string): ReactNode[] {
   const parts = text.split(INLINE_PATTERN).filter((part) => part.length > 0);
   return parts.map((part, index) => {
     const key = `${keyPrefix}-${index}`;
+    const imageMatch = /^!\[([^\]]*)\]\(([^)]+)\)$/.exec(part);
+    if (imageMatch) {
+      return IMAGE_SOURCE.test(imageMatch[2]) ? <img key={key} src={imageMatch[2]} alt={imageMatch[1]} /> : part;
+    }
     if (part.startsWith("**") && part.endsWith("**")) {
       return <strong key={key}>{part.slice(2, -2)}</strong>;
     }

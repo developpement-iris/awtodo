@@ -15,7 +15,7 @@
 //
 // Les deux sont appliquées globalement (organisation), pas par utilisateur.
 
-function hexToRgb(hex: string): [number, number, number] | null {
+export function hexToRgb(hex: string): [number, number, number] | null {
   const match = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
   if (!match) return null;
   const v = match[1];
@@ -27,7 +27,7 @@ function rgbToHex([r, g, b]: [number, number, number]): string {
   return `#${[r, g, b].map((c) => clamp(c).toString(16).padStart(2, "0")).join("")}`;
 }
 
-function relativeLuminance([r, g, b]: [number, number, number]): number {
+export function relativeLuminance([r, g, b]: [number, number, number]): number {
   const channel = (c: number) => {
     const v = c / 255;
     return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
@@ -39,7 +39,7 @@ function relativeLuminance([r, g, b]: [number, number, number]): number {
 // relative — plus fiable qu'un simple seuil sur la somme RGB, nécessaire ici
 // puisqu'une couleur choisie librement peut être aussi bien claire que
 // foncée.
-function contrastTextFor(rgb: [number, number, number]): string {
+export function contrastTextFor(rgb: [number, number, number]): string {
   return relativeLuminance(rgb) > 0.44 ? "#1A1A1A" : "#FFFFFF";
 }
 

@@ -1,9 +1,11 @@
-from django.http import Http404
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
+from django.utils.http import content_disposition_header
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -22,6 +24,15 @@ from .serializers import (
     DocSpaceAppearanceSerializer,
     DocSpaceSlugSerializer,
 )
+
+
+def _attachment_download(attachment):
+    # Toujours en téléchargement, jamais affiché sur le domaine d'Awtodo.
+    response = HttpResponse(bytes(attachment.data), content_type=attachment.content_type)
+    response["Content-Disposition"] = content_disposition_header(True, attachment.filename)
+    response["X-Content-Type-Options"] = "nosniff"
+    response["Cache-Control"] = "no-store"
+    return response
 
 
 @extend_schema(responses=OpenApiTypes.OBJECT)
@@ -104,6 +115,66 @@ class DocSpaceViewSet(viewsets.GenericViewSet):
         project = self._project(request, project_id)
         page = services.unpublish_page(actor=request.user, project=project, page_id=page_id)
         return Response(services._page_dict(page))
+
+    # --- Pièces jointes du « Support d'utilisation » ------------------
+    # Seuls endpoints de documentation ouverts à une clé API (`_attachment_project`).
+    def _attachment_project(self, request, project_id):
+        return get_object_or_404(services.attachment_projects(request.user), id=project_id)
+
+    @action(detail=True, methods=["get"], url_path="support-pages")
+    def support_pages(self, request, project_id=None):
+        project = self._attachment_project(request, project_id)
+        return Response(services.list_support_pages(actor=request.user, project=project))
+
+    @extend_schema(
+        request={
+            "multipart/form-data": {
+                "type": "object",
+                "properties": {"file": {"type": "string", "format": "binary"}},
+                "required": ["file"],
+            }
+        },
+        responses=OpenApiTypes.OBJECT,
+    )
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path=r"pages/(?P<page_id>[^/.]+)/attachments",
+        parser_classes=[MultiPartParser],
+    )
+    def page_attachments(self, request, project_id=None, page_id=None):
+        project = self._attachment_project(request, project_id)
+        file = request.FILES.get("file")
+        if file is not None and file.size > services.MAX_ATTACHMENT_BYTES:
+            # Refusé avant lecture : inutile de charger un gros fichier en mémoire.
+            raise services.DocsValidationError(
+                f"Fichier trop lourd — {services.MAX_ATTACHMENT_BYTES // (1024 * 1024)} Mo maximum."
+            )
+        attachment = services.upload_attachment(
+            actor=request.user,
+            project=project,
+            page_id=page_id,
+            filename=file.name if file else "",
+            data=file.read() if file else b"",
+        )
+        return Response(services.attachment_dict(attachment), status=201)
+
+    @action(
+        detail=True,
+        methods=["get", "delete"],
+        url_path=r"pages/(?P<page_id>[^/.]+)/attachments/(?P<attachment_id>[^/.]+)",
+    )
+    def page_attachment_detail(self, request, project_id=None, page_id=None, attachment_id=None):
+        project = self._attachment_project(request, project_id)
+        if request.method == "DELETE":
+            services.archive_attachment(
+                actor=request.user, project=project, page_id=page_id, attachment_id=attachment_id
+            )
+            return Response(status=204)
+        attachment = services.get_attachment(
+            actor=request.user, project=project, page_id=page_id, attachment_id=attachment_id
+        )
+        return _attachment_download(attachment)
 
     # --- Fiches (DocEntry) --------------------------------------------
     @action(detail=True, methods=["post"], url_path="entries")
@@ -237,3 +308,18 @@ class PublicDocsView(APIView):
         if data is None:
             raise Http404
         return Response(data)
+
+
+class PublicDocAttachmentView(APIView):
+    """Téléchargement public d'une pièce jointe de page publiée — mêmes
+    conditions d'accès que `PublicDocsView`."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    @extend_schema(responses={(200, "application/octet-stream"): OpenApiTypes.BINARY})
+    def get(self, request, token, attachment_id):
+        attachment = services.get_public_attachment(token, attachment_id)
+        if attachment is None:
+            raise Http404
+        return _attachment_download(attachment)
