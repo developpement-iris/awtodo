@@ -289,6 +289,22 @@ class AppearanceServiceTests(AttachmentFixtureMixin, TestCase):
     def test_rejects_unknown_zone(self):
         with self.assertRaises(services.DocsValidationError):
             self._update(theme_colors={"partout": "#112233"})
+        with self.assertRaises(services.DocsValidationError):
+            self._update(theme_colors={"partout_text": "#112233"})
+
+    def test_each_zone_accepts_a_text_color(self):
+        zones = ("background", "content", "sidebar", "tabs", "header", "footer")
+        colors = {f"{zone}_text": "#ABCDEF" for zone in zones}
+        self.assertEqual(self._update(theme_colors=colors).theme_colors, colors)
+
+    def test_blank_clears_a_text_color(self):
+        self._update(theme_colors={"sidebar_text": "#ABCDEF", "sidebar": "#112233"})
+        space = self._update(theme_colors={"sidebar_text": ""})
+        self.assertEqual(space.theme_colors, {"sidebar": "#112233"})
+
+    def test_rejects_invalid_text_color(self):
+        with self.assertRaises(services.DocsValidationError):
+            self._update(theme_colors={"sidebar_text": "blanc"})
 
     def test_rejects_invalid_colors(self):
         for value in ("rouge", "#12345", "#12345G", "url(x)"):

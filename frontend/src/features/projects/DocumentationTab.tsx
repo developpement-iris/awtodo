@@ -1,4 +1,4 @@
-import { Check, Copy, FileDown, ImagePlus, Paperclip, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
+import { Check, Copy, FileDown, ImagePlus, Paperclip, Plus, RefreshCw, RotateCcw, Search, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   archiveDocAttachment,
@@ -49,7 +49,7 @@ import type {
   Project,
   ProjectVersion,
 } from "../../types/watodo";
-import { buildDocTheme } from "../docs/docTheme";
+import { buildDocTheme, resolveZoneText } from "../docs/docTheme";
 import { exportDocsToDocx } from "../docs/exportDocx";
 import "./DocumentationTab.css";
 
@@ -1215,14 +1215,14 @@ function ContributorsView({ projectId, entry, busy, run }: ContributorsViewProps
 
 // --- Personnalisation -----------------------------------------------------
 
-// `token` : valeur montrée dans le sélecteur tant que la zone suit le thème.
-const THEME_ZONES: { zone: DocThemeZone; label: string; token: string }[] = [
-  { zone: "background", label: "Fond de page", token: "--color-bg" },
-  { zone: "content", label: "Zone de contenu", token: "--color-surface" },
-  { zone: "sidebar", label: "Barre latérale", token: "--color-bg" },
-  { zone: "tabs", label: "Onglets", token: "--sidebar-bg" },
-  { zone: "header", label: "En-tête", token: "--color-surface" },
-  { zone: "footer", label: "Pied de page", token: "--color-surface" },
+// `token`/`textToken` : valeurs montrées tant que la zone suit le thème.
+const THEME_ZONES: { zone: DocThemeZone; label: string; token: string; textToken: string }[] = [
+  { zone: "background", label: "Fond de page", token: "--color-bg", textToken: "--color-text" },
+  { zone: "content", label: "Zone de contenu", token: "--color-surface", textToken: "--color-text" },
+  { zone: "sidebar", label: "Barre latérale", token: "--color-bg", textToken: "--color-text" },
+  { zone: "tabs", label: "Onglets", token: "--sidebar-bg", textToken: "--sidebar-text" },
+  { zone: "header", label: "En-tête", token: "--color-surface", textToken: "--color-text" },
+  { zone: "footer", label: "Pied de page", token: "--color-surface", textToken: "--color-text" },
 ];
 
 function themeTokenColor(token: string): string {
@@ -1233,29 +1233,35 @@ function themeTokenColor(token: string): string {
 function ColorField({
   label,
   value,
-  token,
+  fallback,
   disabled,
   onChange,
 }: {
   label: string;
   value: string;
-  token: string;
+  fallback: string;
   disabled: boolean;
   onChange: (color: string) => void;
 }) {
   return (
-    <div className="doc-tab__color-row">
+    <div className={`doc-tab__color-field${value ? "" : " doc-tab__color-field--default"}`}>
       <input
         type="color"
-        value={value || themeTokenColor(token)}
+        value={value || fallback}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
         aria-label={label}
+        title={value || "Par défaut"}
       />
-      <span className="doc-tab__color-label">{label}</span>
-      <code className="doc-tab__color-value">{value || "Par défaut"}</code>
-      <button type="button" className="doc-tab__ghost-btn" onClick={() => onChange("")} disabled={disabled || !value}>
-        Réinitialiser
+      <button
+        type="button"
+        className="doc-tab__color-reset"
+        onClick={() => onChange("")}
+        disabled={disabled || !value}
+        aria-label={`Rétablir : ${label}`}
+        title="Rétablir la valeur par défaut"
+      >
+        <RotateCcw size={12} strokeWidth={1.75} aria-hidden="true" />
       </button>
     </div>
   );
@@ -1296,7 +1302,7 @@ function BannerField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         rows={3}
-        placeholder="Markdown : **gras**, [lien](https://…), ![logo](https://…)"
+        placeholder="Markdown : **gras**, *italique*, [lien](https://…)"
         aria-label={label}
         disabled={disabled}
       />
@@ -1334,7 +1340,8 @@ function AppearanceView({ projectId, bundle, busy, run }: PanelProps) {
     setShowPoweredBy(space.show_powered_by);
   }, [space.accent_color, space.theme_colors, space.header_content, space.footer_content, space.show_powered_by]);
 
-  const colorsDirty = THEME_ZONES.some(({ zone }) => (colors[zone] ?? "") !== (space.theme_colors[zone] ?? ""));
+  const colorKeys = THEME_ZONES.flatMap(({ zone }) => [zone, `${zone}_text` as const]);
+  const colorsDirty = colorKeys.some((key) => (colors[key] ?? "") !== (space.theme_colors[key] ?? ""));
   const dirty =
     colorsDirty ||
     accentColor !== space.accent_color ||
@@ -1352,23 +1359,41 @@ function AppearanceView({ projectId, bundle, busy, run }: PanelProps) {
 
       <div className="doc-tab__appearance">
         <div className="doc-tab__color-list">
-          {THEME_ZONES.map(({ zone, label, token }) => (
-            <ColorField
-              key={zone}
-              label={label}
-              value={colors[zone] ?? ""}
-              token={token}
-              disabled={busy}
-              onChange={(color) => setColors((current) => ({ ...current, [zone]: color }))}
-            />
+          <div className="doc-tab__color-row doc-tab__color-row--head" aria-hidden="true">
+            <span className="doc-tab__color-label" />
+            <span className="doc-tab__color-col">Fond</span>
+            <span className="doc-tab__color-col">Texte</span>
+          </div>
+          {THEME_ZONES.map(({ zone, label, token, textToken }) => (
+            <div key={zone} className="doc-tab__color-row">
+              <span className="doc-tab__color-label">{label}</span>
+              <ColorField
+                label={`${label} : fond`}
+                value={colors[zone] ?? ""}
+                fallback={themeTokenColor(token)}
+                disabled={busy}
+                onChange={(color) => setColors((current) => ({ ...current, [zone]: color }))}
+              />
+              <ColorField
+                label={`${label} : texte`}
+                value={colors[`${zone}_text`] ?? ""}
+                fallback={resolveZoneText(colors[zone], undefined) ?? themeTokenColor(textToken)}
+                disabled={busy}
+                onChange={(color) => setColors((current) => ({ ...current, [`${zone}_text`]: color }))}
+              />
+            </div>
           ))}
-          <ColorField
-            label="Couleur d'accent"
-            value={accentColor}
-            token="--color-accent"
-            disabled={busy}
-            onChange={setAccentColor}
-          />
+          <div className="doc-tab__color-row">
+            <span className="doc-tab__color-label">Liens et page active</span>
+            <ColorField
+              label="Couleur d'accent"
+              value={accentColor}
+              fallback={themeTokenColor("--color-accent")}
+              disabled={busy}
+              onChange={setAccentColor}
+            />
+            <span className="doc-tab__color-col" />
+          </div>
         </div>
 
         <div className="doc-tab__theme-preview" style={theme.shell} aria-label="Aperçu des couleurs" role="img">
@@ -1417,7 +1442,7 @@ function AppearanceView({ projectId, bundle, busy, run }: PanelProps) {
                 updateDocSpaceAppearance(projectId, {
                   accent_color: accentColor,
                   // Envoie aussi les zones vidées : le serveur fusionne par zone.
-                  theme_colors: Object.fromEntries(THEME_ZONES.map(({ zone }) => [zone, colors[zone] ?? ""])),
+                  theme_colors: Object.fromEntries(colorKeys.map((key) => [key, colors[key] ?? ""])),
                   header_content: header,
                   footer_content: footer,
                   show_powered_by: showPoweredBy,

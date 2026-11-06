@@ -1,15 +1,23 @@
 /* Page publique autonome (hors AppShell) — suit le thème clair/sombre du
    visiteur via les jetons globaux. Voir docs/charte-graphique.md. */
 
+/* En-tête, onglets et pied de page restent visibles : seuls le sommaire et le
+   contenu défilent, chacun de son côté. */
 .public-docs-shell {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   background: var(--sidebar-bg);
 }
 
-/* Bandeaux d'en-tête et de pied de page (Markdown, session du 2026-11-05). */
+/* Bandeaux d'en-tête et de pied de page (Markdown, session du 2026-11-05).
+   Hauteur plafonnée : un long bandeau persistant ne doit pas masquer la page. */
 .public-docs__banner {
+  flex: none;
+  max-height: 30vh;
+  overflow-y: auto;
   padding: var(--space-3) var(--space-5);
   background: var(--color-surface);
   color: var(--color-text);
@@ -49,12 +57,14 @@
    classes `.binder-tabs`/`.binder-tab` de la navigation interne — reprise à
    l'identique demandée explicitement, pas de style propre à cette page. */
 .public-docs__top-tabs {
+  flex: none;
   padding: var(--space-3) var(--space-5) 0;
 }
 
 .public-docs {
   display: flex;
   flex: 1;
+  min-height: 0;
   background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-sans);
@@ -86,10 +96,6 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  position: sticky;
-  top: 0;
-  align-self: flex-start;
-  height: 100vh;
   overflow-y: auto;
 }
 
@@ -133,6 +139,7 @@
 .public-docs__content {
   flex: 1;
   min-width: 0;
+  overflow-y: auto;
   display: flex;
   justify-content: center;
   align-items: flex-start;
@@ -298,16 +305,16 @@
 }
 
 @media (max-width: 760px) {
+  /* Écran étroit : sommaire et contenu défilent ensemble, entre les bandeaux. */
   .public-docs {
     flex-direction: column;
+    overflow-y: auto;
   }
 
   .public-docs__nav {
     flex: none;
     width: 100%;
     max-height: 40vh;
-    height: auto;
-    position: static;
     border-right: none;
     border-bottom: 1px solid var(--color-border);
     padding: var(--space-3) 0;
@@ -318,10 +325,13 @@
   }
 
   .public-docs__content {
+    flex: none;
+    overflow-y: visible;
     padding: var(--space-4) var(--space-4) var(--space-6);
   }
 
   .public-docs__banner {
+    max-height: 20vh;
     padding: var(--space-3) var(--space-4);
   }
 
@@ -345,19 +355,31 @@
     display: none;
   }
 
+  /* Rien ne défile à l'impression : sans ça, seul l'écran visible sortirait. */
   .public-docs-shell {
+    display: block;
+    height: auto;
+    overflow: visible;
     background: none;
   }
 
   .public-docs {
+    display: block;
+    overflow: visible;
     /* Le fond personnalisé ne s'imprime pas : le texte du corps repasse en
        foncé sur page blanche, quelle que soit la couleur choisie à l'écran. */
     background: none !important;
   }
 
+  .public-docs__banner {
+    max-height: none;
+    overflow: visible;
+  }
+
   .public-docs__content {
     padding: 0;
     display: block;
+    overflow: visible;
   }
 
   .public-docs__article {

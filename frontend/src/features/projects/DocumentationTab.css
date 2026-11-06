@@ -516,7 +516,29 @@
   color: var(--color-text);
 }
 
-.doc-tab__color-row input[type="color"] {
+.doc-tab__color-row--head {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.doc-tab__color-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.doc-tab__color-col,
+.doc-tab__color-field {
+  flex: 0 0 68px;
+}
+
+.doc-tab__color-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.doc-tab__color-field input[type="color"] {
   flex: none;
   width: 32px;
   height: 28px;
@@ -527,15 +549,28 @@
   cursor: pointer;
 }
 
-.doc-tab__color-label {
-  flex: 1;
-  min-width: 0;
+/* Sans valeur choisie, la pastille montre le défaut : atténuée pour le signaler. */
+.doc-tab__color-field--default input[type="color"] {
+  opacity: 0.45;
 }
 
-.doc-tab__color-value {
-  font-family: var(--font-mono);
-  font-size: 11px;
+.doc-tab__color-reset {
+  display: inline-flex;
+  padding: var(--space-1);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
   color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.doc-tab__color-reset:hover:not(:disabled) {
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+
+.doc-tab__color-reset:disabled {
+  visibility: hidden;
 }
 
 .doc-tab__switch-row {

@@ -106,7 +106,10 @@ def set_public_slug(*, actor, project, slug):
     return space
 
 
-THEME_COLOR_ZONES = frozenset({"background", "content", "sidebar", "tabs", "header", "footer"})
+_THEME_ZONES = ("background", "content", "sidebar", "tabs", "header", "footer")
+# `<zone>` : couleur de fond, `<zone>_text` : couleur du texte (absente = calculée
+# selon le fond pour rester lisible).
+THEME_COLOR_ZONES = frozenset({*_THEME_ZONES, *(f"{zone}_text" for zone in _THEME_ZONES)})
 _HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 

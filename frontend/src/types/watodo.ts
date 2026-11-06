@@ -265,7 +265,8 @@ export interface DocAttachment {
 }
 
 export type DocThemeZone = "background" | "content" | "sidebar" | "tabs" | "header" | "footer";
-export type DocThemeColors = Partial<Record<DocThemeZone, string>>;
+// `<zone>` : fond, `<zone>_text` : texte (absent = calculé selon le fond).
+export type DocThemeColors = Partial<Record<DocThemeZone | `${DocThemeZone}_text`, string>>;
 
 export interface DocPage {
   id: string;

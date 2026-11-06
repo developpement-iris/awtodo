@@ -585,6 +585,14 @@ Les segments de la frise sont peu contrastés (remplissage sombre proche de la c
 
 App `apps/documentation/` (label `documentation`). Onglet « Documentation » du hub projet, **visible uniquement pour un chef de projet** (`permissions.can_edit_documentation`, ajouté à `get_project_permissions`). Objectif : de la **documentation utilisateur** du produit, hébergée dans Awtodo et partageable en lecture publique.
 
+### Documentation de l'API — Swagger (session du 2026-11-05)
+
+Page `GET /api/v1/docs-api/`, schéma `GET /api/v1/schema/`, lien depuis Administration > Intégrations. **Schéma filtré selon l'appelant** (`SERVE_PUBLIC=False`) : sans authentification, seuls les endpoints publics (connexion, invitations, documentation publique…) et le bouton « Authorize » sont visibles ; l'API complète apparaît après saisie d'une clé API (`Api-Key awt_…`) ou d'un jeton. Une clé invalide reçoit un 401. Un schéma entièrement protégé rendrait « Authorize » inaccessible, d'où ce choix.
+
+- **CSP** : `config/api_docs.py::ApiDocsView` est la seule page autorisée à charger le CDN de Swagger UI (`cdn.jsdelivr.net`, version figée), sans `unsafe-inline` pour les scripts. Le reste du site garde le CSP strict d'`apps.common.middleware`.
+- **Description des opérations** : chaque app décrit ses actions dans son `schema.py`, appliqué aux vues par décorateur (helpers dans `apps/common/schema.py`). Tout nouvel endpoint doit y être déclaré, sinon il hérite du serializer de l'entité. Contrat vérifié par `apps/integrations/tests/test_openapi.py`.
+- **Limite** : les réponses des modules Planning, Documentation et Dashboards sont des objets génériques (dicts assemblés par les services) ; leurs corps de requête sont, eux, détaillés.
+
 ### Améliorations du 2026-11-05 — pièces jointes par API, couleurs par zone, bandeaux
 
 Cadrage via `AskUserQuestion`.
@@ -595,9 +603,9 @@ Cadrage via `AskUserQuestion`.
   - **Connecteur MCP** : ne peut pas déposer de fichier (il n'envoie que du JSON, l'endpoint attend du multipart).
   - **Public** : fichier accessible seulement si la page est publiée, le lien actif et la pièce non retirée.
   - **Pas de quota par projet** : chaque fichier compte sur les 500 Mo de Supabase. À migrer vers S3 avec l'infra AWS.
-- **Couleurs par zone de la page publique.** `DocSpace.theme_colors` (`{zone: "#RRGGBB"}`, zones `background`/`content`/`sidebar`/`tabs`/`header`/`footer`), fusionné zone par zone (`""` rétablit la valeur par défaut). `accent_color` est désormais validé (`#RRGGBB`). Une couleur choisie s'impose quel que soit le thème clair/sombre du visiteur ; une zone vide suit le thème. Voir `docs/charte-graphique.md`.
-- **Bandeaux d'en-tête et de pied de page.** `header_content`/`footer_content` sont désormais du Markdown, rendus en bandeaux pleine largeur (auparavant du texte brut dans la barre latérale). `DocSpace.show_powered_by` (défaut vrai) masque la mention « Documentation propulsée par Awtodo », qui passe dans le pied de page.
-- **Correctif — images Markdown.** `MarkdownView` n'affichait pas les images (`![x](…)` donnait « ! » suivi d'un lien), y compris celles insérées dans les pages depuis le 2026-09-23. Elles s'affichent maintenant (`http(s)` et `data:image/` seulement), partout où ce composant est utilisé.
+- **Couleurs par zone de la page publique.** `DocSpace.theme_colors` (`{zone: "#RRGGBB"}`, zones `background`/`content`/`sidebar`/`tabs`/`header`/`footer`, plus `<zone>_text` pour la couleur du texte de chaque zone, calculée selon le fond si absente), fusionné zone par zone (`""` rétablit la valeur par défaut). `accent_color` est désormais validé (`#RRGGBB`). Une couleur choisie s'impose quel que soit le thème clair/sombre du visiteur ; une zone vide suit le thème. Voir `docs/charte-graphique.md`.
+- **Bandeaux d'en-tête et de pied de page.** `header_content`/`footer_content` sont désormais du Markdown, rendus en bandeaux pleine largeur **persistants** : en-tête, onglets et pied de page restent visibles, seuls le sommaire et le contenu défilent (auparavant du texte brut dans la barre latérale). Hauteur d'un bandeau plafonnée à 30 % de l'écran (20 % sur mobile). `DocSpace.show_powered_by` (défaut vrai) masque la mention « Documentation propulsée par Awtodo », qui passe dans le pied de page.
+- **Correctif — images Markdown.** `MarkdownView` n'affichait pas les images (`![x](…)` donnait « ! » suivi d'un lien), y compris celles insérées dans les pages depuis le 2026-09-23. Elles s'affichent maintenant partout où ce composant est utilisé, à condition d'être embarquées (`data:image/`, bouton « Insérer une image ») : le CSP du site (`img-src 'self' data:`) bloque toute image externe, une image en `http(s)` est donc rendue comme un lien.
 
 ### Améliorations du 2026-10-06
 

@@ -8,7 +8,10 @@ import "./MarkdownView.css";
 // restreint (titres, gras/italique, code inline, liens, images, listes).
 
 const INLINE_PATTERN = /(!\[[^\]]*\]\([^)]+\)|\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g;
-const IMAGE_SOURCE = /^(https?:\/\/|data:image\/)/i;
+// Le CSP du site (`img-src 'self' data:`) bloque toute image externe : une image
+// en http(s) s'afficherait cassée, on la propose donc en lien.
+const EMBEDDED_IMAGE = /^data:image\//i;
+const REMOTE_URL = /^https?:\/\//i;
 
 function renderInline(text: string, keyPrefix: string): ReactNode[] {
   const parts = text.split(INLINE_PATTERN).filter((part) => part.length > 0);
@@ -16,7 +19,15 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
     const key = `${keyPrefix}-${index}`;
     const imageMatch = /^!\[([^\]]*)\]\(([^)]+)\)$/.exec(part);
     if (imageMatch) {
-      return IMAGE_SOURCE.test(imageMatch[2]) ? <img key={key} src={imageMatch[2]} alt={imageMatch[1]} /> : part;
+      if (EMBEDDED_IMAGE.test(imageMatch[2])) return <img key={key} src={imageMatch[2]} alt={imageMatch[1]} />;
+      if (REMOTE_URL.test(imageMatch[2])) {
+        return (
+          <a key={key} href={imageMatch[2]} target="_blank" rel="noreferrer">
+            {imageMatch[1] || imageMatch[2]}
+          </a>
+        );
+      }
+      return part;
     }
     if (part.startsWith("**") && part.endsWith("**")) {
       return <strong key={key}>{part.slice(2, -2)}</strong>;
