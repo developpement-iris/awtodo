@@ -8,6 +8,7 @@ from apps.projects.services import contributor_projects
 
 from . import services
 from .models import DashboardWidget
+from .schema import catalog_schema, dashboard_schema, widget_detail_schema
 from .serializers import (
     DashboardWidgetCreateSerializer,
     DashboardWidgetPositionSerializer,
@@ -31,6 +32,7 @@ def _serialize_dashboard(entries):
     return {"widgets": [serialize_widget_entry(entry) for entry in entries]}
 
 
+@dashboard_schema
 @extend_schema(responses=OpenApiTypes.OBJECT)
 class ProjectDashboardView(_DashboardExceptionMixin, APIView):
     """Dashboard personnalisable d'un projet, propre à l'utilisateur courant.
@@ -52,6 +54,7 @@ class ProjectDashboardView(_DashboardExceptionMixin, APIView):
         return Response(serialize_widget_entry(entry), status=201)
 
 
+@dashboard_schema
 @extend_schema(responses=OpenApiTypes.OBJECT)
 class GlobalDashboardView(_DashboardExceptionMixin, APIView):
     """Dashboard personnalisable de l'écran Statistiques global."""
@@ -68,6 +71,7 @@ class GlobalDashboardView(_DashboardExceptionMixin, APIView):
         return Response(serialize_widget_entry(entry), status=201)
 
 
+@widget_detail_schema
 @extend_schema(responses=OpenApiTypes.OBJECT)
 class DashboardWidgetDetailView(_DashboardExceptionMixin, APIView):
     """`owner=request.user` dans le queryset, pas une vérification a
@@ -90,6 +94,7 @@ class DashboardWidgetDetailView(_DashboardExceptionMixin, APIView):
         return Response(status=204)
 
 
+@catalog_schema
 @extend_schema(responses=OpenApiTypes.OBJECT)
 class DashboardCatalogView(_DashboardExceptionMixin, APIView):
     """Catalogue des widgets disponibles, filtré selon les droits de

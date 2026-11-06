@@ -11,6 +11,7 @@ from apps.projects.services import contributor_projects
 
 from . import services
 from .models import CommunicationChannel
+from .schema import communication_schema, o365_schema
 from .serializers import (
     CommunicationChannelCreateSerializer,
     CommunicationChannelSerializer,
@@ -33,6 +34,7 @@ class _CommunicationExceptionMixin:
         return super().handle_exception(exc)
 
 
+@o365_schema
 @extend_schema(responses=O365ConnectionSerializer)
 class O365ConnectionView(_CommunicationExceptionMixin, APIView):
     """Connexion Office 365 de l'organisation de l'utilisateur courant.
@@ -52,6 +54,7 @@ class O365ConnectionView(_CommunicationExceptionMixin, APIView):
         return Response(O365ConnectionSerializer(connection).data)
 
 
+@communication_schema
 @extend_schema(responses=OpenApiTypes.OBJECT)
 class ProjectCommunicationViewSet(_CommunicationExceptionMixin, viewsets.GenericViewSet):
     lookup_field = "project_id"

@@ -296,3 +296,12 @@
     flex: 1;
   }
 }
+
+.integrations-section__api-docs {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: flex-start;
+  font-size: 0.88rem;
+  color: var(--color-accent);
+}

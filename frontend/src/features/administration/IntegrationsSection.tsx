@@ -1,6 +1,13 @@
-import { Check, Copy, KeyRound, Plug } from "lucide-react";
+import { BookOpen, Check, Copy, KeyRound, Plug } from "lucide-react";
 import { useEffect, useState } from "react";
-import { generateApiKey, getApiKeys, getO365Connection, revokeApiKey, updateO365Connection } from "../../api/client";
+import {
+  apiDocumentationUrl,
+  generateApiKey,
+  getApiKeys,
+  getO365Connection,
+  revokeApiKey,
+  updateO365Connection,
+} from "../../api/client";
 import { Checkbox } from "../../components/Checkbox";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Skeleton } from "../../components/Skeleton";
@@ -123,6 +130,10 @@ export function IntegrationsSection() {
         Identifiants Microsoft Graph pour toute l'organisation — sert à la synchronisation Outlook du planning
         (« Mon planning »).
       </p>
+      <a className="integrations-section__api-docs" href={apiDocumentationUrl()} target="_blank" rel="noreferrer">
+        <BookOpen size={14} strokeWidth={1.75} aria-hidden="true" />
+        Documentation de l'API (s'ouvre avec une clé API, via « Authorize »)
+      </a>
 
       {error && <p className="integrations-section__error">{error}</p>}
 

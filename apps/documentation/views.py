@@ -15,6 +15,7 @@ from apps.projects.services import contributor_projects
 
 from . import services
 from .models import DocSpace
+from .schema import doc_space_schema
 from .serializers import (
     ContributorsUpdateSerializer,
     DocEntryCreateSerializer,
@@ -35,6 +36,7 @@ def _attachment_download(attachment):
     return response
 
 
+@doc_space_schema
 @extend_schema(responses=OpenApiTypes.OBJECT)
 class DocSpaceViewSet(viewsets.GenericViewSet):
     """Espace de documentation d'un projet — voir CLAUDE.md > Roadmap
@@ -127,16 +129,6 @@ class DocSpaceViewSet(viewsets.GenericViewSet):
         project = self._automation_project(request, project_id)
         return Response(services.list_support_pages(actor=request.user, project=project))
 
-    @extend_schema(
-        request={
-            "multipart/form-data": {
-                "type": "object",
-                "properties": {"file": {"type": "string", "format": "binary"}},
-                "required": ["file"],
-            }
-        },
-        responses=OpenApiTypes.OBJECT,
-    )
     @action(
         detail=True,
         methods=["post"],
@@ -286,7 +278,6 @@ class DocSpaceViewSet(viewsets.GenericViewSet):
         return Response({"space": services._space_dict(space, request)})
 
     # --- Personnalisation (couleur, en-tête, pied de page) -------------
-    @extend_schema(methods=["PATCH"], request=DocSpaceAppearanceSerializer, responses=OpenApiTypes.OBJECT)
     @action(detail=True, methods=["get", "patch"], url_path="appearance")
     def appearance(self, request, project_id=None):
         project = self._automation_project(request, project_id)

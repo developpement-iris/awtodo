@@ -3,10 +3,12 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from .models import Notification
+from .schema import notification_schema
 from .serializers import NotificationSerializer
 from .services import NotificationPermissionError, get_unread_count, mark_all_read, mark_notification_read
 
 
+@notification_schema
 class NotificationViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     serializer_class = NotificationSerializer
 

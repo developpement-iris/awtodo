@@ -9,6 +9,22 @@ from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import Invitation, Organisation, PasswordResetRequest, PermissionProfile, Team, User
+from .schema import (
+    change_password_schema,
+    invitation_schema,
+    login_schema,
+    me_schema,
+    notification_preferences_schema,
+    organisation_branding_schema,
+    organisation_schema,
+    password_reset_confirm_schema,
+    password_reset_request_schema,
+    password_reset_token_schema,
+    permission_profile_schema,
+    planning_preferences_schema,
+    team_schema,
+    user_schema,
+)
 from .serializers import (
     ChangePasswordSerializer,
     InvitationAcceptSerializer,
@@ -68,6 +84,7 @@ from .services import (
 )
 
 
+@login_schema
 class LoginView(APIView):
     """Connexion par mot de passe (voir CLAUDE.md > "Stack technique" > Auth,
     session du 2026-08-06) — publique par nature (c'est le point d'entrée
@@ -96,6 +113,7 @@ class LoginView(APIView):
         )
 
 
+@me_schema
 class MeView(APIView):
     """"Qui suis-je" — permet au frontend de résoudre l'utilisateur courant à
     partir d'un token stocké (JWT) sans le décoder côté client. Fonctionne
@@ -108,6 +126,7 @@ class MeView(APIView):
         return Response(MeSerializer(request.user).data)
 
 
+@change_password_schema
 class ChangePasswordView(APIView):
     """Écran Paramètres (session du 2026-09-16) — connecté, distinct du flux
     « mot de passe oublié » (public, voir `PasswordResetRequestView`)."""
@@ -126,6 +145,7 @@ class ChangePasswordView(APIView):
         return Response({"detail": "Mot de passe mis à jour."})
 
 
+@notification_preferences_schema
 class NotificationPreferencesView(APIView):
     """Écran Paramètres (session du 2026-09-16) — un seul réglage pour
     l'instant (envoi par email), voir `User.email_notifications_enabled`."""
@@ -140,6 +160,7 @@ class NotificationPreferencesView(APIView):
         return Response(MeSerializer(updated).data)
 
 
+@organisation_branding_schema
 class OrganisationBrandingView(APIView):
     """Couleurs de marque de l'organisation courante (session du 2026-09-28,
     remplace l'ancienne préférence d'accent par utilisateur — écran
@@ -167,6 +188,7 @@ class OrganisationBrandingView(APIView):
         return Response(OrganisationBrandingSerializer(organisation).data)
 
 
+@permission_profile_schema
 class PermissionProfileViewSet(viewsets.GenericViewSet):
     """Profils de droits personnalisés (session du 2026-09-28) — portée
     organisation, réservés à un admin d'organisation (garde dans chaque
@@ -237,6 +259,7 @@ class PermissionProfileViewSet(viewsets.GenericViewSet):
         return Response(PermissionProfileSerializer(profile).data)
 
 
+@planning_preferences_schema
 class PlanningPreferencesView(APIView):
     """Écran Planning (session du 2026-09-18) — couleur du calendrier
     personnel + horaires de travail affichés (grisent le reste de la grille).
@@ -255,6 +278,7 @@ class PlanningPreferencesView(APIView):
         return Response(MeSerializer(updated).data)
 
 
+@password_reset_request_schema
 class PasswordResetRequestView(APIView):
     """Public par nature (voir `LoginView` ci-dessus, même raisonnement) — la
     personne a justement perdu l'accès à son compte.
@@ -290,6 +314,7 @@ class PasswordResetRequestView(APIView):
         return Response({"detail": "Si un compte correspond à cet identifiant, un email a été envoyé."})
 
 
+@password_reset_token_schema
 class PasswordResetTokenView(APIView):
     """Lecture publique de l'état d'un lien de réinitialisation (voir
     `InvitationViewSet.retrieve` pour le même raisonnement — la personne n'a
@@ -305,6 +330,7 @@ class PasswordResetTokenView(APIView):
         return Response(PasswordResetTokenSerializer(reset).data)
 
 
+@password_reset_confirm_schema
 class PasswordResetConfirmView(APIView):
     """⚠️ Comme `InvitationViewSet`, publique par construction : en
     staging/production la permission par défaut est `IsAuthenticated`, sans
@@ -325,6 +351,7 @@ class PasswordResetConfirmView(APIView):
         return Response({"detail": "Mot de passe mis à jour."})
 
 
+@user_schema
 class UserViewSet(ReadOnlyModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
@@ -373,6 +400,7 @@ class UserViewSet(ReadOnlyModelViewSet):
         return Response(UserSerializer(updated).data)
 
 
+@team_schema
 class TeamViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
     queryset = Team.objects.active()
     serializer_class = TeamSerializer
@@ -455,6 +483,7 @@ class TeamViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.Gen
         return Response(self.get_serializer(renamed).data)
 
 
+@organisation_schema
 class OrganisationViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     queryset = Organisation.objects.all()
     serializer_class = OrganisationSerializer
@@ -488,6 +517,7 @@ class OrganisationViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         return Response(payload, status=201)
 
 
+@invitation_schema
 class InvitationViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
     """`retrieve` (par token) et `accept` sont volontairement publics —
     l'invité n'a par définition pas encore de session utilisable (voir

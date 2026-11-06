@@ -9,6 +9,7 @@ from apps.projects.services import contributor_projects, prefetched_project_role
 
 from .filters import IncidentFilterSet
 from .models import Incident
+from .schema import incident_schema
 from .serializers import (
     IncidentAssignProjectSerializer,
     IncidentCommentCreateSerializer,
@@ -38,6 +39,7 @@ from .services import (
 )
 
 
+@incident_schema
 class IncidentViewSet(ListOnlyFilterMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
     # Schéma/introspection uniquement — la portée réelle vient de
     # `get_queryset()` (voir CLAUDE.md > "Scoping des listes par appartenance").

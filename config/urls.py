@@ -1,6 +1,8 @@
 from django.contrib import admin
 from django.urls import include, path, re_path
+from drf_spectacular.views import SpectacularAPIView
 
+from config.api_docs import ApiDocsView
 from config.health import health
 from config.spa import spa_index
 
@@ -16,6 +18,9 @@ api_v1_patterns = [
     path("notifications/", include("apps.notifications.urls")),
     path("communication/", include("apps.communication.urls")),
     path("dashboards/", include("apps.dashboards.urls")),
+    # Documentation de l'API : schéma filtré selon l'appelant, voir SPECTACULAR_SETTINGS.
+    path("schema/", SpectacularAPIView.as_view(), name="api-schema"),
+    path("docs-api/", ApiDocsView.as_view(), name="api-docs"),
 ]
 
 urlpatterns = [

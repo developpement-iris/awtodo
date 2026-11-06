@@ -66,23 +66,23 @@ class TaskSerializer(serializers.ModelSerializer):
             "permissions",
         ]
 
-    def get_version_label(self, obj):
+    def get_version_label(self, obj) -> str | None:
         return obj.version.label if obj.version_id else None
 
-    def get_project_name(self, obj):
+    def get_project_name(self, obj) -> str | None:
         return obj.project.name if obj.project_id else None
 
     def _task_type(self, obj):
         cache = self.context.setdefault("_task_type_cache", {}) if isinstance(self.context, dict) else None
         return resolve_task_type(obj.project, obj.task_type, cache=cache)
 
-    def get_task_type_display(self, obj):
+    def get_task_type_display(self, obj) -> str:
         return self._task_type(obj)[0]
 
-    def get_task_type_icon(self, obj):
+    def get_task_type_icon(self, obj) -> str:
         return self._task_type(obj)[1]
 
-    def get_permissions(self, obj):
+    def get_permissions(self, obj) -> dict[str, bool]:
         # Voir CLAUDE.md > "Permissions API — flags calculés" : une seule
         # source de vérité (apps.tasks.services), le frontend ne recalcule
         # jamais une règle de rôle/statut lui-même.
@@ -105,7 +105,7 @@ class TaskDetailSerializer(TaskSerializer):
     class Meta(TaskSerializer.Meta):
         fields = TaskSerializer.Meta.fields + ["comments", "audit_log"]
 
-    def get_audit_log(self, obj):
+    def get_audit_log(self, obj) -> list[dict]:
         return AuditLogEntrySerializer(get_audit_log(obj), many=True).data
 
 

@@ -11,6 +11,7 @@ from apps.projects.services import accessible_projects, prefetched_project_roles
 
 from .filters import TaskFilterSet
 from .models import Task, TaskType
+from .schema import task_schema, task_type_schema
 from .serializers import (
     TaskTypeSerializer,
     GlobalTaskStatsSerializer,
@@ -55,6 +56,7 @@ from .services import (
 )
 
 
+@task_type_schema
 class TaskTypeViewSet(viewsets.GenericViewSet):
     """Types de tâche personnalisables (session du 2026-10-09). La portée se
     désigne par `team` ou `project` (query string en lecture, body à la
@@ -153,6 +155,7 @@ def _resolve_assignee(user_id):
         return None, Response({"detail": "Utilisateur introuvable."}, status=400)
 
 
+@task_schema
 class TaskViewSet(ListOnlyFilterMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
     # Schéma/introspection uniquement — la portée réelle vient de
     # `get_queryset()` (voir CLAUDE.md > "Scoping des listes par appartenance").

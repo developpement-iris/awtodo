@@ -47,7 +47,7 @@ class PermissionProfileSerializer(serializers.ModelSerializer):
         model = PermissionProfile
         fields = ["id", "name", "capabilities", "status", "assigned_users"]
 
-    def get_assigned_users(self, obj):
+    def get_assigned_users(self, obj) -> list[dict]:
         return [
             {"id": str(u.id), "username": u.username, "first_name": u.first_name, "last_name": u.last_name}
             for u in obj.users.all()
@@ -100,7 +100,7 @@ class UserSerializer(serializers.ModelSerializer):
             "planning_color",
         ]
 
-    def get_teams(self, obj):
+    def get_teams(self, obj) -> list[dict]:
         # `team_memberships` (reverse FK) n'est pas filtré par statut par
         # défaut — seules les TeamMembership actives comptent. `_active_memberships`
         # (préchargé par les viewsets qui sérialisent `UserSerializer` en
@@ -129,7 +129,7 @@ class MeSerializer(UserSerializer):
     # (ex. `isOrgAdmin || capabilities.includes("manage_integrations")`).
     capabilities = serializers.SerializerMethodField()
 
-    def get_capabilities(self, obj):
+    def get_capabilities(self, obj) -> list[str]:
         return [key for key, _ in PERMISSION_CAPABILITY_CHOICES if has_capability(obj, key)]
 
     class Meta(UserSerializer.Meta):
@@ -188,15 +188,15 @@ class TeamSerializer(serializers.ModelSerializer):
         model = Team
         fields = ["id", "name", "description", "organisation", "created_by", "members", "memberships", "can_manage"]
 
-    def get_members(self, obj):
+    def get_members(self, obj) -> list[dict]:
         member_ids = TeamMembership.objects.filter(team=obj).values_list("user_id", flat=True)
         return UserSerializer(User.objects.filter(id__in=member_ids), many=True).data
 
-    def get_memberships(self, obj):
+    def get_memberships(self, obj) -> list[dict]:
         memberships = TeamMembership.objects.filter(team=obj).select_related("user")
         return TeamMembershipSerializer(memberships, many=True).data
 
-    def get_can_manage(self, obj):
+    def get_can_manage(self, obj) -> bool:
         # Voir CLAUDE.md > "Permissions API — flags calculés" : une seule
         # source de vérité (apps.accounts.services), le frontend ne
         # recalcule jamais une règle de rôle lui-même.

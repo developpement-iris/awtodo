@@ -198,8 +198,45 @@ SIMPLE_JWT = {
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "Awtodo API",
-    "DESCRIPTION": "API de gestion de projets, tâches et incidents d'Awtodo.",
+    "DESCRIPTION": (
+        "API de gestion de projets, tâches et incidents d'Awtodo.\n\n"
+        "**Authentification** : `Authorization: Api-Key awt_…` pour une automatisation (clé générée dans "
+        "Administration > Intégrations), `Authorization: Bearer <jeton>` pour une personne connectée. "
+        "Une clé API n'a accès qu'à une partie de l'API : création d'incidents, pièces jointes et "
+        "personnalisation de la documentation.\n\n"
+        "**Conventions** : identifiants en UUID, `/` final obligatoire sur les chemins, changements de statut "
+        "par des actions dédiées (`POST tasks/{id}/start/`), jamais par une modification du champ `status`.\n\n"
+        "**Erreurs** : `400` (`{\"detail\": …}` ou erreurs par champ), `401` non authentifié, `403` droits "
+        "insuffisants, `404` objet inconnu ou hors de votre portée."
+    ),
     "VERSION": "1.0.0",
+    # Schéma filtré selon l'appelant : sans authentification, seuls les endpoints
+    # publics apparaissent ; l'API interne n'est décrite qu'après « Authorize ».
+    # Les schémas d'authentification sont ajoutés d'office : sans eux, Swagger
+    # n'affiche pas ce bouton sur le schéma anonyme.
+    "SERVE_PUBLIC": False,
+    "SERVE_INCLUDE_SCHEMA": False,
+    "APPEND_COMPONENTS": {
+        "securitySchemes": {
+            "apiKeyAuth": {
+                "type": "apiKey",
+                "in": "header",
+                "name": "Authorization",
+                "description": "Saisir `Api-Key awt_…`. Clé générée dans Administration > Intégrations.",
+            },
+            "jwtAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"},
+        }
+    },
+    "AUTHENTICATION_WHITELIST": [
+        "apps.integrations.authentication.ApiKeyAuthentication",
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ],
+    "SWAGGER_UI_DIST": "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14",
+    "SWAGGER_UI_FAVICON_HREF": "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/favicon-32x32.png",
+    "POSTPROCESSING_HOOKS": [
+        "drf_spectacular.hooks.postprocess_schema_enums",
+        "apps.common.schema.type_identifiers_as_uuid",
+    ],
 }
 
 # Restrictif par défaut ; assoupli en dev, à renseigner via env pour un

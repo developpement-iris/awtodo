@@ -23,7 +23,7 @@ class O365ConnectionSerializer(serializers.ModelSerializer):
             "is_configured",
         ]
 
-    def get_has_client_secret(self, obj):
+    def get_has_client_secret(self, obj) -> bool:
         return bool(obj.client_secret)
 
 
@@ -47,7 +47,7 @@ class CommunicationChannelSerializer(serializers.ModelSerializer):
             "status",
         ]
 
-    def get_scope(self, obj):
+    def get_scope(self, obj) -> str:
         return "team" if obj.team_id else "project"
 
 

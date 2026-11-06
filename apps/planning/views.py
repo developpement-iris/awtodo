@@ -21,6 +21,14 @@ from .models import (
     ProjectPlanningEntry,
     ScheduledBlock,
 )
+from .schema import (
+    block_schema,
+    calendar_schema,
+    event_schema,
+    project_planning_schema,
+    share_schema,
+    working_hours_schema,
+)
 from .serializers import (
     BlockCreateSerializer,
     BlockUpdateSerializer,
@@ -79,6 +87,7 @@ def _id_list(request, name):
     return [part for part in raw.split(",") if part] if raw else None
 
 
+@calendar_schema
 @extend_schema(responses=OpenApiTypes.OBJECT)
 class CalendarView(_PlanningExceptionMixin, APIView):
     def get(self, request):
@@ -94,6 +103,7 @@ class CalendarView(_PlanningExceptionMixin, APIView):
         return Response(data)
 
 
+@event_schema
 @extend_schema(responses=OpenApiTypes.OBJECT)
 class CalendarEventViewSet(_PlanningExceptionMixin, viewsets.GenericViewSet):
     serializer_class = EventCreateSerializer
@@ -193,6 +203,7 @@ class CalendarEventViewSet(_PlanningExceptionMixin, viewsets.GenericViewSet):
         return Response(services._event_detail_dict(event, actor=request.user))
 
 
+@block_schema
 @extend_schema(responses=OpenApiTypes.OBJECT)
 class ScheduledBlockViewSet(_PlanningExceptionMixin, viewsets.GenericViewSet):
     serializer_class = BlockCreateSerializer
@@ -225,6 +236,7 @@ class ScheduledBlockViewSet(_PlanningExceptionMixin, viewsets.GenericViewSet):
         return Response(status=204)
 
 
+@share_schema
 @extend_schema(responses=OpenApiTypes.OBJECT)
 class CalendarShareViewSet(_PlanningExceptionMixin, viewsets.GenericViewSet):
     serializer_class = ShareCreateSerializer
@@ -259,6 +271,7 @@ class CalendarShareViewSet(_PlanningExceptionMixin, viewsets.GenericViewSet):
         return Response(services._share_dict(share))
 
 
+@working_hours_schema
 @extend_schema(responses=OpenApiTypes.OBJECT)
 class WorkingHoursView(_PlanningExceptionMixin, APIView):
     """Horaires de travail (modèle hebdomadaire + exceptions par semaine,
@@ -311,6 +324,7 @@ class WorkingHoursView(_PlanningExceptionMixin, APIView):
         return Response(data)
 
 
+@project_planning_schema
 @extend_schema(responses=OpenApiTypes.OBJECT)
 class ProjectPlanningViewSet(_PlanningExceptionMixin, viewsets.GenericViewSet):
     lookup_field = "project_id"

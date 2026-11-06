@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from apps.projects.services import contributor_projects
 
 from .models import BudgetLine
+from .schema import budget_schema
 from .serializers import BudgetLineCreateSerializer, BudgetLineSerializer, BudgetSummarySerializer
 from .services import (
     BudgetPermissionError,
@@ -17,6 +18,7 @@ from .services import (
 )
 
 
+@budget_schema
 class BudgetLineViewSet(viewsets.GenericViewSet):
     # Schéma/introspection uniquement — les endpoints réels sont tous des
     # `@action` scopées par projet (voir docs/modeles-et-api.md), pas de

@@ -1007,6 +1007,11 @@ export function updateDocSpaceAppearance(
   return patchJson<{ space: DocSpace }>(`/docs/${projectId}/appearance/`, payload);
 }
 
+// Page Swagger de l'API : endpoints publics sans compte, API complète après « Authorize ».
+export function apiDocumentationUrl(): string {
+  return new URL(`${API_BASE_URL}/docs-api/`, window.location.origin).href;
+}
+
 // Adresse absolue de dépôt, affichée pour configurer un outil externe.
 export function docAttachmentApiUrl(projectId: string, pageId: string): string {
   return new URL(`${API_BASE_URL}/docs/${projectId}/pages/${pageId}/attachments/`, window.location.origin).href;

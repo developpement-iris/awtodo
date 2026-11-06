@@ -78,11 +78,11 @@ class ProjectSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["created_at", "cover_updated_at"]
 
-    def get_permissions(self, obj):
+    def get_permissions(self, obj) -> dict[str, bool]:
         request = self.context.get("request")
         return get_project_permissions(getattr(request, "user", None), obj)
 
-    def get_current_version_id(self, obj):
+    def get_current_version_id(self, obj) -> str | None:
         # Évite un aller-retour séparé pour connaître la version par défaut à
         # afficher (sélecteur de version, voir docs/modeles-et-api.md).
         # `_current_versions` préchargé par `ProjectViewSet.get_queryset()`
@@ -93,10 +93,10 @@ class ProjectSerializer(serializers.ModelSerializer):
             current = obj.versions.filter(is_current=True).first()
         return str(current.id) if current else None
 
-    def get_team_name(self, obj):
+    def get_team_name(self, obj) -> str | None:
         return obj.team.name if obj.team else None
 
-    def get_tasks_total(self, obj):
+    def get_tasks_total(self, obj) -> int:
         # Annoté par ProjectViewSet.queryset quand disponible (évite une requête
         # par projet dans la liste) ; recalculé au besoin (ex. juste après la
         # création, où l'instance ne vient pas du queryset annoté).
@@ -104,12 +104,12 @@ class ProjectSerializer(serializers.ModelSerializer):
             return obj.tasks_total
         return obj.tasks.filter(status__in=NON_REJECTED_TASK_STATUSES).count()
 
-    def get_tasks_done(self, obj):
+    def get_tasks_done(self, obj) -> int:
         if hasattr(obj, "tasks_done"):
             return obj.tasks_done
         return obj.tasks.filter(status="archivee").count()
 
-    def get_members(self, obj):
+    def get_members(self, obj) -> list[dict]:
         # `_prefetched_members` posé par `ProjectViewSet.get_queryset()` dans
         # la liste ; requête ponctuelle sinon. Même portée qu'avant (manager
         # `all_objects` — inchangé, y compris les adhésions `removed`).

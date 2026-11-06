@@ -43,13 +43,13 @@ class IncidentSerializer(serializers.ModelSerializer):
             "permissions",
         ]
 
-    def get_team_name(self, obj):
+    def get_team_name(self, obj) -> str | None:
         return obj.team.name if obj.team_id else None
 
-    def get_assigned_to_name(self, obj):
+    def get_assigned_to_name(self, obj) -> str | None:
         return obj.assigned_to.get_full_name() or obj.assigned_to.username if obj.assigned_to_id else None
 
-    def get_permissions(self, obj):
+    def get_permissions(self, obj) -> dict[str, bool]:
         request = self.context.get("request")
         return get_incident_permissions(getattr(request, "user", None), obj)
 
@@ -69,7 +69,7 @@ class IncidentDetailSerializer(IncidentSerializer):
     class Meta(IncidentSerializer.Meta):
         fields = IncidentSerializer.Meta.fields + ["comments", "audit_log"]
 
-    def get_audit_log(self, obj):
+    def get_audit_log(self, obj) -> list[dict]:
         return AuditLogEntrySerializer(get_audit_log(obj), many=True).data
 
 

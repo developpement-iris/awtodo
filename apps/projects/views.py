@@ -14,6 +14,7 @@ from apps.common.views import ListOnlyFilterMixin
 
 from .filters import ProjectFilterSet
 from .models import Project, ProjectMembership, ProjectVersion
+from .schema import project_schema
 from .serializers import (
     NON_REJECTED_TASK_STATUSES,
     ProjectConvertToCollaborativeSerializer,
@@ -55,6 +56,7 @@ from .services import (
 )
 
 
+@project_schema
 class ProjectViewSet(
     ListOnlyFilterMixin,
     mixins.ListModelMixin,

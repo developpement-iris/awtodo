@@ -44,8 +44,8 @@ class BudgetSummarySerializer(serializers.Serializer):
     opex_total = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
     capex_total = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
 
-    def get_project_id(self, obj):
+    def get_project_id(self, obj) -> str:
         return str(obj["project"].id)
 
-    def get_project_name(self, obj):
+    def get_project_name(self, obj) -> str:
         return obj["project"].name
