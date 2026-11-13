@@ -8,7 +8,13 @@ from .serializers import (
     CatalogQuestionCreateSerializer,
     CatalogQuestionSerializer,
     MoveSerializer,
+    QuestionDefinitionInputSerializer,
     QuestionDefinitionUpdateSerializer,
+    SheetCreateSerializer,
+    SheetDetailSerializer,
+    SheetQuestionSerializer,
+    SheetSummarySerializer,
+    SheetUpdateSerializer,
 )
 
 _SCOPE_DOC = (
@@ -37,4 +43,42 @@ catalog_schema = extend_schema_view(
     archive=extend_schema(request=None, responses=CatalogQuestionSerializer),
     restore=extend_schema(request=None, responses=CatalogQuestionSerializer),
     move=extend_schema(request=MoveSerializer, responses=CatalogQuestionSerializer),
+)
+
+
+def _sheet_action(request=None):
+    return extend_schema(request=request, responses=SheetDetailSerializer)
+
+
+def _question_action(request=None):
+    return extend_schema(request=request, responses=SheetQuestionSerializer)
+
+
+sheet_schema = extend_schema_view(
+    list=extend_schema(
+        parameters=[OpenApiParameter("project", OpenApiTypes.UUID, required=True, description="Projet")],
+        responses=SheetSummarySerializer(many=True),
+    ),
+    create=extend_schema(request=SheetCreateSerializer, responses={201: SheetDetailSerializer}),
+    retrieve=extend_schema(responses=SheetDetailSerializer),
+    partial_update=_sheet_action(SheetUpdateSerializer),
+    add_question=extend_schema(
+        description="Question propre à la fiche (fiche en brouillon seulement).",
+        request=QuestionDefinitionInputSerializer,
+        responses={201: SheetQuestionSerializer},
+    ),
+    question_detail=_question_action(QuestionDefinitionUpdateSerializer),
+    question_archive=_question_action(),
+    question_move=_question_action(MoveSerializer),
+    open=extend_schema(
+        description="Brouillon -> ouverte : fige les questions et génère le lien public.",
+        request=None,
+        responses=SheetDetailSerializer,
+    ),
+    close=_sheet_action(),
+    reopen=_sheet_action(),
+    archive=_sheet_action(),
+    rotate_link=extend_schema(
+        description="Nouveau jeton : l'ancien lien cesse de fonctionner.", request=None, responses=SheetDetailSerializer
+    ),
 )

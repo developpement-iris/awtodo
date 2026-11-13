@@ -1,8 +1,9 @@
 from rest_framework.routers import SimpleRouter
 
-from .views import CatalogQuestionViewSet
+from .views import CatalogQuestionViewSet, SheetViewSet
 
 router = SimpleRouter(trailing_slash=True)
 router.register("catalog", CatalogQuestionViewSet, basename="evaluation-catalog")
+router.register("sheets", SheetViewSet, basename="evaluation-sheet")
 
 urlpatterns = [*router.urls]

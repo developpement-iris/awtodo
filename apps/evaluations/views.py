@@ -1,22 +1,30 @@
 from django.core.exceptions import ValidationError
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.accounts.models import Team
+from apps.projects.models import Project
 from apps.projects.services import accessible_projects
 
-from . import catalog
+from . import catalog, services
 from .answers import AnswerError
 from .definitions import EvaluationPermissionError, EvaluationValidationError
-from .models import CatalogQuestion
-from .schema import catalog_schema
+from .models import CatalogQuestion, EvaluationSheet, SheetQuestion
+from .schema import catalog_schema, sheet_schema
 from .serializers import (
     CatalogQuestionCreateSerializer,
     CatalogQuestionSerializer,
     MoveSerializer,
+    QuestionDefinitionInputSerializer,
     QuestionDefinitionUpdateSerializer,
+    SheetCreateSerializer,
+    SheetDetailSerializer,
+    SheetQuestionSerializer,
+    SheetSummarySerializer,
+    SheetUpdateSerializer,
 )
 
 
@@ -105,3 +113,108 @@ class CatalogQuestionViewSet(EvaluationErrorsMixin, viewsets.GenericViewSet):
             actor=request.user, question=self.get_object(), direction=serializer.validated_data["direction"]
         )
         return Response(CatalogQuestionSerializer(question).data)
+
+
+@sheet_schema
+class SheetViewSet(EvaluationErrorsMixin, viewsets.GenericViewSet):
+    """Fiches d'évaluation d'un projet. Toutes les règles d'accès vivent dans
+    `services` : un objet hors de portée donne 403, comme le catalogue."""
+
+    queryset = EvaluationSheet.all_objects.select_related("project")
+    serializer_class = SheetDetailSerializer
+
+    def _detail(self, sheet, status_code=200):
+        sheet.refresh_from_db()
+        return Response(SheetDetailSerializer(sheet, context={"request": self.request}).data, status=status_code)
+
+    def _question(self, sheet, question_id):
+        try:
+            return get_object_or_404(SheetQuestion.all_objects, pk=question_id, sheet=sheet)
+        except (ValueError, ValidationError):
+            raise Http404
+
+    def list(self, request):
+        project_id = request.query_params.get("project")
+        if not project_id:
+            raise EvaluationValidationError("Paramètre `project` requis.")
+        try:
+            project = get_object_or_404(Project.all_objects, pk=project_id)
+        except (ValueError, ValidationError):
+            raise EvaluationValidationError("Projet invalide.")
+        sheets = services.list_sheets(actor=request.user, project=project)
+        return Response(SheetSummarySerializer(sheets, many=True).data)
+
+    def create(self, request):
+        serializer = SheetCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = dict(serializer.validated_data)
+        project = get_object_or_404(Project.all_objects, pk=data.pop("project"))
+        sheet = services.create_sheet(actor=request.user, project=project, **data)
+        return self._detail(sheet, status_code=201)
+
+    def retrieve(self, request, pk=None):
+        return self._detail(services.get_sheet(actor=request.user, sheet=self.get_object()))
+
+    def partial_update(self, request, pk=None):
+        serializer = SheetUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        sheet = services.update_sheet(actor=request.user, sheet=self.get_object(), **serializer.validated_data)
+        return self._detail(sheet)
+
+    @action(detail=True, methods=["post"], url_path="questions")
+    def add_question(self, request, pk=None):
+        serializer = QuestionDefinitionInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        question = services.add_sheet_question(
+            actor=request.user, sheet=self.get_object(), **serializer.validated_data
+        )
+        return Response(SheetQuestionSerializer(question).data, status=201)
+
+    @action(detail=True, methods=["patch"], url_path=r"questions/(?P<question_id>[^/.]+)")
+    def question_detail(self, request, pk=None, question_id=None):
+        serializer = QuestionDefinitionUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        question = services.update_sheet_question(
+            actor=request.user, question=self._question(self.get_object(), question_id), **serializer.validated_data
+        )
+        return Response(SheetQuestionSerializer(question).data)
+
+    @action(detail=True, methods=["post"], url_path=r"questions/(?P<question_id>[^/.]+)/archive")
+    def question_archive(self, request, pk=None, question_id=None):
+        question = services.archive_sheet_question(
+            actor=request.user, question=self._question(self.get_object(), question_id)
+        )
+        return Response(SheetQuestionSerializer(question).data)
+
+    @action(detail=True, methods=["post"], url_path=r"questions/(?P<question_id>[^/.]+)/move")
+    def question_move(self, request, pk=None, question_id=None):
+        serializer = MoveSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        question = services.move_sheet_question(
+            actor=request.user, question=self._question(self.get_object(), question_id),
+            direction=serializer.validated_data["direction"],
+        )
+        return Response(SheetQuestionSerializer(question).data)
+
+    def _lifecycle(self, fn):
+        return self._detail(fn(actor=self.request.user, sheet=self.get_object()))
+
+    @action(detail=True, methods=["post"])
+    def open(self, request, pk=None):
+        return self._lifecycle(services.open_sheet)
+
+    @action(detail=True, methods=["post"])
+    def close(self, request, pk=None):
+        return self._lifecycle(services.close_sheet)
+
+    @action(detail=True, methods=["post"])
+    def reopen(self, request, pk=None):
+        return self._lifecycle(services.reopen_sheet)
+
+    @action(detail=True, methods=["post"])
+    def archive(self, request, pk=None):
+        return self._lifecycle(services.archive_sheet)
+
+    @action(detail=True, methods=["post"], url_path="rotate-link")
+    def rotate_link(self, request, pk=None):
+        return self._lifecycle(services.rotate_sheet_link)

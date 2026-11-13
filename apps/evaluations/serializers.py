@@ -1,6 +1,8 @@
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from .models import ANSWER_TYPES, SECTIONS, CatalogQuestion
+from .models import ANSWER_TYPES, SECTIONS, CatalogQuestion, EvaluationSheet, SheetQuestion
+from .services import can_manage_sheets, public_path, sheet_questions
 
 QUESTION_FIELDS = [
     "id", "section", "label", "help_text", "answer_type", "options", "required",
@@ -61,3 +63,73 @@ class CatalogListSerializer(serializers.Serializer):
     scope = CatalogScopeSerializer()
     can_manage = serializers.BooleanField()
     questions = CatalogQuestionSerializer(many=True)
+
+
+# --- Fiches --------------------------------------------------------------
+
+
+class SheetCreateSerializer(serializers.Serializer):
+    project = serializers.UUIDField()
+    title = serializers.CharField(max_length=200)
+    client_intro = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class SheetUpdateSerializer(serializers.Serializer):
+    title = serializers.CharField(max_length=200, required=False)
+    client_intro = serializers.CharField(required=False, allow_blank=True)
+
+
+class SheetQuestionSerializer(serializers.ModelSerializer):
+    is_generic = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SheetQuestion
+        fields = QUESTION_FIELDS + ["is_generic"]
+
+    def get_is_generic(self, obj) -> bool:
+        return obj.catalog_question_id is not None
+
+
+class SheetSummarySerializer(serializers.ModelSerializer):
+    response_count = serializers.SerializerMethodField()
+    public_path = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EvaluationSheet
+        fields = [
+            "id", "project", "title", "client_intro", "status", "created_at", "opened_at", "closed_at",
+            "response_count", "public_path",
+        ]
+
+    def get_response_count(self, obj) -> int:
+        # Annoté en liste (`list_sheets`) ; compté à la demande en détail.
+        count = getattr(obj, "response_count", None)
+        if count is None:
+            count = obj.client_responses.filter(status="retenue").count()
+        return count
+
+    def get_public_path(self, obj) -> str | None:
+        return public_path(obj)
+
+
+class SheetPermissionsSerializer(serializers.Serializer):
+    can_manage = serializers.BooleanField()
+
+
+class SheetDetailSerializer(SheetSummarySerializer):
+    """Détail d'une fiche : résumé, questions actives (les deux parties) et droits."""
+
+    questions = serializers.SerializerMethodField()
+    permissions = serializers.SerializerMethodField()
+
+    class Meta(SheetSummarySerializer.Meta):
+        fields = SheetSummarySerializer.Meta.fields + ["questions", "permissions"]
+
+    @extend_schema_field(SheetQuestionSerializer(many=True))
+    def get_questions(self, obj):
+        return SheetQuestionSerializer(sheet_questions(obj), many=True).data
+
+    @extend_schema_field(SheetPermissionsSerializer)
+    def get_permissions(self, obj):
+        user = self.context["request"].user
+        return {"can_manage": can_manage_sheets(user, obj.project)}
