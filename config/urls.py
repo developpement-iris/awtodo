@@ -18,6 +18,7 @@ api_v1_patterns = [
     path("notifications/", include("apps.notifications.urls")),
     path("communication/", include("apps.communication.urls")),
     path("dashboards/", include("apps.dashboards.urls")),
+    path("evaluations/", include("apps.evaluations.urls")),
     # Documentation de l'API : schéma filtré selon l'appelant, voir SPECTACULAR_SETTINGS.
     path("schema/", SpectacularAPIView.as_view(), name="api-schema"),
     path("docs-api/", ApiDocsView.as_view(), name="api-docs"),
