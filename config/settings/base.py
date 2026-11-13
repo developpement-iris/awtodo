@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "apps.planning",
     "apps.communication",
     "apps.dashboards",
+    "apps.evaluations",
     # Avant oauth2_provider : ses gabarits (`oauth2_provider/authorize.html`)
     # remplacent ceux du toolkit.
     "apps.mcp",
