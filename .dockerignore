@@ -1,0 +1,31 @@
+# Contexte de build Docker : n'envoyer que ce qui sert à l'image.
+# Les motifs sans ** ne visent que la racine du dépôt.
+
+.git
+.gitignore
+.env
+.venv
+db.sqlite3
+staticfiles/
+media/
+**/__pycache__
+**/*.pyc
+
+frontend/node_modules
+frontend/dist
+
+# Outillage et documents de travail
+.claude
+.impeccable
+frontend/.impeccable
+.vscode
+.idea
+docs/
+folio-claude-handoff/
+render.yaml
+desktop.ini
+*.md
+
+# Maquettes et logos de référence à la racine (frontend/index.html et frontend/public/ restent inclus)
+*.html
+*.png
