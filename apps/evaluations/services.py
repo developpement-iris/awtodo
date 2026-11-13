@@ -11,6 +11,7 @@ from apps.accounts.services import can_manage_team, is_organisation_admin
 from apps.common.audit import record_event
 from apps.projects.services import is_project_manager
 
+from .answers import AnswerError, clean_answers
 from .catalog import catalog_scope, get_catalog, swap_position
 from .definitions import (
     EvaluationPermissionError,
@@ -19,7 +20,7 @@ from .definitions import (
     definition_of,
     ensure_no_dependents,
 )
-from .models import EvaluationSheet, SheetQuestion
+from .models import Answer, ClientResponse, EvaluationSheet, SheetQuestion
 
 # Contrairement au catalogue, une question propre à une fiche en brouillon
 # peut changer de type : elle n'a encore aucune réponse.
@@ -250,3 +251,69 @@ def rotate_sheet_link(*, actor, sheet):
     sheet.public_token = secrets.token_urlsafe(24)
     sheet.save(update_fields=["public_token", "updated_at"])
     return sheet
+
+
+# --- Formulaire public (sans compte) -------------------------------------
+
+
+class SheetClosedError(Exception):
+    pass
+
+
+def _public_question(question):
+    return {
+        "id": str(question.id), "label": question.label, "help_text": question.help_text,
+        "answer_type": question.answer_type, "options": question.options, "required": question.required,
+        "condition_on": str(question.condition_on_id) if question.condition_on_id else None,
+        "condition_values": question.condition_values,
+    }
+
+
+def _sheet_by_token(token):
+    if not token:
+        return None
+    return (
+        EvaluationSheet.all_objects.select_related("project")
+        .filter(public_token=token).exclude(status__in=["brouillon", "archivee"]).first()
+    )
+
+
+def get_public_sheet(token):
+    """Seul contenu exposé sans compte : titre, intro, nom du projet et
+    questions client d'une fiche ouverte. Jamais la partie chef de projet."""
+    sheet = _sheet_by_token(token)
+    if sheet is None:
+        return None
+    if sheet.status != "ouverte":
+        return {"closed": True, "title": sheet.title, "project_name": sheet.project.name}
+    return {
+        "closed": False,
+        "title": sheet.title,
+        "client_intro": sheet.client_intro,
+        "project_name": sheet.project.name,
+        "questions": [_public_question(q) for q in sheet_questions(sheet, section="client")],
+    }
+
+
+@transaction.atomic
+def submit_client_response(*, token, respondent_name, answers):
+    """`None` si le lien est inconnu. Seules les questions client sont
+    acceptées : une réponse à une question interne est refusée."""
+    sheet = _sheet_by_token(token)
+    if sheet is None:
+        return None
+    if sheet.status != "ouverte":
+        raise SheetClosedError("Ce formulaire n'accepte plus de réponses.")
+    name = (respondent_name or "").strip()
+    if not name:
+        raise AnswerError(None, "Indiquez votre nom.")
+    if len(name) > 150:
+        raise AnswerError(None, "Le nom ne peut pas dépasser 150 caractères.")
+    questions = list(sheet_questions(sheet, section="client"))
+    cleaned = clean_answers(questions, answers, enforce_required=True)
+    response = ClientResponse.all_objects.create(sheet=sheet, respondent_name=name)
+    Answer.objects.bulk_create(
+        Answer(question=question, client_response=response, value=cleaned[str(question.id)])
+        for question in questions
+    )
+    return response

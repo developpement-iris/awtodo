@@ -133,3 +133,34 @@ class SheetDetailSerializer(SheetSummarySerializer):
     def get_permissions(self, obj):
         user = self.context["request"].user
         return {"can_manage": can_manage_sheets(user, obj.project)}
+
+
+class PublicSubmitSerializer(serializers.Serializer):
+    respondent_name = serializers.CharField(max_length=150, allow_blank=True)
+    answers = serializers.DictField(child=serializers.JSONField(allow_null=True), required=False, default=dict)
+
+
+class PublicQuestionSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    label = serializers.CharField()
+    help_text = serializers.CharField()
+    answer_type = serializers.ChoiceField(choices=ANSWER_TYPES)
+    options = serializers.ListField(child=serializers.CharField())
+    required = serializers.BooleanField()
+    condition_on = serializers.UUIDField(allow_null=True)
+    condition_values = serializers.ListField(child=serializers.JSONField())
+
+
+class PublicSheetSerializer(serializers.Serializer):
+    """Contenu exposé sans compte. `client_intro` et `questions` sont absents
+    quand `closed` est vrai."""
+
+    closed = serializers.BooleanField()
+    title = serializers.CharField()
+    project_name = serializers.CharField()
+    client_intro = serializers.CharField(required=False)
+    questions = PublicQuestionSerializer(many=True, required=False)
+
+
+class DetailMessageSerializer(serializers.Serializer):
+    detail = serializers.CharField()

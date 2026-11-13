@@ -3,7 +3,10 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
+from rest_framework.views import APIView
 
 from apps.accounts.models import Team
 from apps.projects.models import Project
@@ -13,11 +16,13 @@ from . import catalog, services
 from .answers import AnswerError
 from .definitions import EvaluationPermissionError, EvaluationValidationError
 from .models import CatalogQuestion, EvaluationSheet, SheetQuestion
-from .schema import catalog_schema, sheet_schema
+from .throttles import EvaluationSubmitThrottle
+from .schema import catalog_schema, public_get_schema, public_submit_schema, sheet_schema
 from .serializers import (
     CatalogQuestionCreateSerializer,
     CatalogQuestionSerializer,
     MoveSerializer,
+    PublicSubmitSerializer,
     QuestionDefinitionInputSerializer,
     QuestionDefinitionUpdateSerializer,
     SheetCreateSerializer,
@@ -218,3 +223,38 @@ class SheetViewSet(EvaluationErrorsMixin, viewsets.GenericViewSet):
     @action(detail=True, methods=["post"], url_path="rotate-link")
     def rotate_link(self, request, pk=None):
         return self._lifecycle(services.rotate_sheet_link)
+
+
+class PublicEvaluationView(EvaluationErrorsMixin, APIView):
+    """Formulaire client public — 2ᵉ exception au garde-fou « connexion
+    obligatoire » (CLAUDE.md > Stack technique > Auth). N'expose que les
+    questions client d'une fiche ouverte."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    @public_get_schema
+    def get(self, request, token):
+        data = services.get_public_sheet(token)
+        if data is None:
+            raise Http404
+        return Response(data)
+
+
+class PublicEvaluationSubmitView(EvaluationErrorsMixin, APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [AnonRateThrottle, EvaluationSubmitThrottle]
+    throttle_scope = "evaluation_submit"
+
+    @public_submit_schema
+    def post(self, request, token):
+        serializer = PublicSubmitSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            response = services.submit_client_response(token=token, **serializer.validated_data)
+        except services.SheetClosedError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_410_GONE)
+        if response is None:
+            raise Http404
+        return Response({"detail": "Merci, votre réponse a bien été enregistrée."}, status=201)

@@ -7,7 +7,10 @@ from .serializers import (
     CatalogListSerializer,
     CatalogQuestionCreateSerializer,
     CatalogQuestionSerializer,
+    DetailMessageSerializer,
     MoveSerializer,
+    PublicSheetSerializer,
+    PublicSubmitSerializer,
     QuestionDefinitionInputSerializer,
     QuestionDefinitionUpdateSerializer,
     SheetCreateSerializer,
@@ -81,4 +84,24 @@ sheet_schema = extend_schema_view(
     rotate_link=extend_schema(
         description="Nouveau jeton : l'ancien lien cesse de fonctionner.", request=None, responses=SheetDetailSerializer
     ),
+)
+
+
+public_get_schema = extend_schema(
+    description=(
+        "Formulaire client, sans compte (lien public d'une fiche). N'expose que les questions client "
+        "d'une fiche ouverte ; `closed` est vrai si la fiche est close. 404 si le lien est inconnu ou révoqué."
+    ),
+    auth=[],
+    responses=PublicSheetSerializer,
+)
+
+public_submit_schema = extend_schema(
+    description=(
+        "Envoi d'une réponse client, sans compte. `answers` : {id de question : valeur}. "
+        "Limité à 10 envois par heure et par adresse IP. 410 si la fiche n'accepte plus de réponses."
+    ),
+    auth=[],
+    request=PublicSubmitSerializer,
+    responses={201: DetailMessageSerializer},
 )

@@ -174,6 +174,7 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon": "20/min",
         "user": "100/min",
+        "evaluation_submit": "10/hour",
     },
     # Sûr par défaut : explicite plutôt que de laisser le AllowAny implicite
     # de DRF. Assoupli uniquement dans config/settings/dev.py.
