@@ -183,7 +183,7 @@ class PublicSheetSerializer(serializers.Serializer):
     questions = PublicQuestionSerializer(many=True, required=False)
 
 
-class DetailMessageSerializer(serializers.Serializer):
+class EvaluationMessageSerializer(serializers.Serializer):
     detail = serializers.CharField()
 
 

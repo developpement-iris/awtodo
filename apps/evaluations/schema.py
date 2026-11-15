@@ -10,7 +10,7 @@ from .serializers import (
     CatalogListSerializer,
     CatalogQuestionCreateSerializer,
     CatalogQuestionSerializer,
-    DetailMessageSerializer,
+    EvaluationMessageSerializer,
     MoveSerializer,
     PublicSheetSerializer,
     PublicSubmitSerializer,
@@ -56,8 +56,12 @@ def _sheet_action(request=None):
     return extend_schema(request=request, responses=SheetDetailSerializer)
 
 
+_QUESTION_ID = OpenApiParameter("question_id", OpenApiTypes.UUID, OpenApiParameter.PATH)
+_RESPONSE_ID = OpenApiParameter("response_id", OpenApiTypes.UUID, OpenApiParameter.PATH)
+
+
 def _question_action(request=None):
-    return extend_schema(request=request, responses=SheetQuestionSerializer)
+    return extend_schema(request=request, responses=SheetQuestionSerializer, parameters=[_QUESTION_ID])
 
 
 sheet_schema = extend_schema_view(
@@ -101,8 +105,11 @@ sheet_schema = extend_schema_view(
         description="Écarte une réponse (spam, test) : elle sort des résultats, de l'export et des statistiques.",
         request=None,
         responses=ResponseItemSerializer(many=True),
+        parameters=[_RESPONSE_ID],
     ),
-    response_restore=extend_schema(request=None, responses=ResponseItemSerializer(many=True)),
+    response_restore=extend_schema(
+        request=None, responses=ResponseItemSerializer(many=True), parameters=[_RESPONSE_ID]
+    ),
     export=extend_schema(
         description="Export CSV (séparateur « ; », encodage UTF-8 avec BOM pour Excel).",
         responses={(200, "text/csv"): OpenApiTypes.STR},
@@ -115,7 +122,6 @@ public_get_schema = extend_schema(
         "Formulaire client, sans compte (lien public d'une fiche). N'expose que les questions client "
         "d'une fiche ouverte ; `closed` est vrai si la fiche est close. 404 si le lien est inconnu ou révoqué."
     ),
-    auth=[],
     responses=PublicSheetSerializer,
 )
 
@@ -124,7 +130,6 @@ public_submit_schema = extend_schema(
         "Envoi d'une réponse client, sans compte. `answers` : {id de question : valeur}. "
         "Limité à 10 envois par heure et par adresse IP. 410 si la fiche n'accepte plus de réponses."
     ),
-    auth=[],
     request=PublicSubmitSerializer,
-    responses={201: DetailMessageSerializer},
+    responses={201: EvaluationMessageSerializer},
 )
