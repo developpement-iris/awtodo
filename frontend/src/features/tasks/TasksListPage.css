@@ -38,7 +38,8 @@
   color: var(--color-accent-contrast);
 }
 
-.tasks-list-page__team-select {
+.tasks-list-page__team-select,
+.tasks-list-page__project-filter {
   display: inline-block;
   min-width: 170px;
 }

@@ -31,7 +31,14 @@ import { useCurrentUser } from "../../context/CurrentUserContext";
 import { useToast } from "../../context/ToastContext";
 import { useColumnPreferences } from "../../hooks/useColumnPreferences";
 import { useSort, type SortDirection } from "../../hooks/useSort";
-import { priorityRank, priorityTone, statusTone, taskStatusIcon } from "../../lib/badges";
+import {
+  priorityRank,
+  priorityTone,
+  PROJECT_PHASE_OPTIONS,
+  projectPhaseIcon,
+  statusTone,
+  taskStatusIcon,
+} from "../../lib/badges";
 import { compareNullableNumbers, compareNullableStrings } from "../../lib/sortCompare";
 import { defaultStatusSelection, TASK_STATUS_FILTER_OPTIONS } from "../../lib/statusFilterOptions";
 import type { AuditLogEntry, Project, Task, TaskComment, Team, User } from "../../types/watodo";
@@ -61,6 +68,7 @@ type TaskColumnKey =
   | "priority"
   | "assignee"
   | "project"
+  | "phase"
   | "deadline"
   | "estimated_hours"
   | "time_spent"
@@ -73,6 +81,7 @@ const TASK_COLUMNS: ColumnDef<TaskColumnKey>[] = [
   { key: "priority", label: "Priorité" },
   { key: "assignee", label: "Assigné à" },
   { key: "project", label: "Projet" },
+  { key: "phase", label: "Phase du projet" },
   { key: "deadline", label: "Échéance" },
   { key: "estimated_hours", label: "Temps estimé" },
   { key: "time_spent", label: "Temps passé" },
@@ -86,7 +95,21 @@ const TASK_COLUMNS_DEFAULT_VISIBLE: TaskColumnKey[] = [
   "priority",
   "assignee",
   "project",
+  "phase",
 ];
+
+// Filtre « Projet » : valeur sentinelle pour les tâches personnelles (sans projet).
+const PERSONAL_PROJECT_FILTER = "__personal__";
+
+// Phase du projet de la tâche (session du 2026-11-09) — tri dans l'ordre
+// d'avancement réel, pas alphabétique ; sans phase / tâche personnelle en dernier.
+const PHASE_RANK = new Map(PROJECT_PHASE_OPTIONS.map((option, index) => [option.value as string, index]));
+
+function phaseRank(task: Task, projectById: Map<string, Project>): number | null {
+  if (task.project === null) return null;
+  const phase = projectById.get(task.project)?.phase;
+  return phase ? (PHASE_RANK.get(phase) ?? null) : null;
+}
 
 function formatDeadline(deadline: string | null): string {
   if (!deadline) return "—";
@@ -103,9 +126,9 @@ function displayName(user: User): string {
 }
 
 // Tâche personnelle (sans projet, session du 2026-10-19) : libellé fixe.
-function projectLabel(task: Task, projectNameById: Map<string, string>): string {
+function projectLabel(task: Task, projectById: Map<string, Project>): string {
   if (task.project === null) return "Personnelle";
-  return projectNameById.get(task.project) ?? "";
+  return projectById.get(task.project)?.name ?? "";
 }
 
 // Tri par colonne (retour direct : "il faut pouvoir trier selon une
@@ -121,7 +144,7 @@ function compareTasks(
   b: Task,
   key: TaskSortKey,
   direction: SortDirection,
-  projectNameById: Map<string, string>,
+  projectById: Map<string, Project>,
 ): number {
   const sign = direction === "asc" ? 1 : -1;
   switch (key) {
@@ -146,8 +169,14 @@ function compareTasks(
     case "project":
       return (
         sign *
-        projectLabel(a, projectNameById).localeCompare(projectLabel(b, projectNameById), "fr")
+        projectLabel(a, projectById).localeCompare(projectLabel(b, projectById), "fr")
       );
+    case "phase": {
+      const rankA = phaseRank(a, projectById);
+      const rankB = phaseRank(b, projectById);
+      if (rankA === null || rankB === null) return rankA === rankB ? 0 : rankA === null ? 1 : -1;
+      return sign * (rankA - rankB);
+    }
     case "deadline":
       return compareNullableStrings(a.deadline, b.deadline, direction);
     case "estimated_hours":
@@ -183,6 +212,7 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [statusFilter, setStatusFilter] = useState(() => defaultStatusSelection(TASK_STATUS_FILTER_OPTIONS));
   const [searchQuery, setSearchQuery] = useState("");
+  const [projectFilter, setProjectFilter] = useState("");
   const [deadlineFrom, setDeadlineFrom] = useState("");
   const [deadlineTo, setDeadlineTo] = useState("");
   const [visibleColumns, setVisibleColumns] = useColumnPreferences<TaskColumnKey>(
@@ -211,6 +241,11 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
       .then(setTeams)
       .catch(() => undefined);
   }, []);
+
+  // Un projet choisi dans une vue peut ne pas exister dans l'autre.
+  useEffect(() => {
+    setProjectFilter("");
+  }, [mode, activeTeam]);
 
   useEffect(() => {
     let cancelled = false;
@@ -409,12 +444,29 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
     }
   }
 
-  const projectNameById = new Map(projects.map((project) => [project.id, project.name]));
+  const projectById = new Map(projects.map((project) => [project.id, project]));
   const teamNameById = new Map(teams.map((team) => [team.id, team.name]));
+  // Filtre « Projet » : seuls les projets présents dans les tâches chargées
+  // (inutile de proposer un projet qui ne donnerait aucun résultat).
+  const projectFilterOptions = (() => {
+    const ids = new Set<string>();
+    let hasPersonal = false;
+    for (const task of tasks ?? []) {
+      if (task.project === null) hasPersonal = true;
+      else ids.add(task.project);
+    }
+    const options = Array.from(ids)
+      .map((id) => ({ value: id, label: projectById.get(id)?.name ?? "Projet inconnu" }))
+      .sort((a, b) => a.label.localeCompare(b.label, "fr"));
+    if (hasPersonal) options.push({ value: PERSONAL_PROJECT_FILTER, label: "Tâches personnelles" });
+    return options;
+  })();
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const filteredTasks = tasks
     ? tasks.filter((task) => {
         if (normalizedQuery && !task.title.toLowerCase().includes(normalizedQuery)) return false;
+        if (projectFilter === PERSONAL_PROJECT_FILTER && task.project !== null) return false;
+        if (projectFilter && projectFilter !== PERSONAL_PROJECT_FILTER && task.project !== projectFilter) return false;
         if (deadlineFrom && (!task.deadline || task.deadline < deadlineFrom)) return false;
         if (deadlineTo && (!task.deadline || task.deadline > deadlineTo)) return false;
         return true;
@@ -422,7 +474,7 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
     : tasks;
   const sortedTasks =
     sortKey && filteredTasks
-      ? [...filteredTasks].sort((a, b) => compareTasks(a, b, sortKey, direction, projectNameById))
+      ? [...filteredTasks].sort((a, b) => compareTasks(a, b, sortKey, direction, projectById))
       : filteredTasks;
 
   return (
@@ -462,6 +514,18 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
         )}
 
         <SearchInput value={searchQuery} onChange={setSearchQuery} placeholder="Rechercher un titre…" />
+
+        <span className="tasks-list-page__project-filter">
+          <Combobox
+            options={projectFilterOptions}
+            value={projectFilter}
+            onChange={setProjectFilter}
+            placeholder="Tous les projets"
+            searchPlaceholder="Rechercher un projet…"
+            emptyLabel="Aucun projet"
+            panelWidth="auto"
+          />
+        </span>
 
         <span className="tasks-list-page__date-range">
           <DatePickerField value={deadlineFrom} onChange={setDeadlineFrom} placeholder="Échéance du…" />
@@ -534,6 +598,9 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
                   {visibleColumns.has("project") && (
                     <SortableColumnHeader label="Projet" columnKey="project" sortKey={sortKey} direction={direction} onSort={toggleSort} />
                   )}
+                  {visibleColumns.has("phase") && (
+                    <SortableColumnHeader label="Phase" columnKey="phase" sortKey={sortKey} direction={direction} onSort={toggleSort} />
+                  )}
                   {visibleColumns.has("deadline") && (
                     <SortableColumnHeader label="Échéance" columnKey="deadline" sortKey={sortKey} direction={direction} onSort={toggleSort} />
                   )}
@@ -602,8 +669,23 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
                           {task.project === null ? (
                             <span className="tasks-list-page__empty-cell">Personnelle</span>
                           ) : (
-                            projectNameById.get(task.project) ?? "—"
+                            projectById.get(task.project)?.name ?? "—"
                           )}
+                        </td>
+                      )}
+                      {visibleColumns.has("phase") && (
+                        <td data-label="Phase">
+                          {(() => {
+                            const project = task.project ? projectById.get(task.project) : undefined;
+                            if (!project?.phase) return <span className="tasks-list-page__empty-cell">—</span>;
+                            return (
+                              <StatusBadge
+                                label={project.phase_display ?? project.phase}
+                                tone="neutral"
+                                icon={projectPhaseIcon(project.phase)}
+                              />
+                            );
+                          })()}
                         </td>
                       )}
                       {visibleColumns.has("deadline") && (
