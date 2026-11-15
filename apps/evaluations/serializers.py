@@ -2,7 +2,7 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from .models import ANSWER_TYPES, SECTIONS, CatalogQuestion, EvaluationSheet, SheetQuestion
-from .services import can_manage_sheets, public_path, sheet_questions
+from .services import can_manage_sheets, internal_evaluation, public_path, sheet_questions
 
 QUESTION_FIELDS = [
     "id", "section", "label", "help_text", "answer_type", "options", "required",
@@ -116,14 +116,35 @@ class SheetPermissionsSerializer(serializers.Serializer):
     can_manage = serializers.BooleanField()
 
 
+class InternalPartSerializer(serializers.Serializer):
+    answers = serializers.DictField(child=serializers.JSONField(allow_null=True))
+    updated_at = serializers.DateTimeField(allow_null=True)
+    updated_by = serializers.CharField(allow_null=True)
+
+
 class SheetDetailSerializer(SheetSummarySerializer):
-    """Détail d'une fiche : résumé, questions actives (les deux parties) et droits."""
+    """Détail d'une fiche : résumé, questions actives (les deux parties),
+    partie chef de projet déjà saisie et droits."""
 
     questions = serializers.SerializerMethodField()
+    internal = serializers.SerializerMethodField()
     permissions = serializers.SerializerMethodField()
 
     class Meta(SheetSummarySerializer.Meta):
-        fields = SheetSummarySerializer.Meta.fields + ["questions", "permissions"]
+        fields = SheetSummarySerializer.Meta.fields + ["questions", "internal", "permissions"]
+
+    @extend_schema_field(InternalPartSerializer)
+    def get_internal(self, obj):
+        evaluation = internal_evaluation(obj)
+        if evaluation is None:
+            return {"answers": {}, "updated_at": None, "updated_by": None}
+        user = evaluation.updated_by
+        name = (f"{user.first_name} {user.last_name}".strip() or user.username) if user else None
+        return {
+            "answers": {str(a.question_id): a.value for a in evaluation.answers.all()},
+            "updated_at": evaluation.updated_at,
+            "updated_by": name,
+        }
 
     @extend_schema_field(SheetQuestionSerializer(many=True))
     def get_questions(self, obj):
@@ -164,3 +185,31 @@ class PublicSheetSerializer(serializers.Serializer):
 
 class DetailMessageSerializer(serializers.Serializer):
     detail = serializers.CharField()
+
+
+class AnswersSerializer(serializers.Serializer):
+    answers = serializers.DictField(child=serializers.JSONField(allow_null=True), required=False, default=dict)
+
+
+class ResponseItemSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    respondent_name = serializers.CharField()
+    created_at = serializers.DateTimeField()
+    status = serializers.ChoiceField(choices=["retenue", "ecartee"])
+    answers = serializers.DictField(child=serializers.JSONField(allow_null=True))
+
+
+class ResultClientItemSerializer(serializers.Serializer):
+    question_id = serializers.UUIDField()
+    summary = serializers.DictField(help_text="Synthèse selon le type : note, nps, yes_no, choices ou text.")
+
+
+class ResultInternalItemSerializer(serializers.Serializer):
+    question_id = serializers.UUIDField()
+    value = serializers.JSONField(allow_null=True)
+
+
+class SheetResultsSerializer(serializers.Serializer):
+    response_count = serializers.IntegerField()
+    client = ResultClientItemSerializer(many=True)
+    interne = ResultInternalItemSerializer(many=True)

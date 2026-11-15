@@ -12,7 +12,7 @@ from apps.common.audit import record_event
 from apps.projects.services import is_project_manager
 
 from .answers import AnswerError, clean_answers
-from .catalog import catalog_scope, get_catalog, swap_position
+from .catalog import catalog_scope, get_catalog, seed_default_catalog, swap_position
 from .definitions import (
     EvaluationPermissionError,
     EvaluationValidationError,
@@ -20,7 +20,7 @@ from .definitions import (
     definition_of,
     ensure_no_dependents,
 )
-from .models import Answer, ClientResponse, EvaluationSheet, SheetQuestion
+from .models import Answer, ClientResponse, EvaluationSheet, InternalEvaluation, SheetQuestion
 
 # Contrairement au catalogue, une question propre à une fiche en brouillon
 # peut changer de type : elle n'a encore aucune réponse.
@@ -101,7 +101,12 @@ def create_sheet(*, actor, project, title, client_intro=""):
     sheet = EvaluationSheet.all_objects.create(
         project=project, title=_clean_title(title), client_intro=(client_intro or "").strip(), created_by=actor
     )
-    sources = list(get_catalog(catalog_scope(project)))
+    scope = catalog_scope(project)
+    # Filet de sécurité : une portée sans aucune question (projet converti en
+    # collaboratif, groupe créé hors signal…) reçoit le catalogue par défaut
+    # avant la copie. Idempotent : rien si la portée a déjà des questions.
+    seed_default_catalog(scope)
+    sources = list(get_catalog(scope))
     copies = {}
     for position, source in enumerate(sources):
         copies[source.pk] = SheetQuestion.all_objects.create(
@@ -317,3 +322,70 @@ def submit_client_response(*, token, respondent_name, answers):
         for question in questions
     )
     return response
+
+
+# --- Partie chef de projet et réponses (tâche 6) -------------------------
+
+
+def internal_evaluation(sheet):
+    return InternalEvaluation.objects.select_related("updated_by").filter(sheet=sheet).first()
+
+
+def internal_answers(sheet):
+    evaluation = internal_evaluation(sheet)
+    if evaluation is None:
+        return {}
+    return {str(a.question_id): a.value for a in evaluation.answers.all()}
+
+
+@transaction.atomic
+def save_internal_evaluation(*, actor, sheet, answers):
+    """Partie chef de projet : une seule par fiche, enregistrement partiel
+    (pas de champ obligatoire imposé), écrase la saisie précédente. Les
+    réponses ne sont jamais supprimées : une réponse vidée garde `value=None`."""
+    _ensure_manage(actor, sheet.project)
+    if sheet.status not in ("ouverte", "close"):
+        raise EvaluationValidationError("La partie chef de projet se remplit une fois la fiche ouverte.")
+    questions = list(sheet_questions(sheet, section="interne"))
+    cleaned = clean_answers(questions, answers or {}, enforce_required=False)
+    evaluation, _ = InternalEvaluation.objects.get_or_create(sheet=sheet, defaults={"updated_by": actor})
+    evaluation.updated_by = actor
+    evaluation.save()
+    for question in questions:
+        Answer.objects.update_or_create(
+            internal_evaluation=evaluation, question=question, defaults={"value": cleaned[str(question.id)]}
+        )
+    return evaluation
+
+
+def _set_response_status(actor, response, from_status, to_status, message):
+    _ensure_manage(actor, response.sheet.project)
+    if response.status != from_status:
+        raise EvaluationValidationError(message)
+    response.status = to_status
+    response.save(update_fields=["status", "updated_at"])
+    return response
+
+
+def discard_response(*, actor, response):
+    return _set_response_status(actor, response, "retenue", "ecartee", "Cette réponse est déjà écartée.")
+
+
+def restore_response(*, actor, response):
+    return _set_response_status(actor, response, "ecartee", "retenue", "Cette réponse n'est pas écartée.")
+
+
+def list_responses(*, actor, sheet):
+    """Toutes les réponses client, retenues et écartées, les plus récentes d'abord."""
+    _ensure_view(actor, sheet.project)
+    responses = ClientResponse.all_objects.filter(sheet=sheet).prefetch_related("answers").order_by("-created_at")
+    return [
+        {
+            "id": str(r.id),
+            "respondent_name": r.respondent_name,
+            "created_at": r.created_at,
+            "status": r.status,
+            "answers": {str(a.question_id): a.value for a in r.answers.all()},
+        }
+        for r in responses
+    ]

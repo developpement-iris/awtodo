@@ -4,6 +4,9 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 
 from .serializers import (
+    AnswersSerializer,
+    ResponseItemSerializer,
+    SheetResultsSerializer,
     CatalogListSerializer,
     CatalogQuestionCreateSerializer,
     CatalogQuestionSerializer,
@@ -83,6 +86,26 @@ sheet_schema = extend_schema_view(
     archive=_sheet_action(),
     rotate_link=extend_schema(
         description="Nouveau jeton : l'ancien lien cesse de fonctionner.", request=None, responses=SheetDetailSerializer
+    ),
+    internal=extend_schema(
+        description=(
+            "Partie chef de projet : une seule par fiche, enregistrement partiel, écrase la saisie précédente. "
+            "Fiche ouverte ou close. `answers` : {id de question interne : valeur}."
+        ),
+        request=AnswersSerializer,
+        responses=SheetDetailSerializer,
+    ),
+    results=extend_schema(responses=SheetResultsSerializer),
+    responses=extend_schema(responses=ResponseItemSerializer(many=True)),
+    response_discard=extend_schema(
+        description="Écarte une réponse (spam, test) : elle sort des résultats, de l'export et des statistiques.",
+        request=None,
+        responses=ResponseItemSerializer(many=True),
+    ),
+    response_restore=extend_schema(request=None, responses=ResponseItemSerializer(many=True)),
+    export=extend_schema(
+        description="Export CSV (séparateur « ; », encodage UTF-8 avec BOM pour Excel).",
+        responses={(200, "text/csv"): OpenApiTypes.STR},
     ),
 )
 

@@ -1,6 +1,9 @@
+import csv
+
 from django.core.exceptions import ValidationError
-from django.http import Http404
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
+from django.utils.text import slugify
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
@@ -12,13 +15,16 @@ from apps.accounts.models import Team
 from apps.projects.models import Project
 from apps.projects.services import accessible_projects
 
-from . import catalog, services
+from . import catalog, results, services
 from .answers import AnswerError
 from .definitions import EvaluationPermissionError, EvaluationValidationError
-from .models import CatalogQuestion, EvaluationSheet, SheetQuestion
+from .models import CatalogQuestion, ClientResponse, EvaluationSheet, SheetQuestion
 from .throttles import EvaluationSubmitThrottle
 from .schema import catalog_schema, public_get_schema, public_submit_schema, sheet_schema
 from .serializers import (
+    AnswersSerializer,
+    ResponseItemSerializer,
+    SheetResultsSerializer,
     CatalogQuestionCreateSerializer,
     CatalogQuestionSerializer,
     MoveSerializer,
@@ -223,6 +229,57 @@ class SheetViewSet(EvaluationErrorsMixin, viewsets.GenericViewSet):
     @action(detail=True, methods=["post"], url_path="rotate-link")
     def rotate_link(self, request, pk=None):
         return self._lifecycle(services.rotate_sheet_link)
+
+    @action(detail=True, methods=["put"])
+    def internal(self, request, pk=None):
+        serializer = AnswersSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        sheet = self.get_object()
+        services.save_internal_evaluation(actor=request.user, sheet=sheet, answers=serializer.validated_data["answers"])
+        return self._detail(sheet)
+
+    @action(detail=True, methods=["get"])
+    def results(self, request, pk=None):
+        sheet = services.get_sheet(actor=request.user, sheet=self.get_object())
+        return Response(SheetResultsSerializer(results.sheet_results(sheet)).data)
+
+    @action(detail=True, methods=["get"])
+    def responses(self, request, pk=None):
+        items = services.list_responses(actor=request.user, sheet=self.get_object())
+        return Response(ResponseItemSerializer(items, many=True).data)
+
+    def _response(self, sheet, response_id):
+        try:
+            return get_object_or_404(ClientResponse.all_objects, pk=response_id, sheet=sheet)
+        except (ValueError, ValidationError):
+            raise Http404
+
+    def _responses_after(self, sheet):
+        return Response(ResponseItemSerializer(services.list_responses(actor=self.request.user, sheet=sheet), many=True).data)
+
+    @action(detail=True, methods=["post"], url_path=r"responses/(?P<response_id>[^/.]+)/discard")
+    def response_discard(self, request, pk=None, response_id=None):
+        sheet = self.get_object()
+        services.discard_response(actor=request.user, response=self._response(sheet, response_id))
+        return self._responses_after(sheet)
+
+    @action(detail=True, methods=["post"], url_path=r"responses/(?P<response_id>[^/.]+)/restore")
+    def response_restore(self, request, pk=None, response_id=None):
+        sheet = self.get_object()
+        services.restore_response(actor=request.user, response=self._response(sheet, response_id))
+        return self._responses_after(sheet)
+
+    @action(detail=True, methods=["get"])
+    def export(self, request, pk=None):
+        sheet = services.get_sheet(actor=request.user, sheet=self.get_object())
+        header, rows = results.export_csv_rows(sheet)
+        response = HttpResponse(content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="evaluation-{slugify(sheet.title) or sheet.id}.csv"'
+        response.write("\ufeff")  # BOM : accents corrects à l'ouverture dans Excel
+        writer = csv.writer(response, delimiter=";")
+        writer.writerow(header)
+        writer.writerows(rows)
+        return response
 
 
 class PublicEvaluationView(EvaluationErrorsMixin, APIView):
