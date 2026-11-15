@@ -16,6 +16,8 @@ def _display_value(field, raw_value):
     spécifique par modèle : Django expose déjà `field.choices`."""
     if raw_value is None:
         return ""
+    if isinstance(raw_value, list):
+        return ", ".join(str(item) for item in raw_value)
     if field.choices:
         return str(dict(field.choices).get(raw_value, raw_value))
     return str(raw_value)

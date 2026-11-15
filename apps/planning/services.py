@@ -7,18 +7,22 @@ projet : `_ensure_can_X` lève, `can_X` renvoie un booléen via `_check`.
 """
 
 import logging
+from datetime import datetime, time, timedelta
 
 from dateutil.rrule import rrulestr
 from django.core.cache import cache
 from django.db.models import Q
 from django.utils import timezone
 
+from apps.accounts.models import User
+from apps.accounts.services import is_organisation_admin
 from apps.common.audit import record_changes, record_event
 from apps.common.permissions import check_permission
 from apps.communication.services import get_o365_connection
-from apps.projects.models import ProjectMembership
-from apps.projects.services import is_project_manager, is_project_member
+from apps.projects.models import Project, ProjectMembership
+from apps.projects.services import accessible_projects, contributor_projects, is_project_manager, is_project_member
 
+from . import workload
 from .graph_client import list_graph_busy_slots
 from .models import (
     CalendarEvent,
@@ -1183,3 +1187,219 @@ def clear_working_hours_override(*, actor, target_user, week_start):
     _ensure_can_manage_working_hours(actor, target_user)
     WorkingHoursWeekOverride.objects.filter(user=target_user, week_start=week_start).delete()
     return get_working_hours(actor=actor, target_user=target_user, week_start=week_start)
+
+
+# --- Feuille de route : phases et jalons (session du 2026-11-14) -------------
+
+ROADMAP_KINDS = ("phase", "jalon")
+# Le Gantt affiche jusqu'à une année entière ; les phases sont rarement
+# récurrentes, et l'expansion reste plafonnée par MAX_OCCURRENCES.
+MAX_ROADMAP_WINDOW_DAYS = 370
+
+
+def get_roadmap_entries(*, actor, window_start, window_end, project_ids=None):
+    """Phases et jalons du planning des projets dont l'acteur est contributeur
+    (un lecteur n'a pas accès au planning), pour le Gantt de l'écran Projets."""
+    _require_actor(actor)
+    _validate_window(window_start, window_end)
+    if window_end - window_start > timedelta(days=MAX_ROADMAP_WINDOW_DAYS):
+        raise PlanningValidationError(f"La fenêtre ne peut pas dépasser {MAX_ROADMAP_WINDOW_DAYS} jours.")
+    projects = contributor_projects(actor)
+    if project_ids:
+        projects = projects.filter(id__in=project_ids)
+    entries = list(
+        ProjectPlanningEntry.objects.filter(project__in=projects, kind__in=ROADMAP_KINDS, start__lt=window_end)
+    )
+    occurrences = expand_occurrences(entries, window_start, window_end)
+    return {
+        "entries": [
+            {
+                "id": str(occ["source"].id),
+                "project_id": str(occ["source"].project_id),
+                "title": occ["source"].title,
+                "kind": occ["source"].kind,
+                "all_day": occ["source"].all_day,
+                "start": _iso(occ["start"]),
+                "end": _iso(occ["end"]),
+            }
+            for occ in occurrences
+        ]
+    }
+
+
+# --- Charge par personne (session du 2026-11-14) ----------------------------
+
+MAX_WORKLOAD_DAYS = 370
+WORKLOAD_GRANULARITIES = ("month", "week")
+
+
+def _workload_people(actor):
+    """Qui l'acteur peut voir : un admin d'organisation voit toute son
+    organisation ; un chef de projet, lui-même et les contributeurs des
+    projets qu'il dirige ; sinon, lui seul."""
+    if is_organisation_admin(actor):
+        return User.objects.filter(organisation_id=actor.organisation_id, is_active=True, is_service_account=False)
+    managed = ProjectMembership.objects.filter(user=actor, status="active", role="chef_de_projet").values("project_id")
+    member_ids = ProjectMembership.objects.filter(
+        project_id__in=managed, status="active", role__in=ProjectMembership.CONTRIBUTOR_ROLES
+    ).values("user_id")
+    return User.objects.filter(Q(id=actor.id) | Q(id__in=member_ids, is_active=True)).distinct()
+
+
+def _project_end(project, today):
+    """Dernier jour où un projet compte comme « en cours » (`None` = sans
+    fin). Un projet actif dont l'échéance est dépassée reste en cours jusqu'à
+    aujourd'hui ; un projet clôturé s'arrête à son échéance, ou à défaut à sa
+    dernière modification."""
+    if project.status == "cloture":
+        return project.deadline or timezone.localtime(project.updated_at).date()
+    if project.already_in_production or project.deadline is None:
+        return None
+    return max(project.deadline, today)
+
+
+def get_workload(*, actor, first_day, last_day, granularity="month", project_ids=None):
+    """Deux indicateurs par personne et par période :
+    - `projects_count` : projets dont elle est membre ou chef de projet (jamais
+      lecteur) et qui sont en cours sur la période ;
+    - `half_days` : demi-journées réellement planifiées, soit les entrées à
+      horaires du planning projet dont elle est assignée, et les créneaux
+      posés sur des tâches ou incidents d'un projet. Les entrées « journée
+      entière » ne comptent pas (ce sont des périodes, pas du temps travaillé).
+    Le détail nomme seulement les projets que l'acteur peut voir ; les autres
+    sont regroupés (`hidden_*`)."""
+    _require_actor(actor)
+    if granularity not in WORKLOAD_GRANULARITIES:
+        raise PlanningValidationError("Granularité inconnue (« month » ou « week »).")
+    if last_day < first_day:
+        raise PlanningValidationError("La fin doit être postérieure au début.")
+    if (last_day - first_day).days + 1 > MAX_WORKLOAD_DAYS:
+        raise PlanningValidationError(f"La période ne peut pas dépasser {MAX_WORKLOAD_DAYS} jours.")
+
+    tz = timezone.get_current_timezone()
+    window_start = datetime.combine(first_day, time.min, tzinfo=tz)
+    window_end = datetime.combine(last_day + timedelta(days=1), time.min, tzinfo=tz)
+    today = timezone.localdate()
+
+    people = list(_workload_people(actor).order_by("first_name", "last_name", "username"))
+    people_ids = {person.id for person in people}
+    project_filter = {str(pid) for pid in project_ids} if project_ids else None
+
+    def counted(project_id):
+        return project_filter is None or str(project_id) in project_filter
+
+    # Rôles des personnes visibles sur tous leurs projets : sert aux deux
+    # indicateurs (un lecteur ne compte jamais).
+    memberships = list(
+        ProjectMembership.objects.filter(user_id__in=people_ids, status="active").select_related("project")
+    )
+    contributor = {
+        (m.user_id, m.project_id) for m in memberships if m.role in ProjectMembership.CONTRIBUTOR_ROLES
+    }
+    projects = {m.project_id: m.project for m in memberships}
+
+    # Demi-journées planifiées : {user_id: {project_id: {(date, am|pm)}}}.
+    planned = {}
+
+    def add(user_id, project_id, start, end):
+        if (user_id, project_id) not in contributor or not counted(project_id):
+            return
+        slots = {
+            slot
+            for slot in workload.half_days(max(start, window_start), min(end, window_end))
+            if first_day <= slot[0] <= last_day
+        }
+        if slots:
+            planned.setdefault(user_id, {}).setdefault(project_id, set()).update(slots)
+
+    entries = list(
+        ProjectPlanningEntry.objects.filter(all_day=False, start__lt=window_end, assignees__in=people_ids)
+        .distinct()
+        .prefetch_related("assignees")
+    )
+    for occ in expand_occurrences(entries, window_start, window_end):
+        for user in occ["source"].assignees.all():
+            if user.id in people_ids:
+                add(user.id, occ["source"].project_id, occ["start"], occ["end"])
+
+    blocks = ScheduledBlock.objects.filter(
+        owner_id__in=people_ids, start__lt=window_end, end__gt=window_start
+    ).select_related("task", "incident")
+    for block in blocks:
+        if block.task_id:
+            project_id = block.task.project_id
+        else:
+            project_id = block.incident.project_id if block.incident_id else None
+        if project_id is not None:
+            add(block.owner_id, project_id, block.start, block.end)
+
+    visible_ids = set(accessible_projects(actor).values_list("id", flat=True))
+    if is_organisation_admin(actor):
+        visible_ids |= set(
+            Project.all_objects.filter(organisation_id=actor.organisation_id).values_list("id", flat=True)
+        )
+
+    periods = workload.build_periods(first_day, last_day, granularity)
+    rows = []
+    for person in people:
+        engaged = [pid for (uid, pid) in contributor if uid == person.id and counted(pid)]
+        by_period = {}
+        for period in periods:
+            p_start, p_end = period["start"], period["end"]
+            engaged_now = {
+                pid
+                for pid in engaged
+                if workload.project_active_between(
+                    created=timezone.localtime(projects[pid].created_at).date(),
+                    end=_project_end(projects[pid], today),
+                    start_day=p_start,
+                    end_day=p_end,
+                )
+            }
+            per_project = {}
+            all_slots = set()
+            for pid, slots in planned.get(person.id, {}).items():
+                in_period = {slot for slot in slots if p_start <= slot[0] <= p_end}
+                if in_period:
+                    per_project[pid] = in_period
+                    all_slots |= in_period
+            detail, hidden_half_days, hidden_projects = [], set(), 0
+            for pid in engaged_now | set(per_project):
+                slots = per_project.get(pid, set())
+                if pid not in visible_ids:
+                    hidden_half_days |= slots
+                    hidden_projects += 1
+                    continue
+                detail.append(
+                    {
+                        "id": str(pid),
+                        "name": projects[pid].name,
+                        "engaged": pid in engaged_now,
+                        "half_days": len(slots),
+                        "mornings": sum(1 for slot in slots if slot[1] == workload.MORNING),
+                        "afternoons": sum(1 for slot in slots if slot[1] == workload.AFTERNOON),
+                    }
+                )
+            detail.sort(key=lambda item: (-item["half_days"], item["name"].lower()))
+            by_period[period["key"]] = {
+                "projects_count": len(engaged_now),
+                "half_days": len(all_slots),
+                "projects": detail,
+                "hidden_projects": hidden_projects,
+                "hidden_half_days": len(hidden_half_days),
+            }
+        rows.append({"user": _user_dict(person), "periods": by_period})
+
+    return {
+        "granularity": granularity,
+        "periods": [
+            {
+                "key": period["key"],
+                "start": period["start"].isoformat(),
+                "end": period["end"].isoformat(),
+                "capacity_half_days": 2 * workload.working_days(period["start"], period["end"]),
+            }
+            for period in periods
+        ],
+        "people": rows,
+    }

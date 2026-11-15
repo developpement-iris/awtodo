@@ -17,6 +17,7 @@ from .models import Project, ProjectMembership, ProjectVersion
 from .schema import project_schema
 from .serializers import (
     NON_REJECTED_TASK_STATUSES,
+    ProjectCategoriesSerializer,
     ProjectConvertToCollaborativeSerializer,
     ProjectCreateSerializer,
     ProjectDetailsUpdateSerializer,
@@ -42,6 +43,7 @@ from .services import (
     convert_to_collaborative as convert_project_to_collaborative,
     create_project,
     create_project_version,
+    get_project_categories,
     get_project_cover,
     get_project_history,
     get_scoped_history,
@@ -370,6 +372,12 @@ class ProjectViewSet(
         except ProjectPermissionError as exc:
             return Response({"detail": str(exc)}, status=403)
         return Response(ProjectHistoryEntrySerializer(entries, many=True).data)
+
+    @action(detail=False, methods=["get"])
+    def categories(self, request):
+        """Domaines et services déjà utilisés dans l'organisation (session du
+        2026-11-14) — suggestions de la saisie assistée du chef de projet."""
+        return Response(ProjectCategoriesSerializer(get_project_categories(actor=request.user)).data)
 
     @action(detail=False, methods=["get"], url_path="history/export")
     def history_export(self, request):

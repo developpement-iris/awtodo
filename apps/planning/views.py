@@ -2,7 +2,7 @@ from datetime import timedelta
 
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from django.utils.dateparse import parse_datetime
+from django.utils.dateparse import parse_date, parse_datetime
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets
@@ -26,8 +26,10 @@ from .schema import (
     calendar_schema,
     event_schema,
     project_planning_schema,
+    roadmap_schema,
     share_schema,
     working_hours_schema,
+    workload_schema,
 )
 from .serializers import (
     BlockCreateSerializer,
@@ -101,6 +103,50 @@ class CalendarView(_PlanningExceptionMixin, APIView):
             include_outlook=request.query_params.get("outlook") in ("1", "true"),
         )
         return Response(data)
+
+
+@roadmap_schema
+@extend_schema(responses=OpenApiTypes.OBJECT)
+class RoadmapView(_PlanningExceptionMixin, APIView):
+    """Phases et jalons des projets pour le Gantt de l'écran Projets (session
+    du 2026-11-14). Fenêtre `from`/`to` jusqu'à 370 jours, `projects`
+    optionnel (identifiants séparés par des virgules)."""
+
+    def get(self, request):
+        raw_start = _aware(parse_datetime(request.query_params.get("from") or ""))
+        raw_end = _aware(parse_datetime(request.query_params.get("to") or ""))
+        if raw_start is None or raw_end is None:
+            raise services.PlanningValidationError("Dates « from » / « to » invalides (format ISO 8601 attendu).")
+        return Response(
+            services.get_roadmap_entries(
+                actor=request.user,
+                window_start=raw_start,
+                window_end=raw_end,
+                project_ids=_id_list(request, "projects"),
+            )
+        )
+
+
+@workload_schema
+@extend_schema(responses=OpenApiTypes.OBJECT)
+class WorkloadView(_PlanningExceptionMixin, APIView):
+    """Charge par personne (session du 2026-11-14) : projets en cours et
+    demi-journées planifiées, par mois ou par semaine."""
+
+    def get(self, request):
+        first_day = parse_date(request.query_params.get("from") or "")
+        last_day = parse_date(request.query_params.get("to") or "")
+        if first_day is None or last_day is None:
+            raise services.PlanningValidationError("Dates « from » / « to » invalides (format YYYY-MM-DD attendu).")
+        return Response(
+            services.get_workload(
+                actor=request.user,
+                first_day=first_day,
+                last_day=last_day,
+                granularity=request.query_params.get("granularity") or "month",
+                project_ids=_id_list(request, "projects"),
+            )
+        )
 
 
 @event_schema
@@ -290,7 +336,6 @@ class WorkingHoursView(_PlanningExceptionMixin, APIView):
         raw = request.query_params.get("week")
         if not raw:
             return None
-        from django.utils.dateparse import parse_date
 
         parsed = parse_date(raw)
         if parsed is None:

@@ -59,6 +59,14 @@ class Project(UUIDModel, TimeStampedModel, StatusLifecycleModel):
     # `update_project_details`).
     already_in_production = models.BooleanField(default=False)
     priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, null=True, blank=True)
+    # Catégorisation pour la feuille de route (session du 2026-11-14) — saisie
+    # assistée par le chef de projet : il choisit une valeur déjà utilisée
+    # dans l'organisation ou en crée une. Pas de table de référence : la
+    # liste se construit au fil des projets (voir `get_project_categories`),
+    # les quasi-doublons (casse, accents) sont ramenés à l'orthographe déjà
+    # en place par `update_project_details`.
+    domain = models.CharField(max_length=80, blank=True, default="")
+    services = models.JSONField(default=list, blank=True)
     team = models.ForeignKey(
         "accounts.Team", null=True, blank=True, on_delete=models.PROTECT, related_name="projects"
     )

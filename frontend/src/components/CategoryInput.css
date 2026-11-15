@@ -1,0 +1,95 @@
+.category-input {
+  width: 100%;
+}
+
+.category-input__field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 36px;
+  padding: 3px var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  cursor: text;
+  transition: border-color 0.12s ease;
+}
+
+.category-input__field:focus-within {
+  border-color: var(--color-accent);
+}
+
+.category-input__field input {
+  flex: 1;
+  min-width: 90px;
+  border: none;
+  background: none;
+  padding: 4px 2px;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: var(--color-text);
+  outline: none;
+}
+
+.category-input__field input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.category-input__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  font-size: 12.5px;
+  color: var(--color-text);
+}
+
+.category-input__chip button {
+  display: inline-flex;
+  border: none;
+  background: none;
+  padding: 2px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+.category-input__chip button:hover {
+  color: var(--color-text);
+}
+
+/* Position posée en inline par AnchoredPanel. */
+.category-input__panel {
+  z-index: 80;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-overlay);
+  overflow-y: auto;
+}
+
+.category-input__list {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-1);
+  max-height: 240px;
+}
+
+.category-input__list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.category-input__list li.is-active {
+  background: var(--color-bg);
+}

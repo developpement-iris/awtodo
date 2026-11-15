@@ -395,6 +395,9 @@ export interface Project {
   // Phase d'avancement, distincte du statut actif/clôturé (session du 2026-11-03).
   phase: ProjectPhase | null;
   phase_display: string | null;
+  // Catégorisation pour la feuille de route (session du 2026-11-14), "" / [] = non renseigné.
+  domain: string;
+  services: string[];
   // Clé d'image de la bibliothèque (`lib/projectCovers.ts`), "" = monogramme.
   cover_image: string;
   // Version de l'image importée (`cover_image === "upload"`), clé de cache.

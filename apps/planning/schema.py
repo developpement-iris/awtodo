@@ -90,3 +90,24 @@ project_planning_schema = extend_schema_view(
     entry_detail=_update(ProjectEntryUpdateSerializer),
     entry_cancel=no_body(),
 )
+
+roadmap_schema = extend_schema_view(
+    get=extend_schema(
+        parameters=[
+            *_WINDOW,
+            OpenApiParameter("projects", OpenApiTypes.STR, description="Identifiants séparés par des virgules."),
+        ],
+        responses=_OBJECT,
+    )
+)
+workload_schema = extend_schema_view(
+    get=extend_schema(
+        parameters=[
+            OpenApiParameter("from", OpenApiTypes.DATE, required=True, description="Premier jour (inclus)."),
+            OpenApiParameter("to", OpenApiTypes.DATE, required=True, description="Dernier jour (inclus), 370 jours au plus."),
+            OpenApiParameter("granularity", OpenApiTypes.STR, enum=["month", "week"], description="Découpage, « month » par défaut."),
+            OpenApiParameter("projects", OpenApiTypes.STR, description="Ne compter que ces projets (identifiants séparés par des virgules)."),
+        ],
+        responses=_OBJECT,
+    )
+)

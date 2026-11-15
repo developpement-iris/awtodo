@@ -1,16 +1,26 @@
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { getRoadmapEntries, type RoadmapEntry } from "../../api/client";
+import { Combobox } from "../../components/Combobox";
+import { PRIORITY_ORDER, PROJECT_PHASE_OPTIONS } from "../../lib/badges";
+import { categoryKey } from "../../lib/categoryKey";
 import type { Project } from "../../types/watodo";
 import { ProjectCover } from "./ProjectCover";
-import { coverTone, formatProjectDate, parseIsoDate, projectProgress, teamLabel } from "./projectDisplay";
+import { ProjectsWorkload } from "./ProjectsWorkload";
+import { coverTone, formatProjectDate, memberName, parseIsoDate, projectProgress, teamLabel } from "./projectDisplay";
 import "./ProjectCover.css";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const ZOOM_STORAGE_KEY = "awtodo:projects-gantt-zoom";
+const GROUP_STORAGE_KEY = "awtodo:projects-gantt-group";
 const START_FORMAT = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+const INDIVIDUAL_TEAM = "__individuel__";
+const NONE = "__aucun__";
 
 type Unit = "day" | "week" | "month" | "quarter" | "year";
 type Zoom = "week" | "month" | "quarter" | "year";
+type GroupBy = "none" | "domain" | "service" | "team" | "phase";
+type View = "gantt" | "workload";
 
 // Chaque échelle affiche UNE période qui occupe toute la largeur du
 // diagramme (on navigue de période en période), découpée en graduations.
@@ -21,6 +31,32 @@ const ZOOMS: Record<Zoom, { label: string; minor: Unit }> = {
   year: { label: "Année", minor: "month" },
 };
 const ZOOM_ORDER: Zoom[] = ["week", "month", "quarter", "year"];
+
+const GROUP_OPTIONS: { value: GroupBy; label: string }[] = [
+  { value: "none", label: "Sans regroupement" },
+  { value: "domain", label: "Par domaine" },
+  { value: "service", label: "Par service" },
+  { value: "team", label: "Par groupe" },
+  { value: "phase", label: "Par phase" },
+];
+
+const PRIORITY_LABELS: Record<string, string> = {
+  basse: "Basse",
+  moyenne: "Moyenne",
+  haute: "Haute",
+  critique: "Critique",
+};
+
+interface Filters {
+  domain: string;
+  service: string;
+  team: string;
+  phase: string;
+  priority: string;
+  person: string;
+}
+
+const EMPTY_FILTERS: Filters = { domain: "", service: "", team: "", phase: "", priority: "", person: "" };
 
 interface GanttItem {
   project: Project;
@@ -132,14 +168,85 @@ function buildSegments(periodStart: Date, periodEnd: Date, zoom: Zoom): Segment[
   return segments;
 }
 
-function readZoom(): Zoom {
+function readStored<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
   try {
-    const saved = window.localStorage.getItem(ZOOM_STORAGE_KEY);
-    if (saved && saved in ZOOMS) return saved as Zoom;
+    const saved = window.localStorage.getItem(key);
+    if (saved && (allowed as readonly string[]).includes(saved)) return saved as T;
   } catch {
-    // ignore — échelle par défaut.
+    // ignore — valeur par défaut.
   }
-  return "quarter";
+  return fallback;
+}
+
+function store(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // ignore — le choix ne persistera pas au rechargement.
+  }
+}
+
+/** Personnes qui travaillent sur le projet : membres et chefs de projet, jamais les lecteurs. */
+function contributors(project: Project) {
+  return project.members.filter((membership) => membership.role !== "lecteur");
+}
+
+function matches(project: Project, filters: Filters): boolean {
+  if (filters.domain && categoryKey(project.domain) !== filters.domain) return false;
+  if (filters.service && !project.services.some((service) => categoryKey(service) === filters.service)) return false;
+  if (filters.team === INDIVIDUAL_TEAM ? project.team !== null : filters.team && project.team !== filters.team) {
+    return false;
+  }
+  if (filters.phase && (project.phase ?? NONE) !== filters.phase) return false;
+  if (filters.priority && (project.priority ?? NONE) !== filters.priority) return false;
+  if (filters.person && !contributors(project).some((membership) => membership.user.id === filters.person)) {
+    return false;
+  }
+  return true;
+}
+
+/** Libellés distincts (casse et accents ignorés), triés. */
+function distinctOptions(values: string[]): { value: string; label: string }[] {
+  const byKey = new Map<string, string>();
+  for (const value of values) if (value && !byKey.has(categoryKey(value))) byKey.set(categoryKey(value), value);
+  return [...byKey.entries()]
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, "fr"));
+}
+
+interface Group {
+  key: string;
+  label: string;
+  items: GanttItem[];
+}
+
+function groupItems(items: GanttItem[], groupBy: GroupBy): Group[] {
+  if (groupBy === "none") return [{ key: "all", label: "", items }];
+  const groups = new Map<string, Group>();
+  const push = (key: string, label: string, item: GanttItem) => {
+    if (!groups.has(key)) groups.set(key, { key, label, items: [] });
+    groups.get(key)!.items.push(item);
+  };
+  for (const item of items) {
+    const { project } = item;
+    if (groupBy === "domain") {
+      push(project.domain ? categoryKey(project.domain) : NONE, project.domain || "Sans domaine", item);
+    } else if (groupBy === "service") {
+      // Un projet à plusieurs services apparaît dans chacun.
+      if (project.services.length === 0) push(NONE, "Sans service", item);
+      for (const service of project.services) push(categoryKey(service), service, item);
+    } else if (groupBy === "team") {
+      push(project.team ?? NONE, project.team_name ?? "Projets individuels", item);
+    } else {
+      push(project.phase ?? NONE, project.phase_display ?? "Phase non définie", item);
+    }
+  }
+  const phaseRank = (key: string) => PROJECT_PHASE_OPTIONS.findIndex((option) => option.value === key);
+  return [...groups.values()].sort((a, b) => {
+    if (a.key === NONE || b.key === NONE) return a.key === NONE ? 1 : -1;
+    if (groupBy === "phase") return phaseRank(a.key) - phaseRank(b.key);
+    return a.label.localeCompare(b.label, "fr");
+  });
 }
 
 interface ProjectsRoadmapProps {
@@ -148,37 +255,236 @@ interface ProjectsRoadmapProps {
 }
 
 /**
- * Diagramme de Gantt des projets actifs (session du 2026-11-03) : une barre
- * par projet, de sa date de création à son échéance, remplie selon
- * l'avancement des tâches. La période affichée (semaine/mois/trimestre/
- * année) occupe toute la largeur ; on se déplace d'une période à l'autre.
- * Un projet « déjà en production » n'a pas de fin ; un projet sans échéance
- * n'est pas placé.
+ * Feuille de route de l'écran Projets. Deux vues sur les mêmes filtres :
+ * - le Gantt (session du 2026-11-03) : une ligne par projet, la durée de vie
+ *   du projet (création → échéance) et, depuis le 2026-11-14, ses phases et
+ *   jalons saisis dans son planning ;
+ * - la charge par personne (session du 2026-11-14), voir `ProjectsWorkload`.
  */
 export function ProjectsRoadmap({ projects, onOpen }: ProjectsRoadmapProps) {
+  const [view, setView] = useState<View>("gantt");
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [groupBy, setGroupBy] = useState<GroupBy>(() =>
+    readStored(GROUP_STORAGE_KEY, ["none", "domain", "service", "team", "phase"] as const, "none"),
+  );
+
+  const active = useMemo(() => projects.filter((project) => project.status === "actif"), [projects]);
+  const shown = useMemo(() => active.filter((project) => matches(project, filters)), [active, filters]);
+  const filtered = Object.values(filters).some(Boolean);
+
+  const options = useMemo(() => {
+    const teams = new Map<string, string>();
+    const people = new Map<string, string>();
+    for (const project of active) {
+      if (project.team && project.team_name) teams.set(project.team, project.team_name);
+      for (const membership of contributors(project)) people.set(membership.user.id, memberName(membership));
+    }
+    const teamOptions = [...teams.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, "fr"));
+    if (active.some((project) => project.team === null)) {
+      teamOptions.push({ value: INDIVIDUAL_TEAM, label: "Projets individuels" });
+    }
+    return {
+      domains: distinctOptions(active.map((project) => project.domain)),
+      services: distinctOptions(active.flatMap((project) => project.services)),
+      teams: teamOptions,
+      people: [...people.entries()]
+        .map(([value, label]) => ({ value, label }))
+        .sort((a, b) => a.label.localeCompare(b.label, "fr")),
+    };
+  }, [active]);
+
+  function setFilter(key: keyof Filters, value: string) {
+    setFilters((current) => ({ ...current, [key]: value }));
+  }
+
+  function changeGroup(value: GroupBy) {
+    setGroupBy(value);
+    store(GROUP_STORAGE_KEY, value);
+  }
+
+  return (
+    <section className="projects-roadmap" aria-labelledby="projects-roadmap-title">
+      <header className="projects-roadmap__header">
+        <div>
+          <h2 id="projects-roadmap-title">Feuille de route</h2>
+          <p>
+            {view === "gantt"
+              ? "Projets actifs, leurs phases et leurs jalons."
+              : "Projets en cours et demi-journées planifiées, par personne."}
+          </p>
+        </div>
+        <div className="gantt-zoom" role="tablist" aria-label="Vue de la feuille de route">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "gantt"}
+            className={view === "gantt" ? "is-active" : ""}
+            onClick={() => setView("gantt")}
+          >
+            Calendrier
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "workload"}
+            className={view === "workload" ? "is-active" : ""}
+            onClick={() => setView("workload")}
+          >
+            Charge
+          </button>
+        </div>
+      </header>
+
+      <div className="roadmap-filters" role="group" aria-label="Filtrer la feuille de route">
+        <RoadmapFilter
+          label="Domaine"
+          all="Tous les domaines"
+          options={options.domains}
+          value={filters.domain}
+          onChange={(value) => setFilter("domain", value)}
+        />
+        <RoadmapFilter
+          label="Service"
+          all="Tous les services"
+          options={options.services}
+          value={filters.service}
+          onChange={(value) => setFilter("service", value)}
+        />
+        <RoadmapFilter
+          label="Groupe"
+          all="Tous les groupes"
+          options={options.teams}
+          value={filters.team}
+          onChange={(value) => setFilter("team", value)}
+        />
+        <RoadmapFilter
+          label="Phase"
+          all="Toutes les phases"
+          options={[...PROJECT_PHASE_OPTIONS, { value: NONE, label: "Non définie" }]}
+          value={filters.phase}
+          onChange={(value) => setFilter("phase", value)}
+        />
+        <RoadmapFilter
+          label="Priorité"
+          all="Toutes les priorités"
+          options={[
+            ...[...PRIORITY_ORDER].reverse().map((value) => ({ value, label: PRIORITY_LABELS[value] })),
+            { value: NONE, label: "Non définie" },
+          ]}
+          value={filters.priority}
+          onChange={(value) => setFilter("priority", value)}
+        />
+        <RoadmapFilter
+          label="Personne"
+          all="Tout le monde"
+          options={options.people}
+          value={filters.person}
+          onChange={(value) => setFilter("person", value)}
+        />
+        {view === "gantt" && (
+          <label className="roadmap-filters__field">
+            <span>Regrouper</span>
+            <Combobox
+              options={GROUP_OPTIONS}
+              value={groupBy}
+              onChange={(value) => changeGroup(value as GroupBy)}
+              clearable={false}
+            />
+          </label>
+        )}
+        {filtered && (
+          <button type="button" className="roadmap-filters__reset" onClick={() => setFilters(EMPTY_FILTERS)}>
+            <RotateCcw size={13} strokeWidth={1.75} aria-hidden="true" />
+            Réinitialiser
+          </button>
+        )}
+      </div>
+
+      {view === "gantt" ? (
+        <GanttView projects={shown} groupBy={groupBy} filtered={filtered} onOpen={onOpen} />
+      ) : (
+        <ProjectsWorkload
+          projectIds={filtered ? shown.map((project) => project.id) : null}
+          personId={filters.person}
+          projects={active}
+          onOpen={onOpen}
+        />
+      )}
+    </section>
+  );
+}
+
+interface RoadmapFilterProps {
+  label: string;
+  all: string;
+  options: { value: string; label: string }[];
+  value: string;
+  onChange: (value: string) => void;
+}
+
+function RoadmapFilter({ label, all, options, value, onChange }: RoadmapFilterProps) {
+  return (
+    <label className="roadmap-filters__field">
+      <span>{label}</span>
+      <Combobox options={[{ value: "", label: all }, ...options]} value={value} onChange={onChange} placeholder={all} />
+    </label>
+  );
+}
+
+interface GanttViewProps {
+  projects: Project[];
+  groupBy: GroupBy;
+  filtered: boolean;
+  onOpen: (project: Project) => void;
+}
+
+function GanttView({ projects, groupBy, filtered, onOpen }: GanttViewProps) {
   const today = useMemo(() => startOfDay(new Date()), []);
-  const [zoom, setZoom] = useState<Zoom>(readZoom);
-  const [periodStart, setPeriodStart] = useState(() => unitStart(today, readZoom()));
+  const [zoom, setZoom] = useState<Zoom>(() => readStored(ZOOM_STORAGE_KEY, ZOOM_ORDER, "quarter"));
+  const [periodStart, setPeriodStart] = useState(() => unitStart(today, zoom));
   const periodEnd = shiftUnit(periodStart, zoom, 1);
   const totalDays = daysBetween(periodStart, periodEnd);
   const showsToday = today >= periodStart && today < periodEnd;
+  const [entries, setEntries] = useState<RoadmapEntry[]>([]);
+
+  const periodKey = periodStart.getTime();
+  useEffect(() => {
+    let cancelled = false;
+    getRoadmapEntries(new Date(periodKey), shiftUnit(new Date(periodKey), zoom, 1))
+      .then((result) => {
+        if (!cancelled) setEntries(result.entries);
+      })
+      .catch(() => {
+        // Sans phases, le Gantt garde la barre création → échéance.
+        if (!cancelled) setEntries([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [periodKey, zoom]);
+
+  const entriesByProject = useMemo(() => {
+    const byProject = new Map<string, RoadmapEntry[]>();
+    for (const entry of entries) {
+      if (!byProject.has(entry.project_id)) byProject.set(entry.project_id, []);
+      byProject.get(entry.project_id)!.push(entry);
+    }
+    return byProject;
+  }, [entries]);
 
   function changeZoom(next: Zoom) {
     // Reste autour d'aujourd'hui s'il est visible, sinon autour de la
     // période actuellement consultée.
     setPeriodStart(unitStart(showsToday ? today : periodStart, next));
     setZoom(next);
-    try {
-      window.localStorage.setItem(ZOOM_STORAGE_KEY, next);
-    } catch {
-      // ignore
-    }
+    store(ZOOM_STORAGE_KEY, next);
   }
 
   const { items, unplaced } = useMemo(() => {
-    const active = projects.filter((project) => project.status === "actif");
     const placed: GanttItem[] = [];
-    for (const project of active) {
+    for (const project of projects) {
       if (!project.deadline && !project.already_in_production) continue;
       const start = startOfDay(new Date(project.created_at));
       const end = project.deadline ? parseIsoDate(project.deadline) : null;
@@ -189,52 +495,70 @@ export function ProjectsRoadmap({ projects, onOpen }: ProjectsRoadmapProps) {
       if (!b.end) return -1;
       return a.end.getTime() - b.end.getTime();
     });
-    return { items: placed, unplaced: active.length - placed.length };
+    return { items: placed, unplaced: projects.length - placed.length };
   }, [projects, today]);
 
+  const groups = useMemo(() => groupItems(items, groupBy), [items, groupBy]);
   const segments = useMemo(() => buildSegments(periodStart, periodEnd, zoom), [periodStart, periodEnd, zoom]);
   const percent = (date: Date) => (daysBetween(periodStart, date) / totalDays) * 100;
 
+  /** Position d'un intervalle [start, endExclusive[ rogné à la période, ou `null` s'il est hors période. */
+  function place(start: Date, endExclusive: Date | null) {
+    if (endExclusive !== null && endExclusive <= periodStart) return null;
+    if (start >= periodEnd) return null;
+    const clipStart = start < periodStart;
+    const clipEnd = endExclusive === null || endExclusive > periodEnd;
+    const left = clipStart ? 0 : percent(start);
+    const right = clipEnd ? 100 : percent(endExclusive!);
+    return { left, width: right - left, clipStart, clipEnd };
+  }
+
   return (
-    <section className="projects-roadmap" aria-labelledby="projects-roadmap-title">
-      <header className="projects-roadmap__header">
-        <div>
-          <h2 id="projects-roadmap-title">Feuille de route</h2>
-          <p>Projets actifs, de leur création à leur échéance.</p>
+    <>
+      <div className="projects-roadmap__controls">
+        <div className="gantt-zoom" role="group" aria-label="Échelle du diagramme">
+          {ZOOM_ORDER.map((value) => (
+            <button
+              key={value}
+              type="button"
+              className={zoom === value ? "is-active" : ""}
+              aria-pressed={zoom === value}
+              onClick={() => changeZoom(value)}
+            >
+              {ZOOMS[value].label}
+            </button>
+          ))}
         </div>
-        <div className="projects-roadmap__controls">
-          <div className="gantt-zoom" role="group" aria-label="Échelle du diagramme">
-            {ZOOM_ORDER.map((value) => (
-              <button
-                key={value}
-                type="button"
-                className={zoom === value ? "is-active" : ""}
-                aria-pressed={zoom === value}
-                onClick={() => changeZoom(value)}
-              >
-                {ZOOMS[value].label}
-              </button>
-            ))}
-          </div>
-          <ul className="gantt-legend" aria-label="Légende">
-            <li>
-              <span className="gantt-legend__swatch gantt-legend__swatch--progress" />
-              Avancement
-            </li>
-            <li>
-              <span className="gantt-legend__swatch gantt-legend__swatch--today" />
-              Aujourd'hui
-            </li>
-            <li>
-              <span className="gantt-legend__swatch gantt-legend__swatch--late" />
-              En retard
-            </li>
-          </ul>
-        </div>
-      </header>
+        <ul className="gantt-legend" aria-label="Légende">
+          <li>
+            <span className="gantt-legend__swatch gantt-legend__swatch--progress" />
+            Avancement
+          </li>
+          <li>
+            <span className="gantt-legend__swatch gantt-legend__swatch--phase" />
+            Phase
+          </li>
+          <li>
+            <span className="gantt-legend__swatch gantt-legend__swatch--milestone" />
+            Jalon
+          </li>
+          <li>
+            <span className="gantt-legend__swatch gantt-legend__swatch--today" />
+            Aujourd'hui
+          </li>
+          <li>
+            <span className="gantt-legend__swatch gantt-legend__swatch--late" />
+            En retard
+          </li>
+        </ul>
+      </div>
 
       {items.length === 0 ? (
-        <p className="projects-roadmap__empty">Aucun projet actif n'a d'échéance pour l'instant.</p>
+        <p className="projects-roadmap__empty">
+          {filtered
+            ? "Aucun projet ne correspond à ces filtres."
+            : "Aucun projet actif n'a d'échéance pour l'instant."}
+        </p>
       ) : (
         <div className="gantt">
           <div className="gantt__row gantt__row--head">
@@ -295,82 +619,27 @@ export function ProjectsRoadmap({ projects, onOpen }: ProjectsRoadmapProps) {
               )}
             </div>
 
-            {items.map(({ project, start, end, late }) => {
-              const progress = projectProgress(project);
-              const startLabel = START_FORMAT.format(start);
-              const period = end
-                ? `du ${startLabel} au ${formatProjectDate(project.deadline!)}`
-                : `en production depuis le ${startLabel}`;
-              // Barre rognée aux bords de la période ; hors période, un repère
-              // indique de quel côté se trouve le projet.
-              const endExclusive = end ? shiftUnit(end, "day", 1) : null;
-              const before = endExclusive !== null && endExclusive <= periodStart;
-              const after = start >= periodEnd;
-              const clipStart = start < periodStart;
-              const clipEnd = endExclusive === null || endExclusive > periodEnd;
-              const left = clipStart ? 0 : percent(start);
-              const right = clipEnd ? 100 : percent(endExclusive!);
-              const width = right - left;
-              // Avancement placé sur toute la durée du projet, puis rapporté à
-              // la portion visible (sinon une barre rognée mentirait).
-              let fill = progress;
-              if (endExclusive && width > 0) {
-                const span = daysBetween(start, endExclusive);
-                const reached = percent(shiftUnit(start, "day", Math.round((span * progress) / 100)));
-                fill = Math.min(100, Math.max(0, ((reached - left) / width) * 100));
-              }
-
-              return (
-                <div key={project.id} className="gantt__row">
-                  <button type="button" className="gantt__label" onClick={() => onOpen(project)}>
-                    <ProjectCover project={project} size="mini" />
-                    <span className="gantt__label-copy">
-                      <strong>{project.name}</strong>
-                      <small>
-                        {teamLabel(project)}
-                        {project.phase_display && ` · ${project.phase_display}`}
-                      </small>
-                    </span>
-                  </button>
-                  <div className="gantt__track">
-                    {before && (
-                      <span className="gantt__offscreen gantt__offscreen--before">
-                        <ChevronLeft size={13} strokeWidth={1.75} aria-hidden="true" />
-                        Échéance {formatProjectDate(project.deadline!)}
-                      </span>
-                    )}
-                    {after && (
-                      <span className="gantt__offscreen gantt__offscreen--after">
-                        Début {startLabel}
-                        <ChevronRight size={13} strokeWidth={1.75} aria-hidden="true" />
-                      </span>
-                    )}
-                    {!before && !after && (
-                      <button
-                        type="button"
-                        className={[
-                          "gantt__bar",
-                          `project-cover--tone-${coverTone(project.id)}`,
-                          end ? "" : "gantt__bar--open",
-                          clipStart ? "gantt__bar--clip-start" : "",
-                          clipEnd ? "gantt__bar--clip-end" : "",
-                          late ? "gantt__bar--late" : "",
-                        ]
-                          .filter(Boolean)
-                          .join(" ")}
-                        style={{ left: `${left}%`, width: `max(8px, ${width}%)` }}
-                        onClick={() => onOpen(project)}
-                        title={`${project.name} — ${period} · ${progress} %${late ? " · échéance dépassée" : ""}`}
-                        aria-label={`${project.name}, ${period}, ${progress} % des tâches terminées${late ? ", échéance dépassée" : ""}`}
-                      >
-                        <span className="gantt__bar-progress" style={{ width: `${fill}%` }} />
-                        {width >= 8 && <span className="gantt__bar-label">{progress} %</span>}
-                      </button>
-                    )}
+            {groups.map((group) => (
+              <div key={group.key} role="group" aria-label={group.label || undefined}>
+                {group.label && (
+                  <div className="gantt__group">
+                    <span>{group.label}</span>
+                    <small>{group.items.length}</small>
                   </div>
-                </div>
-              );
-            })}
+                )}
+                {group.items.map((item) => (
+                  <GanttRow
+                    key={`${group.key}-${item.project.id}`}
+                    item={item}
+                    entries={entriesByProject.get(item.project.id) ?? []}
+                    place={place}
+                    percent={percent}
+                    periodEnd={periodEnd}
+                    onOpen={onOpen}
+                  />
+                ))}
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -381,6 +650,133 @@ export function ProjectsRoadmap({ projects, onOpen }: ProjectsRoadmapProps) {
           {unplaced > 1 ? "s" : ""}.
         </p>
       )}
-    </section>
+    </>
+  );
+}
+
+interface GanttRowProps {
+  item: GanttItem;
+  entries: RoadmapEntry[];
+  place: (start: Date, endExclusive: Date | null) => { left: number; width: number; clipStart: boolean; clipEnd: boolean } | null;
+  percent: (date: Date) => number;
+  periodEnd: Date;
+  onOpen: (project: Project) => void;
+}
+
+const ENTRY_FORMAT = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" });
+
+function GanttRow({ item, entries, place, percent, periodEnd, onOpen }: GanttRowProps) {
+  const { project, start, end, late } = item;
+  const progress = projectProgress(project);
+  const startLabel = START_FORMAT.format(start);
+  const period = end ? `du ${startLabel} au ${formatProjectDate(project.deadline!)}` : `en production depuis le ${startLabel}`;
+  const endExclusive = end ? new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1) : null;
+  const lifespan = place(start, endExclusive);
+  // Hors période : un repère indique de quel côté se trouve le projet.
+  const offscreen = lifespan ? null : start >= periodEnd ? "after" : "before";
+  const phases = entries.filter((entry) => entry.kind === "phase");
+  const milestones = entries.filter((entry) => entry.kind === "jalon");
+  const detailed = entries.length > 0;
+  const tone = `project-cover--tone-${coverTone(project.id)}`;
+
+  // Avancement placé sur toute la durée du projet, puis rapporté à la
+  // portion visible (sinon une barre rognée mentirait).
+  let fill = progress;
+  if (lifespan && endExclusive && lifespan.width > 0) {
+    const span = daysBetween(start, endExclusive);
+    const reachedDay = new Date(start.getFullYear(), start.getMonth(), start.getDate() + Math.round((span * progress) / 100));
+    fill = Math.min(100, Math.max(0, ((percent(reachedDay) - lifespan.left) / lifespan.width) * 100));
+  }
+
+  return (
+    <div className="gantt__row">
+      <button type="button" className="gantt__label" onClick={() => onOpen(project)}>
+        <ProjectCover project={project} size="mini" />
+        <span className="gantt__label-copy">
+          <strong>{project.name}</strong>
+          <small>
+            {teamLabel(project)}
+            {project.phase_display && ` · ${project.phase_display}`}
+            {detailed && ` · ${progress} %`}
+          </small>
+        </span>
+      </button>
+      <div className="gantt__track">
+        {!lifespan && offscreen === "before" && (
+          <span className="gantt__offscreen gantt__offscreen--before">
+            <ChevronLeft size={13} strokeWidth={1.75} aria-hidden="true" />
+            Échéance {formatProjectDate(project.deadline!)}
+          </span>
+        )}
+        {!lifespan && offscreen === "after" && (
+          <span className="gantt__offscreen gantt__offscreen--after">
+            Début {startLabel}
+            <ChevronRight size={13} strokeWidth={1.75} aria-hidden="true" />
+          </span>
+        )}
+        {lifespan && (
+          <button
+            type="button"
+            className={[
+              detailed ? "gantt__lifespan" : "gantt__bar",
+              tone,
+              end ? "" : "gantt__bar--open",
+              lifespan.clipStart ? "gantt__bar--clip-start" : "",
+              lifespan.clipEnd ? "gantt__bar--clip-end" : "",
+              late ? "gantt__bar--late" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            style={{ left: `${lifespan.left}%`, width: `max(8px, ${lifespan.width}%)` }}
+            onClick={() => onOpen(project)}
+            title={`${project.name} — ${period} · ${progress} %${late ? " · échéance dépassée" : ""}`}
+            aria-label={`${project.name}, ${period}, ${progress} % des tâches terminées${late ? ", échéance dépassée" : ""}`}
+          >
+            {!detailed && (
+              <>
+                <span className="gantt__bar-progress" style={{ width: `${fill}%` }} />
+                {lifespan.width >= 8 && <span className="gantt__bar-label">{progress} %</span>}
+              </>
+            )}
+          </button>
+        )}
+        {phases.map((entry) => {
+          const phaseStart = startOfDay(new Date(entry.start));
+          const last = new Date(new Date(entry.end).getTime() - 1);
+          const position = place(phaseStart, new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1));
+          if (!position) return null;
+          const dates = `${ENTRY_FORMAT.format(phaseStart)} → ${ENTRY_FORMAT.format(last)}`;
+          return (
+            <button
+              key={`${entry.id}-${entry.start}`}
+              type="button"
+              className={`gantt__phase ${tone}${position.clipStart ? " gantt__bar--clip-start" : ""}${position.clipEnd ? " gantt__bar--clip-end" : ""}`}
+              style={{ left: `${position.left}%`, width: `max(6px, ${position.width}%)` }}
+              onClick={() => onOpen(project)}
+              title={`${entry.title} · ${dates}`}
+              aria-label={`${project.name}, phase ${entry.title}, ${dates}`}
+            >
+              {position.width >= 6 && <span>{entry.title}</span>}
+            </button>
+          );
+        })}
+        {milestones.map((entry) => {
+          const day = startOfDay(new Date(entry.start));
+          const position = place(day, new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1));
+          if (!position) return null;
+          return (
+            <button
+              key={`${entry.id}-${entry.start}`}
+              type="button"
+              className="gantt__milestone"
+              style={{ left: `${position.left + position.width / 2}%` }}
+              onClick={() => onOpen(project)}
+              title={`${entry.title} · ${ENTRY_FORMAT.format(day)}`}
+              aria-label={`${project.name}, jalon ${entry.title}, ${ENTRY_FORMAT.format(day)}`}
+            />
+          );
+        })}
+      </div>
+    </div>
   );
 }

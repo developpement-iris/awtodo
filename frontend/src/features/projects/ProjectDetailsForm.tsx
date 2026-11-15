@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import { updateProjectDetails, uploadProjectCover, type ProjectDetailsUpdatePayload } from "../../api/client";
+import {
+  getProjectCategories,
+  updateProjectDetails,
+  uploadProjectCover,
+  type ProjectCategories,
+  type ProjectDetailsUpdatePayload,
+} from "../../api/client";
+import { CategoryInput } from "../../components/CategoryInput";
 import { Checkbox } from "../../components/Checkbox";
 import { Combobox } from "../../components/Combobox";
 import { DatePickerField } from "../../components/DatePickerField";
@@ -24,6 +31,8 @@ interface FormValues {
   priority: string;
   deadline: string;
   already_in_production: boolean;
+  domain: string;
+  services: string[];
 }
 
 function valuesFrom(project: Project): FormValues {
@@ -35,6 +44,8 @@ function valuesFrom(project: Project): FormValues {
     priority: project.priority ?? "",
     deadline: project.deadline ?? "",
     already_in_production: project.already_in_production,
+    domain: project.domain,
+    services: project.services,
   };
 }
 
@@ -51,6 +62,8 @@ function diffPayload(initial: FormValues, current: FormValues): ProjectDetailsUp
   if (current.already_in_production !== initial.already_in_production) {
     payload.already_in_production = current.already_in_production;
   }
+  if (current.domain !== initial.domain) payload.domain = current.domain;
+  if (current.services.join("\n") !== initial.services.join("\n")) payload.services = current.services;
   return payload;
 }
 
@@ -64,6 +77,21 @@ export function ProjectDetailsForm({ project, onUpdated }: ProjectDetailsFormPro
   const [values, setValues] = useState(() => valuesFrom(project));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [categories, setCategories] = useState<ProjectCategories>({ domains: [], services: [] });
+
+  useEffect(() => {
+    let cancelled = false;
+    getProjectCategories()
+      .then((result) => {
+        if (!cancelled) setCategories(result);
+      })
+      .catch(() => {
+        // Sans suggestions, la saisie libre reste possible.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id]);
 
   // Réinitialisé seulement au changement de projet : une mise à jour du
   // projet par ailleurs (import d'image, membre ajouté) ne doit pas effacer
@@ -131,6 +159,27 @@ export function ProjectDetailsForm({ project, onUpdated }: ProjectDetailsFormPro
             value={values.cover_image}
             onChange={(value) => update("cover_image", value)}
             onImport={handleImport}
+          />
+        </div>
+
+        <div className="project-details-form__field">
+          <label htmlFor="project-domain">Domaine</label>
+          <CategoryInput
+            id="project-domain"
+            values={values.domain ? [values.domain] : []}
+            onChange={(next) => update("domain", next[0] ?? "")}
+            suggestions={categories.domains}
+          />
+        </div>
+
+        <div className="project-details-form__field project-details-form__field--wide">
+          <label htmlFor="project-services">Services concernés</label>
+          <CategoryInput
+            id="project-services"
+            multiple
+            values={values.services}
+            onChange={(next) => update("services", next)}
+            suggestions={categories.services}
           />
         </div>
 

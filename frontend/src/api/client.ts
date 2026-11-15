@@ -228,7 +228,19 @@ export interface ProjectDetailsUpdatePayload {
   priority?: Project["priority"];
   phase?: Project["phase"];
   cover_image?: string;
+  domain?: string;
+  services?: string[];
   [key: string]: unknown;
+}
+
+// Domaines et services déjà utilisés dans l'organisation (saisie assistée).
+export interface ProjectCategories {
+  domains: string[];
+  services: string[];
+}
+
+export function getProjectCategories(): Promise<ProjectCategories> {
+  return getJson<ProjectCategories>("/projects/categories/");
 }
 
 // Image d'illustration importée (session du 2026-11-03) — déjà compressée
@@ -1363,4 +1375,76 @@ export function composeProjectCommunicationMessage(
   payload: { subject: string; body: string; channel_ids: string[]; task_id?: string; incident_id?: string },
 ): Promise<CommunicationMessage> {
   return postJson<CommunicationMessage>(`/communication/projects/${projectId}/messages/`, payload);
+}
+
+// --- Feuille de route et charge (session du 2026-11-14) -------------------
+
+/** Phase ou jalon du planning d'un projet, pour le Gantt de l'écran Projets. */
+export interface RoadmapEntry {
+  id: string;
+  project_id: string;
+  title: string;
+  kind: "phase" | "jalon";
+  all_day: boolean;
+  start: string;
+  end: string;
+}
+
+export function getRoadmapEntries(from: Date, to: Date): Promise<{ entries: RoadmapEntry[] }> {
+  return getJson<{ entries: RoadmapEntry[] }>(
+    `/planning/roadmap/${buildQuery({ from: from.toISOString(), to: to.toISOString() })}`,
+  );
+}
+
+export type WorkloadGranularity = "month" | "week";
+
+export interface WorkloadProjectLine {
+  id: string;
+  name: string;
+  /** Membre ou chef de projet d'un projet en cours sur la période. */
+  engaged: boolean;
+  half_days: number;
+  mornings: number;
+  afternoons: number;
+}
+
+export interface WorkloadCell {
+  projects_count: number;
+  half_days: number;
+  projects: WorkloadProjectLine[];
+  /** Projets que vous ne voyez pas : comptés, mais pas nommés. */
+  hidden_projects: number;
+  hidden_half_days: number;
+}
+
+export interface WorkloadPeriod {
+  key: string;
+  start: string;
+  end: string;
+  capacity_half_days: number;
+}
+
+export interface Workload {
+  granularity: WorkloadGranularity;
+  periods: WorkloadPeriod[];
+  people: {
+    user: { id: string; username: string; first_name: string; last_name: string };
+    periods: Record<string, WorkloadCell>;
+  }[];
+}
+
+export function getWorkload(params: {
+  from: string;
+  to: string;
+  granularity: WorkloadGranularity;
+  projects?: string[];
+}): Promise<Workload> {
+  return getJson<Workload>(
+    `/planning/workload/${buildQuery({
+      from: params.from,
+      to: params.to,
+      granularity: params.granularity,
+      projects: params.projects?.length ? params.projects.join(",") : undefined,
+    })}`,
+  );
 }

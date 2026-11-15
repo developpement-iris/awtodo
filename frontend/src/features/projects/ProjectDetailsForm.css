@@ -141,3 +141,13 @@
     grid-template-columns: 1fr;
   }
 }
+
+.project-details-form__field--wide {
+  grid-column: span 2;
+}
+
+@media (max-width: 720px) {
+  .project-details-form__field--wide {
+    grid-column: 1 / -1;
+  }
+}

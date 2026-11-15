@@ -5,6 +5,7 @@ from apps.common.schema import FILE_UPLOAD, file_response, no_body
 from apps.common.serializers import ProjectHistoryEntrySerializer
 
 from .serializers import (
+    ProjectCategoriesSerializer,
     ProjectConvertToCollaborativeSerializer,
     ProjectCreateSerializer,
     ProjectDetailsUpdateSerializer,
@@ -49,6 +50,7 @@ project_schema = extend_schema_view(
     convert_to_collaborative=_update(ProjectConvertToCollaborativeSerializer),
     invite_member=extend_schema(request=ProjectInviteExternalSerializer, responses={201: ProjectSerializer}),
     remove_member=_update(ProjectMemberRemoveSerializer),
+    categories=extend_schema(responses=ProjectCategoriesSerializer),
     history=extend_schema(responses=ProjectHistoryEntrySerializer(many=True)),
     history_export=extend_schema(responses={(200, "text/csv"): OpenApiTypes.STR}),
 )

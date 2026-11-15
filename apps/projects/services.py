@@ -1,4 +1,5 @@
 import contextvars
+import unicodedata
 from contextlib import contextmanager
 
 from django.db.models import Q
@@ -470,7 +471,66 @@ EDITABLE_DETAIL_FIELDS = (
     "priority",
     "phase",
     "cover_image",
+    "domain",
+    "services",
 )
+
+MAX_CATEGORY_LENGTH = 80
+MAX_PROJECT_SERVICES = 10
+
+
+def _category_key(value):
+    """Clé de comparaison d'une catégorie : sans casse ni accents, espaces
+    réduits — « Pôle  planning » et « pole planning » sont la même valeur."""
+    decomposed = unicodedata.normalize("NFKD", value)
+    without_accents = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    return " ".join(without_accents.casefold().split())
+
+
+def _clean_category(value):
+    cleaned = " ".join(str(value or "").split())
+    if len(cleaned) > MAX_CATEGORY_LENGTH:
+        raise ProjectValidationError(f"« {cleaned[:30]}… » dépasse {MAX_CATEGORY_LENGTH} caractères.")
+    return cleaned
+
+
+def _existing_categories(organisation, *, exclude_project=None):
+    """Domaines et services déjà utilisés dans l'organisation, toutes
+    orthographes confondues — un seul aller-retour en base."""
+    rows = Project.objects.filter(organisation=organisation)
+    if exclude_project is not None:
+        rows = rows.exclude(pk=exclude_project.pk)
+    domains, services = [], []
+    for domain, project_services in rows.values_list("domain", "services"):
+        if domain:
+            domains.append(domain)
+        services.extend(item for item in (project_services or []) if isinstance(item, str) and item)
+    return domains, services
+
+
+def _canonical(value, known):
+    """Orthographe déjà en place dans l'organisation si elle existe (la
+    première rencontrée), sinon la valeur saisie."""
+    key = _category_key(value)
+    for candidate in known:
+        if _category_key(candidate) == key:
+            return candidate
+    return value
+
+
+def _distinct_sorted(values):
+    seen = {}
+    for value in values:
+        seen.setdefault(_category_key(value), value)
+    return sorted(seen.values(), key=_category_key)
+
+
+def get_project_categories(*, actor):
+    """Suggestions pour la saisie assistée du domaine et des services
+    (session du 2026-11-14) : valeurs déjà utilisées dans l'organisation de
+    l'acteur, dédoublonnées sans tenir compte de la casse ni des accents."""
+    domains, services = _existing_categories(actor.organisation)
+    return {"domains": _distinct_sorted(domains), "services": _distinct_sorted(services)}
 
 
 def update_project_details(*, actor, project, **changes):
@@ -490,6 +550,23 @@ def update_project_details(*, actor, project, **changes):
         if not name:
             raise ProjectValidationError("Le nom du projet est obligatoire.")
         changes["name"] = name
+
+    if "domain" in changes or "services" in changes:
+        known_domains, known_services = _existing_categories(project.organisation, exclude_project=project)
+        if "domain" in changes:
+            domain = _clean_category(changes["domain"])
+            changes["domain"] = _canonical(domain, known_domains) if domain else ""
+        if "services" in changes:
+            cleaned, seen = [], set()
+            for raw in changes["services"] or []:
+                service = _clean_category(raw)
+                if not service or _category_key(service) in seen:
+                    continue
+                seen.add(_category_key(service))
+                cleaned.append(_canonical(service, known_services))
+            if len(cleaned) > MAX_PROJECT_SERVICES:
+                raise ProjectValidationError(f"{MAX_PROJECT_SERVICES} services au maximum par projet.")
+            changes["services"] = cleaned
 
     if changes.get("cover_image") == "upload" and not ProjectCoverUpload.objects.filter(project=project).exists():
         raise ProjectValidationError("Aucune image importée pour ce projet.")

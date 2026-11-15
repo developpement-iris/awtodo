@@ -59,6 +59,8 @@ class ProjectSerializer(serializers.ModelSerializer):
             "status_display",
             "phase",
             "phase_display",
+            "domain",
+            "services",
             "cover_image",
             "cover_updated_at",
             "deadline",
@@ -144,6 +146,17 @@ class ProjectDetailsUpdateSerializer(serializers.Serializer):
     priority = serializers.ChoiceField(choices=PRIORITY_CHOICES, required=False, allow_null=True)
     phase = serializers.ChoiceField(choices=Project.PHASE_CHOICES, required=False, allow_null=True)
     cover_image = serializers.ChoiceField(choices=Project.COVER_IMAGE_CHOICES, required=False, allow_blank=True)
+    domain = serializers.CharField(max_length=80, required=False, allow_blank=True)
+    services = serializers.ListField(
+        child=serializers.CharField(max_length=80, allow_blank=True), required=False, max_length=20
+    )
+
+
+class ProjectCategoriesSerializer(serializers.Serializer):
+    """Suggestions de la saisie assistée (domaine, services)."""
+
+    domains = serializers.ListField(child=serializers.CharField(), read_only=True)
+    services = serializers.ListField(child=serializers.CharField(), read_only=True)
 
 
 class ProjectNotepadUpdateSerializer(serializers.Serializer):
