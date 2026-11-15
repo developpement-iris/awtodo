@@ -7,6 +7,7 @@ from apps.accounts.services import is_organisation_admin
 from apps.budgeting.models import BudgetLine
 from apps.budgeting.services import get_budget_summary_for_manager
 from apps.documentation.services import get_pending_doc_count
+from apps.evaluations.results import evaluation_insights
 from apps.incidents.models import Incident
 from apps.incidents.services import (
     get_global_incident_stats,
@@ -347,7 +348,14 @@ def _load_budget_summary(actor, project, project_ids):
     return get_budget_summary_for_manager(actor=actor)
 
 
+def _load_evaluation_insights(actor, project, project_ids):
+    if project is not None:
+        return evaluation_insights([project.id])
+    return evaluation_insights(project_ids or [])
+
+
 _LOADERS = {
+    "evaluation_insights": _load_evaluation_insights,
     "project_task_insights": _load_project_task_insights,
     "incident_insights": _load_incident_insights,
     "project_user_stats": _load_project_user_stats,
@@ -384,6 +392,20 @@ def _normalize_default_data(metric, raw):
                     "capex_total": float(row["capex_total"]),
                 }
                 for row in raw
+            ],
+        }
+    if render_hint == "table" and metric["loader"] == "evaluation_insights":
+        return {
+            "type": "table",
+            "rows": [
+                {
+                    "Groupe": row["groupe"],
+                    "Partie": row["partie"],
+                    "Question": row["question"],
+                    "Résultat": row["resultat"],
+                    "Réponses": row["reponses"],
+                }
+                for row in raw[data_key]
             ],
         }
     if render_hint == "feed":
