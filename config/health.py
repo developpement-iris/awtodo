@@ -1,8 +1,8 @@
-"""Endpoint de santé pour le monitoring (UptimeRobot) de la phase Render.
+"""Endpoint de santé pour le monitoring (UptimeRobot, health check Clever).
 
-Touche réellement la base (SELECT 1) : un ping régulier sert à la fois à
-tenir Render éveillé (seuil de veille ~15 min) et à empêcher la mise en
-pause de Supabase pour inactivité (mesurée en requêtes DB réelles).
+Touche réellement la base (SELECT 1) : un ping régulier vérifie la
+connexion à Supabase et empêche sa mise en pause pour inactivité
+(mesurée en requêtes DB réelles).
 Voir docs/deploiement-intermediaire.md.
 """
 

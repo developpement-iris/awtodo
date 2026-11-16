@@ -22,7 +22,6 @@ frontend/.impeccable
 .idea
 docs/
 folio-claude-handoff/
-render.yaml
 desktop.ini
 *.md
 

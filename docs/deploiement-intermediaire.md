@@ -1,4 +1,39 @@
-# Watodo — Déploiement intermédiaire (Render + Supabase + UptimeRobot)
+# Awtodo — Déploiement (Clever Cloud + Supabase + UptimeRobot)
+
+## État actuel (2026-11-16) — Clever Cloud seul
+
+**Render est coupé.** La production tourne uniquement sur Clever Cloud (application Docker, `Dockerfile` à la racine), avec la même base Supabase.
+
+- **Adresse** : `https://awtodo.reparstores.com` — CNAME `awtodo` → `domain.par.clever-cloud.com.` dans la zone OVH de `reparstores.com` (vrai alias, pas une redirection), certificat Let's Encrypt émis par Clever. L'adresse `*.cleverapps.io` reste joignable en secours.
+- **Variables Clever** : `DJANGO_SETTINGS_MODULE=config.settings.staging`, `DJANGO_SECRET_KEY`, `DATABASE_URL` (Supabase), `DJANGO_ALLOWED_HOSTS` et `CSRF_TRUSTED_ORIGINS` (les deux domaines, **sans espace ni guillemets**), `FRONTEND_BASE_URL=https://awtodo.reparstores.com` (liens des e-mails), `EMAIL_*`. Contrairement à Render, aucun nom d'hôte n'est ajouté automatiquement : un domaine absent de `DJANGO_ALLOWED_HOSTS` donne un 400 sur toute l'API alors que la page s'affiche. Toute modification de variable demande un **redémarrage** de l'application.
+- **Surveillance** : UptimeRobot sur `https://awtodo.reparstores.com/api/health/` (évite aussi la mise en pause de Supabase après 7 jours sans requête).
+- **Synchro Outlook** : aucune dépendance au domaine (client credentials, appels sortants uniquement) — rien à changer dans l'App Registration Entra.
+
+### Déployer
+
+Toujours depuis `main` à jour, jamais depuis une branche de fonctionnalité. Le conteneur ne lance **que** gunicorn : ni `migrate` ni `bootstrap_admin` au démarrage (un redémarrage de la plateforme les rejouerait sur la base de production).
+
+1. **Si le déploiement contient une migration**, l'appliquer d'abord, en local (PowerShell, à la racine du dépôt) :
+   ```powershell
+   git switch main; git pull
+   $env:DJANGO_SECRET_KEY = "x"; $env:DJANGO_ALLOWED_HOSTS = "localhost"
+   $env:DATABASE_URL = "<URL Supabase>"
+   .venv\Scripts\python.exe manage.py showmigrations --settings=config.settings.staging   # contrôle
+   .venv\Scripts\python.exe manage.py migrate --settings=config.settings.staging
+   Remove-Item Env:DATABASE_URL
+   ```
+2. **Pousser vers Clever** : `git push clever main:master` (clé SSH enregistrée dans la console Clever requise). Suivre le build dans la console ou avec `clever logs`.
+3. Vérifier `https://awtodo.reparstores.com/api/health/` → `{"status": "ok", "database": "ok"}`.
+
+Migrer **avant** de pousser : sinon le nouveau code tourne quelques minutes sur un schéma incomplet (erreurs 500). Une migration additive (nouvelle table, nouvelle colonne nullable) ne gêne pas l'ancien code encore en ligne ; une migration qui renomme ou supprime une colonne demande un déploiement plus soigné.
+
+Pour créer ou promouvoir un administrateur : même préambule que l'étape 1, puis `manage.py bootstrap_admin --settings=config.settings.staging` avec `ADMIN_USERNAME`/`ADMIN_EMAIL`/`ADMIN_PASSWORD` définies.
+
+---
+
+## Historique — phase Render (06/08/2026 → 16/11/2026)
+
+Tout ce qui suit décrit la phase Render, aujourd'hui terminée. `render.yaml` a été retiré du dépôt le 2026-11-16. Conservé pour mémoire.
 
 **Statut : acté, session du 06/08/2026.** Phase de test en conditions réelles (SSO, webhook ticketing) avant le déploiement définitif sur AWS. Référencé depuis CLAUDE.md — à lire uniquement pour les tâches touchant à cette phase de déploiement, pas à chaque session.
 

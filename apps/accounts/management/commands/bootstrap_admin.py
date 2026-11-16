@@ -9,7 +9,7 @@ class Command(BaseCommand):
     help = (
         "Crée (ou met à jour) un compte administrateur à partir de variables "
         "d'environnement, pour amorcer une instance déployée sans accès shell "
-        "(Render free tier). Lancé dans le buildCommand après `migrate`. "
+        "Lancé à la main après `migrate` (jamais au démarrage du conteneur). "
         "Idempotent : sans les variables, ne fait rien ; si le compte existe "
         "déjà, ne réécrit que les droits (pas le mot de passe, sauf "
         "ADMIN_FORCE_PASSWORD=1)."
