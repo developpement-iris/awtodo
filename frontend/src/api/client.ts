@@ -60,6 +60,15 @@ import type {
   User,
   WorkingHoursDay,
   WorkingHoursSchedule,
+  EvaluationAnswerValue,
+  EvaluationCatalog,
+  EvaluationClientResponse,
+  EvaluationQuestion,
+  EvaluationQuestionInput,
+  EvaluationResults,
+  EvaluationSheetDetail,
+  EvaluationSheetSummary,
+  PublicEvaluation,
 } from "../types/watodo";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
@@ -1446,5 +1455,181 @@ export function getWorkload(params: {
       granularity: params.granularity,
       projects: params.projects?.length ? params.projects.join(",") : undefined,
     })}`,
+  );
+}
+
+// --- Fiches d'évaluation (session du 2026-11-13) --------------------------
+
+/** Erreur d'une fiche d'évaluation : `questionId` désigne la question fautive. */
+export class EvaluationApiError extends Error {
+  questionId: string | null;
+  status: number;
+
+  constructor(message: string, status: number, questionId: string | null = null) {
+    super(message);
+    this.status = status;
+    this.questionId = questionId;
+  }
+}
+
+async function evaluationRequest<T>(path: string, init: RequestInit = {}, isPublic = false): Promise<T> {
+  const options: RequestInit = { ...init };
+  if (init.body !== undefined) {
+    options.headers = { "Content-Type": "application/json", ...(init.headers as Record<string, string> | undefined) };
+  }
+  // Pages publiques : jamais d'en-tête d'authentification.
+  const response = isPublic ? await fetch(`${API_BASE_URL}${path}`, options) : await authFetch(path, options);
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    const questionId = payload && typeof payload.question === "string" ? payload.question : null;
+    throw new EvaluationApiError(errorMessage(payload, path, response.status), response.status, questionId);
+  }
+  if (response.status === 204) return undefined as T;
+  return response.json() as Promise<T>;
+}
+
+function evaluationJson<T>(method: string, path: string, body?: Record<string, unknown>): Promise<T> {
+  return evaluationRequest<T>(path, { method, body: body === undefined ? undefined : JSON.stringify(body) });
+}
+
+export type EvaluationScope = { team: string } | { project: string };
+
+function scopeQuery(scope: EvaluationScope): string {
+  return "team" in scope ? `team=${scope.team}` : `project=${scope.project}`;
+}
+
+export function getEvaluationCatalog(scope: EvaluationScope, includeArchived = false): Promise<EvaluationCatalog> {
+  return evaluationJson<EvaluationCatalog>(
+    "GET",
+    `/evaluations/catalog/?${scopeQuery(scope)}${includeArchived ? "&include_archived=1" : ""}`,
+  );
+}
+
+export function createCatalogQuestion(scope: EvaluationScope, input: EvaluationQuestionInput): Promise<EvaluationQuestion> {
+  return evaluationJson<EvaluationQuestion>("POST", "/evaluations/catalog/", { ...scope, ...input });
+}
+
+export function updateCatalogQuestion(id: string, changes: Partial<EvaluationQuestionInput>): Promise<EvaluationQuestion> {
+  return evaluationJson<EvaluationQuestion>("PATCH", `/evaluations/catalog/${id}/`, changes);
+}
+
+export function archiveCatalogQuestion(id: string): Promise<EvaluationQuestion> {
+  return evaluationJson<EvaluationQuestion>("POST", `/evaluations/catalog/${id}/archive/`);
+}
+
+export function restoreCatalogQuestion(id: string): Promise<EvaluationQuestion> {
+  return evaluationJson<EvaluationQuestion>("POST", `/evaluations/catalog/${id}/restore/`);
+}
+
+export function moveCatalogQuestion(id: string, direction: "up" | "down"): Promise<EvaluationQuestion> {
+  return evaluationJson<EvaluationQuestion>("POST", `/evaluations/catalog/${id}/move/`, { direction });
+}
+
+export function getEvaluationSheets(projectId: string): Promise<EvaluationSheetSummary[]> {
+  return evaluationJson<EvaluationSheetSummary[]>("GET", `/evaluations/sheets/?project=${projectId}`);
+}
+
+export function createEvaluationSheet(projectId: string, title: string, clientIntro = ""): Promise<EvaluationSheetDetail> {
+  return evaluationJson<EvaluationSheetDetail>("POST", "/evaluations/sheets/", {
+    project: projectId,
+    title,
+    client_intro: clientIntro,
+  });
+}
+
+export function getEvaluationSheet(id: string): Promise<EvaluationSheetDetail> {
+  return evaluationJson<EvaluationSheetDetail>("GET", `/evaluations/sheets/${id}/`);
+}
+
+export function updateEvaluationSheet(
+  id: string,
+  changes: { title?: string; client_intro?: string },
+): Promise<EvaluationSheetDetail> {
+  return evaluationJson<EvaluationSheetDetail>("PATCH", `/evaluations/sheets/${id}/`, changes);
+}
+
+export function addSheetQuestion(sheetId: string, input: EvaluationQuestionInput): Promise<EvaluationQuestion> {
+  return evaluationJson<EvaluationQuestion>("POST", `/evaluations/sheets/${sheetId}/questions/`, { ...input });
+}
+
+export function updateSheetQuestion(
+  sheetId: string,
+  questionId: string,
+  changes: Partial<EvaluationQuestionInput>,
+): Promise<EvaluationQuestion> {
+  return evaluationJson<EvaluationQuestion>("PATCH", `/evaluations/sheets/${sheetId}/questions/${questionId}/`, changes);
+}
+
+export function archiveSheetQuestion(sheetId: string, questionId: string): Promise<EvaluationQuestion> {
+  return evaluationJson<EvaluationQuestion>("POST", `/evaluations/sheets/${sheetId}/questions/${questionId}/archive/`);
+}
+
+export function moveSheetQuestion(sheetId: string, questionId: string, direction: "up" | "down"): Promise<EvaluationQuestion> {
+  return evaluationJson<EvaluationQuestion>("POST", `/evaluations/sheets/${sheetId}/questions/${questionId}/move/`, {
+    direction,
+  });
+}
+
+export function transitionEvaluationSheet(
+  id: string,
+  action: "open" | "close" | "reopen" | "archive" | "rotate-link",
+): Promise<EvaluationSheetDetail> {
+  return evaluationJson<EvaluationSheetDetail>("POST", `/evaluations/sheets/${id}/${action}/`);
+}
+
+export function saveInternalEvaluation(
+  id: string,
+  answers: Record<string, EvaluationAnswerValue>,
+): Promise<EvaluationSheetDetail> {
+  return evaluationJson<EvaluationSheetDetail>("PUT", `/evaluations/sheets/${id}/internal/`, { answers });
+}
+
+export function getEvaluationResults(id: string): Promise<EvaluationResults> {
+  return evaluationJson<EvaluationResults>("GET", `/evaluations/sheets/${id}/results/`);
+}
+
+export function getEvaluationResponses(id: string): Promise<EvaluationClientResponse[]> {
+  return evaluationJson<EvaluationClientResponse[]>("GET", `/evaluations/sheets/${id}/responses/`);
+}
+
+/** Renvoie la liste à jour de toutes les réponses de la fiche. */
+export function setEvaluationResponseStatus(
+  sheetId: string,
+  responseId: string,
+  action: "discard" | "restore",
+): Promise<EvaluationClientResponse[]> {
+  return evaluationJson<EvaluationClientResponse[]>(
+    "POST",
+    `/evaluations/sheets/${sheetId}/responses/${responseId}/${action}/`,
+  );
+}
+
+export async function downloadEvaluationExport(id: string, title: string): Promise<void> {
+  const response = await authFetch(`/evaluations/sheets/${id}/export/`);
+  if (!response.ok) {
+    throw new Error(`Échec de l'export (${response.status})`);
+  }
+  const slug = title
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  saveBlob(await response.blob(), `evaluation-${slug || id}.csv`);
+}
+
+export function getPublicEvaluation(token: string): Promise<PublicEvaluation> {
+  return evaluationRequest<PublicEvaluation>(`/evaluations/public/${token}/`, {}, true);
+}
+
+export function submitPublicEvaluation(
+  token: string,
+  respondentName: string,
+  answers: Record<string, EvaluationAnswerValue>,
+): Promise<{ detail: string }> {
+  return evaluationRequest<{ detail: string }>(
+    `/evaluations/public/${token}/responses/`,
+    { method: "POST", body: JSON.stringify({ respondent_name: respondentName, answers }) },
+    true,
   );
 }

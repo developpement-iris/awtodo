@@ -10,6 +10,7 @@ import {
 import { Combobox } from "../../components/Combobox";
 import { TaskTypesEditor } from "../../components/TaskTypesEditor";
 import { invalidateTaskTypes } from "../../hooks/useTaskTypes";
+import { CatalogEditor } from "../evaluations/CatalogEditor";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 import { useToast } from "../../context/ToastContext";
 import type { Project, ProjectMembership, ProjectRole, Team } from "../../types/watodo";
@@ -273,6 +274,14 @@ export function ProjectAdminTab({ project, onUpdated }: ProjectAdminTabProps) {
             <div className="project-admin-tab__form">
               <h3>Types de tâche</h3>
               <TaskTypesEditor scope={{ project: project.id }} />
+            </div>
+          )}
+          {/* Questions d'évaluation (session du 2026-11-13) : même règle que
+              les types de tâche, un projet de groupe utilise celles du groupe. */}
+          {project.team === null && (
+            <div className="project-admin-tab__form">
+              <h3>Questions d'évaluation</h3>
+              <CatalogEditor scope={{ project: project.id }} />
             </div>
           )}
           {project.permissions.can_convert_to_collaborative && (

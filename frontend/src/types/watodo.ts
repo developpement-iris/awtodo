@@ -167,6 +167,10 @@ export interface ProjectPermissions {
   // Historique d'activité (session du 2026-09-29) — réservé au chef de
   // projet, pas les membres/lecteurs.
   can_view_history: boolean;
+  // Fiches d'évaluation (session du 2026-11-13) : gestion par le chef de
+  // projet, consultation aussi par les admins du groupe et de l'organisation.
+  can_manage_evaluations: boolean;
+  can_view_evaluations: boolean;
 }
 
 // --- Communication de projet (onglet hub) --------------------------------
@@ -978,4 +982,113 @@ export interface WorkingHoursSchedule {
   /** Lundi de la semaine visée, "YYYY-MM-DD" — présent seulement si demandé. */
   week_start: string | null;
   days: WorkingHoursDay[];
+}
+
+// --- Fiches d'évaluation de projet (session du 2026-11-13) ----------------
+// Voir docs/modeles-et-api.md > "Fiches d'évaluation de projet".
+
+export type EvaluationSection = "client" | "interne";
+export type EvaluationAnswerType =
+  | "note_5"
+  | "nps_10"
+  | "oui_non"
+  | "choix_unique"
+  | "choix_multiple"
+  | "texte_court"
+  | "texte_long";
+export type EvaluationAnswerValue = number | string | string[] | null;
+
+export interface EvaluationQuestion {
+  id: string;
+  section: EvaluationSection;
+  label: string;
+  help_text: string;
+  answer_type: EvaluationAnswerType;
+  options: string[];
+  required: boolean;
+  position: number;
+  condition_on: string | null;
+  condition_values: string[];
+  status: "active" | "archived";
+  /** Questions de fiche seulement : copie d'une question du catalogue. */
+  is_generic?: boolean;
+}
+
+export interface EvaluationQuestionInput {
+  section: EvaluationSection;
+  label: string;
+  help_text?: string;
+  answer_type: EvaluationAnswerType;
+  options?: string[];
+  required?: boolean;
+  condition_on?: string | null;
+  condition_values?: string[];
+}
+
+export type EvaluationSheetStatus = "brouillon" | "ouverte" | "close" | "archivee";
+
+export interface EvaluationSheetSummary {
+  id: string;
+  project: string;
+  title: string;
+  client_intro: string;
+  status: EvaluationSheetStatus;
+  created_at: string;
+  opened_at: string | null;
+  closed_at: string | null;
+  response_count: number;
+  public_path: string | null;
+}
+
+export interface EvaluationSheetDetail extends EvaluationSheetSummary {
+  questions: EvaluationQuestion[];
+  internal: {
+    answers: Record<string, EvaluationAnswerValue>;
+    updated_at: string | null;
+    updated_by: string | null;
+  };
+  permissions: { can_manage: boolean };
+}
+
+export type EvaluationSummary =
+  | { kind: "note"; count: number; average: number | null; distribution: Record<string, number> }
+  | {
+      kind: "nps";
+      count: number;
+      score: number | null;
+      promoters: number;
+      passives: number;
+      detractors: number;
+      distribution: Record<string, number>;
+    }
+  | { kind: "yes_no"; count: number; yes: number; no: number; yes_rate: number | null }
+  | { kind: "choices"; count: number; counts: Record<string, number> }
+  | { kind: "text"; count: number; values: string[] };
+
+export interface EvaluationResults {
+  response_count: number;
+  client: { question_id: string; summary: EvaluationSummary }[];
+  interne: { question_id: string; value: EvaluationAnswerValue }[];
+}
+
+export interface EvaluationClientResponse {
+  id: string;
+  respondent_name: string;
+  created_at: string;
+  status: "retenue" | "ecartee";
+  answers: Record<string, EvaluationAnswerValue>;
+}
+
+export interface EvaluationCatalog {
+  scope: { kind: "team" | "project"; id: string; name: string };
+  can_manage: boolean;
+  questions: EvaluationQuestion[];
+}
+
+export interface PublicEvaluation {
+  closed: boolean;
+  title: string;
+  project_name: string;
+  client_intro?: string;
+  questions?: EvaluationQuestion[];
 }

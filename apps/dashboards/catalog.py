@@ -156,6 +156,24 @@ DEFAULT_METRICS = {
         "visibility": "groupe",
         "render_hint": "table",
     },
+    # Fiches d'évaluation (session du 2026-11-15) : agrégats par question
+    # générique du catalogue, jamais entre deux groupes.
+    "evaluation_generic_results": {
+        "label": "Évaluations — questions génériques",
+        "loader": "evaluation_insights",
+        "data_key": "generic_rows",
+        "scope": {"projet", "global"},
+        "visibility": "groupe",
+        "render_hint": "table",
+    },
+    "evaluation_response_count": {
+        "label": "Réponses clients reçues",
+        "loader": "evaluation_insights",
+        "data_key": "response_count",
+        "scope": {"projet", "global"},
+        "visibility": "groupe",
+        "render_hint": "stat_card",
+    },
 }
 
 

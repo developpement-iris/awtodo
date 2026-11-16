@@ -47,6 +47,16 @@ NO_BODY = [
     ("post", "docs/{project_id}/contributors/generate/"),
     ("post", "docs/{project_id}/public-link/"),
     ("post", "docs/{project_id}/public-link/rotate/"),
+    ("post", "evaluations/catalog/{id}/archive/"),
+    ("post", "evaluations/catalog/{id}/restore/"),
+    ("post", "evaluations/sheets/{id}/open/"),
+    ("post", "evaluations/sheets/{id}/close/"),
+    ("post", "evaluations/sheets/{id}/reopen/"),
+    ("post", "evaluations/sheets/{id}/archive/"),
+    ("post", "evaluations/sheets/{id}/rotate-link/"),
+    ("post", "evaluations/sheets/{id}/questions/{question_id}/archive/"),
+    ("post", "evaluations/sheets/{id}/responses/{response_id}/discard/"),
+    ("post", "evaluations/sheets/{id}/responses/{response_id}/restore/"),
 ]
 
 # (méthode, chemin) -> champs réellement lus par la vue.
@@ -85,6 +95,10 @@ BODIES = {
     ("patch", "docs/{project_id}/pages/{page_id}/"): {"title", "parent_id"},
     ("patch", "docs/{project_id}/contributors/"): {"rows"},
     ("patch", "docs/{project_id}/public-link/slug/"): {"slug"},
+    ("post", "evaluations/sheets/"): {"project", "title", "client_intro"},
+    ("post", "evaluations/public/{token}/responses/"): {"respondent_name", "answers"},
+    ("put", "evaluations/sheets/{id}/internal/"): {"answers"},
+    ("post", "evaluations/catalog/{id}/move/"): {"direction"},
 }
 
 # (méthode, chemin) -> (statut de succès, champ attendu dans la réponse).
@@ -156,6 +170,10 @@ class OpenApiContractTests(SimpleTestCase):
     def test_public_documentation_requires_no_authentication(self):
         self.assertEqual(self._op("get", "docs/public/{token}/")["security"], [{}])
 
+    def test_public_evaluation_requires_no_authentication(self):
+        self.assertEqual(self._op("get", "evaluations/public/{token}/")["security"], [{}])
+        self.assertEqual(self._op("post", "evaluations/public/{token}/responses/")["security"], [{}])
+
     def test_query_parameters_of_hand_written_views_are_declared(self):
         names = {p["name"] for p in self._op("get", "planning/calendar/")["parameters"]}
         self.assertLessEqual({"from", "to", "owners", "projects", "outlook"}, names)
@@ -197,6 +215,9 @@ class ApiDocumentationAccessTests(APITestCase):
         paths = self._schema()["paths"]
         self.assertIn(f"{PREFIX}accounts/login/", paths)
         self.assertIn(f"{PREFIX}docs/public/{{token}}/", paths)
+        self.assertIn(f"{PREFIX}evaluations/public/{{token}}/", paths)
+        self.assertIn(f"{PREFIX}evaluations/public/{{token}}/responses/", paths)
+        self.assertNotIn(f"{PREFIX}evaluations/sheets/", paths)
         self.assertNotIn(f"{PREFIX}tasks/", paths)
         self.assertNotIn(f"{PREFIX}integrations/api-keys/", paths)
         self.assertNotIn(f"{PREFIX}docs/{{project_id}}/appearance/", paths)

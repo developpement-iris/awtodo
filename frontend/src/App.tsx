@@ -6,6 +6,7 @@ import { AdministrationPage } from "./features/administration/AdministrationPage
 import { LoginPage } from "./features/auth/LoginPage";
 import { HomePage } from "./features/home/HomePage";
 import { PublicDocsPage } from "./features/docs/PublicDocsPage";
+import { PublicEvaluationPage } from "./features/evaluations/PublicEvaluationPage";
 import { InvitationAcceptPage } from "./features/invitations/InvitationAcceptPage";
 import { ResetPasswordPage } from "./features/auth/ResetPasswordPage";
 import { ProjectDetailView } from "./features/projects/ProjectDetailView";
@@ -37,6 +38,9 @@ const RESET_PASSWORD_PATH_PATTERN = /^\/reset-password\/([^/]+)\/?$/;
 // Le match est fait AVANT toute garde d'authentification (le lecteur n'a pas
 // forcément de compte).
 const PUBLIC_DOCS_PATH_PATTERN = /^\/docs\/([^/]+)\/?$/;
+// Formulaire client d'une fiche d'évaluation (session du 2026-11-13) — 2ᵉ
+// exception au garde-fou de connexion, même traitement que la doc publique.
+const PUBLIC_EVALUATION_PATH_PATTERN = /^\/evaluation\/([^/]+)\/?$/;
 
 type Route =
   | { name: "home" }
@@ -132,6 +136,11 @@ function App() {
   const publicDocsToken = window.location.pathname.match(PUBLIC_DOCS_PATH_PATTERN)?.[1];
   if (publicDocsToken) {
     return <PublicDocsPage token={publicDocsToken} />;
+  }
+
+  const publicEvaluationToken = window.location.pathname.match(PUBLIC_EVALUATION_PATH_PATTERN)?.[1];
+  if (publicEvaluationToken) {
+    return <PublicEvaluationPage token={publicEvaluationToken} />;
   }
 
   const invitationToken = window.location.pathname.match(INVITATION_PATH_PATTERN)?.[1];

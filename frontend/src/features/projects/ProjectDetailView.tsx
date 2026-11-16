@@ -12,6 +12,7 @@ import { TasksTab } from "../tasks/TasksTab";
 import type { Project } from "../../types/watodo";
 import { BudgetingTab } from "./BudgetingTab";
 import { DocumentationTab } from "./DocumentationTab";
+import { EvaluationsTab } from "../evaluations/EvaluationsTab";
 import { HistoryTab } from "./HistoryTab";
 import { NotesTab } from "./NotesTab";
 import { ProjectPlanningTab } from "../planning/ProjectPlanningTab";
@@ -27,6 +28,7 @@ type Tab =
   | "maintenance"
   | "planning"
   | "documentation"
+  | "evaluations"
   | "communication"
   | "stats"
   | "budgeting"
@@ -40,6 +42,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "maintenance", label: "Incidents" },
   { id: "planning", label: "Planning" },
   { id: "documentation", label: "Documentation" },
+  { id: "evaluations", label: "Évaluations" },
   { id: "communication", label: "Communication" },
   { id: "stats", label: "Statistiques" },
   { id: "budgeting", label: "Budgétisation" },
@@ -76,6 +79,9 @@ export function ProjectDetailView({ project: initialProject, onBack }: ProjectDe
     // Historique réservé au chef de projet (session du 2026-09-29) — demande
     // explicite, contrairement aux autres onglets "contributeur" ci-dessus.
     if (item.id === "history" && !project.permissions.can_view_history) return false;
+    // Fiches d'évaluation (session du 2026-11-13) : chefs de projet, admins du
+    // groupe et de l'organisation — sur tous les projets, existants compris.
+    if (item.id === "evaluations") return project.permissions.can_view_evaluations;
     if (!project.permissions.can_contribute && contributorOnlyTabs.includes(item.id)) return false;
     return true;
   });
@@ -197,6 +203,7 @@ export function ProjectDetailView({ project: initialProject, onBack }: ProjectDe
           {tab === "maintenance" && <IncidentsPage scopedProject={project} />}
           {tab === "planning" && <ProjectPlanningTab project={project} />}
           {tab === "documentation" && <DocumentationTab project={project} />}
+          {tab === "evaluations" && <EvaluationsTab project={project} />}
           {tab === "communication" && <CommunicationTab project={project} />}
           {tab === "stats" && <StatsTab project={project} />}
           {tab === "budgeting" && <BudgetingTab project={project} />}

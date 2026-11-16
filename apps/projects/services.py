@@ -6,7 +6,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from apps.accounts.models import TeamMembership, User
-from apps.accounts.services import is_organisation_admin
+from apps.accounts.services import can_manage_team, is_organisation_admin
 from apps.common.audit import get_project_audit_log, record_changes, record_event
 from apps.common.models import AuditLogEntry
 from apps.common.permissions import check_permission
@@ -349,6 +349,14 @@ def get_project_permissions(user, project):
         # Historique d'activité (session du 2026-09-29) — réservé au chef de
         # projet, comme demandé explicitement (pas les membres/lecteurs).
         "can_view_history": is_project_manager(user, project),
+        # Fiches d'évaluation (session du 2026-11-13) : gestion par le chef de
+        # projet ; consultation aussi par les admins du groupe et de
+        # l'organisation. Miroir de `apps.evaluations.services.can_view_sheets`,
+        # dupliqué à dessein : `projects` ne doit pas importer `evaluations`.
+        "can_manage_evaluations": is_project_manager(user, project),
+        "can_view_evaluations": is_project_manager(user, project)
+        or is_organisation_admin(user, project.organisation)
+        or bool(project.team_id and can_manage_team(user, project.team)),
     }
 
 

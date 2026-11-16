@@ -15,6 +15,7 @@ import { InlineEditableText } from "../../components/InlineEditableText";
 import { SkeletonCards } from "../../components/Skeleton";
 import { TaskTypesEditor } from "../../components/TaskTypesEditor";
 import { useToast } from "../../context/ToastContext";
+import { CatalogEditor } from "../evaluations/CatalogEditor";
 import type { Team, TeamMembershipRole, User } from "../../types/watodo";
 import "./GroupsSection.css";
 
@@ -247,6 +248,7 @@ export function GroupsSection({ currentUser }: GroupsSectionProps) {
                 )}
 
                 <TaskTypesEditor scope={{ team: team.id }} collapsible />
+                <CatalogEditor scope={{ team: team.id }} collapsible />
               </div>
             );
           })}

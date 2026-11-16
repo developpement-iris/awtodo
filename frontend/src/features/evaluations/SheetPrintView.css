@@ -1,0 +1,80 @@
+/* Export PDF d'une fiche d'évaluation : seul ce conteneur s'imprime. */
+@media screen {
+  .evaluation-print {
+    display: none;
+  }
+}
+
+@media print {
+  @page {
+    margin: 18mm;
+  }
+
+  body.is-printing-evaluation > *:not(.evaluation-print) {
+    display: none !important;
+  }
+
+  body.is-printing-evaluation {
+    background: #ffffff !important;
+  }
+
+  .evaluation-print {
+    display: block;
+    color: #000000;
+    font-family: var(--font-sans);
+    font-size: 11pt;
+    line-height: 1.45;
+  }
+
+  .evaluation-print__page {
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .evaluation-print__page:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  .evaluation-print header {
+    margin-bottom: 8mm;
+    padding-bottom: 4mm;
+    border-bottom: 1px solid #000000;
+  }
+
+  .evaluation-print h2 {
+    font-family: var(--font-display);
+    font-size: 18pt;
+    margin: 1mm 0;
+  }
+
+  .evaluation-print h3 {
+    margin: 6mm 0 3mm;
+    font-size: 13pt;
+  }
+
+  .evaluation-print__project,
+  .evaluation-print__meta {
+    font-size: 9.5pt;
+    color: #333333;
+  }
+
+  .evaluation-print dl {
+    margin: 0;
+  }
+
+  .evaluation-print dl > div {
+    padding: 2mm 0;
+    border-bottom: 1px solid #cccccc;
+    break-inside: avoid;
+  }
+
+  .evaluation-print dt {
+    font-weight: 600;
+  }
+
+  .evaluation-print dd {
+    margin: 1mm 0 0;
+    white-space: pre-wrap;
+  }
+}

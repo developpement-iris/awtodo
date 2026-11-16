@@ -768,6 +768,54 @@ Demande directe : compléter la vue roadmap de l'écran Projets, sans refondre A
 
 **Frontend.** `ProjectsRoadmap.tsx` : bascule « Calendrier / Charge », filtres partagés par les deux vues (domaine, service, groupe, phase, priorité, personne), regroupement du Gantt par domaine, service, groupe ou phase (un projet à plusieurs services apparaît dans chacun). Le regroupement est mémorisé par appareil. `ProjectsWorkload.tsx` : tableau personnes × périodes (6 mois ou 8 semaines, navigation d'une période). Chaque case donne les demi-journées et le nombre de projets ; un clic détaille par projet (après-midi, matinées). Saisie assistée : nouveau composant partagé `components/CategoryInput.tsx`, branché dans le bloc « Informations du projet » de l'onglet Administration.
 
+## Fiches d'évaluation de projet (sessions du 2026-11-13 et du 2026-11-15)
+
+Nouvelle app `apps/evaluations` (dépend de `common`, `accounts`, `projects` ; seule `dashboards` en dépend). Une **fiche** appartient à un projet et a deux parties : la **satisfaction client**, remplie via un lien public sans compte, et l'**évaluation chef de projet**, remplie dans Awtodo.
+
+### Modèles
+
+| Modèle | Rôle |
+|---|---|
+| `CatalogQuestion` | Question générique d'un groupe (`team`) **ou** d'un projet sans groupe (`project`), jamais les deux (garanti par le service). Parties `client` / `interne`. Statut `active` / `archived`. |
+| `EvaluationSheet` | Fiche d'un projet. Cycle de vie `brouillon` → `ouverte` ⇄ `close` → `archivee` (un brouillon s'archive aussi). `public_token` créé à l'ouverture, régénérable. |
+| `SheetQuestion` | Copie figée d'une question dans une fiche. `catalog_question` renseigné = question générique (non modifiable depuis la fiche, sert aux statistiques) ; vide = question propre à la fiche. |
+| `ClientResponse` | Une réponse reçue par le lien public (`respondent_name` obligatoire). `retenue` / `ecartee` : une réponse écartée sort des résultats, de l'export et des statistiques, reste restaurable. |
+| `InternalEvaluation` | Partie chef de projet, une seule par fiche (`updated_by`). |
+| `Answer` | Valeur d'une réponse (JSON), rattachée à une réponse client **ou** à la partie interne. Jamais supprimée : une réponse vidée garde `value=None`. |
+
+Types de réponse : `note_5`, `nps_10`, `oui_non`, `choix_unique`, `choix_multiple`, `texte_court` (200 caractères), `texte_long` (5 000).
+
+### Règles
+
+- **Copie figée** : à la création d'une fiche, les questions actives du catalogue (conditions comprises) sont copiées ; modifier le catalogue ensuite ne change rien aux fiches existantes. Les questions d'une fiche ne se modifient qu'en `brouillon` ; elles se figent à l'ouverture.
+- **Type figé** : le type de réponse d'une question du catalogue ne change plus après sa création (statistiques comparables). Une question propre à une fiche en brouillon peut changer de type.
+- **Conditions** : une question peut dépendre d'une autre de la même partie, de type `oui_non` ou `choix_unique` (« afficher si la réponse est l'une de… »). La même logique tourne côté serveur (`answers.py::visible_question_ids`) et dans le navigateur (`features/evaluations/visibility.ts`). Une réponse à une question masquée est ignorée.
+- **Projets existants** : la migration `evaluations.0002` amorce le catalogue par défaut (`defaults.py`) pour tous les groupes et projets sans groupe existants ; les nouveaux le reçoivent par signal (`receivers.py`). `create_sheet` l'amorce aussi si la portée n'a aucune question (projet converti, groupe créé hors signal).
+- **Droits** : catalogue d'un groupe géré par tout administrateur du groupe (`can_manage_team`), catalogue d'un projet sans groupe par son chef de projet. Fiches gérées par les chefs de projet ; consultées aussi par les admins du groupe et de l'organisation. Flags projet `can_manage_evaluations` / `can_view_evaluations`.
+
+### API — `/api/v1/evaluations/`
+
+| Méthode / chemin | Effet |
+|---|---|
+| `GET /catalog/?team=<id>\|project=<id>&include_archived=1` | catalogue de la portée (`project` rattaché à un groupe → catalogue du groupe), `{scope, can_manage, questions}` |
+| `POST /catalog/` · `PATCH /catalog/{id}/` · `POST …/archive/\|restore/\|move/` | gestion du catalogue |
+| `GET /sheets/?project=<id>` · `POST /sheets/` · `GET\|PATCH /sheets/{id}/` | fiches du projet, création (copie du catalogue), détail (questions, `internal`, `permissions`), titre et intro |
+| `POST /sheets/{id}/questions/` · `PATCH …/questions/{qid}/` · `POST …/archive/\|move/` | questions propres à une fiche en brouillon |
+| `POST /sheets/{id}/open/\|close/\|reopen/\|archive/\|rotate-link/` | cycle de vie, lien public |
+| `PUT /sheets/{id}/internal/` | partie chef de projet `{answers}`, enregistrement partiel, fiche ouverte ou close |
+| `GET /sheets/{id}/results/` | `{response_count, client: [{question_id, summary}], interne: [{question_id, value}]}` ; `summary.kind` : `note` (moyenne, distribution), `nps` (score, promoteurs/passifs/détracteurs), `yes_no`, `choices`, `text` |
+| `GET /sheets/{id}/responses/` · `POST …/responses/{rid}/discard/\|restore/` | réponses individuelles (retenues et écartées) |
+| `GET /sheets/{id}/export/` | CSV `;`, UTF-8 avec BOM : une ligne par réponse retenue + la partie chef de projet ; sans réponse client, une ligne porte la partie chef de projet |
+| `GET /public/<token>/` · `POST /public/<token>/responses/` | formulaire client, `AllowAny` (voir CLAUDE.md > Auth) ; 404 lien inconnu, 410 fiche close, 429 au-delà de 10 envois/heure/IP |
+
+### Statistiques
+
+Deux widgets du dashboard (`apps/dashboards/catalog.py`), portée projet ou globale, visibilité « groupe » : **Évaluations — questions génériques** (tableau : groupe, partie, question, résultat, nombre de réponses) et **Réponses clients reçues**. Seules les notes, NPS et Oui/Non des questions génériques s'agrègent (`results.evaluation_insights`) ; une ligne ne mélange jamais deux groupes, puisque chaque catalogue appartient à un seul groupe. En portée globale, la règle « groupe » commune s'applique (projets dirigés, ou toute l'organisation pour un admin) : un admin de groupe qui n'est pas chef de projet n'y voit pas ces widgets.
+
+### Frontend
+
+Onglet **Évaluations** du hub projet (`features/evaluations/EvaluationsTab.tsx`) : liste des fiches, puis fiche en trois sous-onglets (Questions, Évaluation chef de projet, Résultats). Éditeur de catalogue `CatalogEditor` dans Administration > Groupes et dans l'onglet Administration d'un projet sans groupe. Page publique `PublicEvaluationPage` sur `/evaluation/<token>`, détectée dans `App.tsx` avant la garde de connexion. Export PDF par `SheetPrintView` (impression du navigateur).
+
 ## Module Communication (scaffolding le 2026-09-10, câblage réel Teams le 2026-09-28 — canal mail abandonné)
 
 **Statut : canaux Teams réellement câblés (Power Automate), canal email abandonné.** Nouvelle app `apps/communication/`, label `communication` — dépend de `common`/`accounts`/`projects`/`incidents`, rien ne dépend d'elle.

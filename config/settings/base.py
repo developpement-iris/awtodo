@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "apps.planning",
     "apps.communication",
     "apps.dashboards",
+    "apps.evaluations",
     # Avant oauth2_provider : ses gabarits (`oauth2_provider/authorize.html`)
     # remplacent ceux du toolkit.
     "apps.mcp",
@@ -173,6 +174,7 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon": "20/min",
         "user": "100/min",
+        "evaluation_submit": "10/hour",
     },
     # Sûr par défaut : explicite plutôt que de laisser le AllowAny implicite
     # de DRF. Assoupli uniquement dans config/settings/dev.py.
