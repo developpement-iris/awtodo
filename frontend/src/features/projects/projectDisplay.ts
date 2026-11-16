@@ -10,6 +10,21 @@ export function coverTone(projectId: string): number {
   return (Math.abs(hash) % COVER_TONE_COUNT) + 1;
 }
 
+/** Teintes des phases d'un projet sur la roadmap (session du 2026-11-16) :
+ * tirées du nom, sans casse ni accents, pour qu'une même phase garde la même
+ * couleur d'un projet à l'autre. Deux phases qui se suivent ne partagent
+ * jamais la même teinte : la seconde passe à la suivante. */
+export function phaseTones(names: string[]): number[] {
+  const tones: number[] = [];
+  for (const name of names) {
+    const key = name.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+    let tone = coverTone(key);
+    if (tones.length && tones[tones.length - 1] === tone) tone = (tone % COVER_TONE_COUNT) + 1;
+    tones.push(tone);
+  }
+  return tones;
+}
+
 export function projectProgress(project: Project): number {
   return project.tasks_total > 0 ? Math.round((project.tasks_done / project.tasks_total) * 100) : 0;
 }

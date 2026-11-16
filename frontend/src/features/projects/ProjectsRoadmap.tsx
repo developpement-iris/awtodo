@@ -6,7 +6,7 @@ import { categoryKey } from "../../lib/categoryKey";
 import type { Project } from "../../types/watodo";
 import { ProjectCover } from "./ProjectCover";
 import { ProjectsWorkload } from "./ProjectsWorkload";
-import { coverTone, memberName, parseIsoDate, projectProgress, teamLabel } from "./projectDisplay";
+import { coverTone, memberName, phaseTones, parseIsoDate, projectProgress, teamLabel } from "./projectDisplay";
 import "./ProjectCover.css";
 import { projectPhaseLabel } from "./projectDisplay";
 
@@ -672,6 +672,8 @@ function GanttRow({ item, place, percent, periodEnd, onOpen }: GanttRowProps) {
   const currentPhaseId = project.current_phase?.id;
   const detailed = phases.length > 0;
   const tone = `project-cover--tone-${coverTone(project.id)}`;
+  // Une couleur par phase, tirée de son nom (voir `phaseTones`).
+  const tones = phaseTones(project.phases.map((phase) => phase.name));
 
   // Avancement placé sur toute la durée du projet, puis rapporté à la
   // portion visible (sinon une barre rognée mentirait).
@@ -734,7 +736,8 @@ function GanttRow({ item, place, percent, periodEnd, onOpen }: GanttRowProps) {
             )}
           </button>
         )}
-        {phases.map((phase) => {
+        {phases.map((phase, index) => {
+          const phaseTone = `project-cover--tone-${tones[index]}`;
           const phaseStart = parseIsoDate(phase.start_date);
           const due = parseIsoDate(phase.due_date);
           const position = place(startOfDay(phaseStart), new Date(due.getFullYear(), due.getMonth(), due.getDate() + 1));
@@ -745,7 +748,7 @@ function GanttRow({ item, place, percent, periodEnd, onOpen }: GanttRowProps) {
             <button
               key={phase.id}
               type="button"
-              className={`gantt__phase ${tone}${current ? " gantt__phase--current" : ""}${position.clipStart ? " gantt__bar--clip-start" : ""}${position.clipEnd ? " gantt__bar--clip-end" : ""}`}
+              className={`gantt__phase ${phaseTone}${current ?" gantt__phase--current" : ""}${position.clipStart ? " gantt__bar--clip-start" : ""}${position.clipEnd ? " gantt__bar--clip-end" : ""}`}
               style={{ left: `${position.left}%`, width: `max(6px, ${position.width}%)` }}
               onClick={() => onOpen(project)}
               title={`${phase.name} · ${dates}${current ? " · phase en cours" : ""}`}
