@@ -75,6 +75,7 @@ from .services import (
     deactivate_account,
     list_permission_profiles,
     login_with_microsoft,
+    password_reset_direct_link_enabled,
     reactivate_account,
     remove_team_member,
     rename_team,
@@ -336,8 +337,9 @@ class PasswordResetRequestView(APIView):
       email part si un compte correspond.
     - `True` (phase de test, pas d'ESP branché) : pas d'email ; si un compte
       correspond, la réponse inclut `reset_path` (`/reset-password/<token>/`)
-      pour que le frontend y redirige directement. Assumé sans enjeu de
-      sécurité pour le nombre d'utilisateurs actuel (voir settings)."""
+      pour que le frontend y redirige directement. Uniquement en
+      développement (`DEBUG`) depuis le 2026-11-16, voir
+      `password_reset_direct_link_enabled`."""
 
     authentication_classes = []
     permission_classes = [AllowAny]
@@ -351,7 +353,7 @@ class PasswordResetRequestView(APIView):
         except AccountValidationError as exc:
             return Response({"detail": str(exc)}, status=400)
 
-        if getattr(settings, "PASSWORD_RESET_DIRECT_LINK", False):
+        if password_reset_direct_link_enabled():
             if reset is None:
                 return Response({"detail": "Aucun compte ne correspond à cet identifiant."}, status=404)
             return Response(

@@ -838,9 +838,17 @@ def request_password_reset(*, identifier):
     # `PASSWORD_RESET_DIRECT_LINK` dans les settings) : on n'envoie pas
     # d'email, la vue renvoie le chemin de réinitialisation et le frontend y
     # redirige. Le jeton est quand même créé/tourné comme d'habitude.
-    if not getattr(settings, "PASSWORD_RESET_DIRECT_LINK", False):
+    if not password_reset_direct_link_enabled():
         _send_password_reset_email(reset)
     return reset
+
+
+def password_reset_direct_link_enabled():
+    """Mode « lien direct » : jamais hors développement (`DEBUG`), quel que
+    soit le réglage. Verrou posé le 2026-11-16, quand la production s'est
+    ouverte à tout le tenant via le SSO : ce mode donne le lien de
+    réinitialisation de n'importe quel compte à qui connaît son identifiant."""
+    return bool(settings.DEBUG and getattr(settings, "PASSWORD_RESET_DIRECT_LINK", False))
 
 
 def confirm_password_reset(*, token, password=None):

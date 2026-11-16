@@ -84,7 +84,7 @@ class RequestPasswordResetServiceTests(TestCase):
         self.assertEqual(len(mail.outbox), 2)
 
 
-@override_settings(PASSWORD_RESET_DIRECT_LINK=True)
+@override_settings(PASSWORD_RESET_DIRECT_LINK=True, DEBUG=True)
 class RequestPasswordResetDirectLinkTests(TestCase):
     """Mode "phase de test" : pas d'email, le jeton est quand même créé/tourné."""
 
@@ -195,7 +195,7 @@ class PasswordResetApiTests(APITestCase):
         # Même message générique dans les deux cas — pas d'énumération.
         self.assertEqual(response.json()["detail"], response_unknown.json()["detail"])
 
-    @override_settings(PASSWORD_RESET_DIRECT_LINK=True)
+    @override_settings(PASSWORD_RESET_DIRECT_LINK=True, DEBUG=True)
     def test_request_endpoint_returns_reset_path_in_direct_link_mode(self):
         response = self.client.post(
             "/api/v1/accounts/password-reset/request/",
@@ -207,7 +207,7 @@ class PasswordResetApiTests(APITestCase):
         self.assertEqual(response.json()["reset_path"], f"/reset-password/{reset.token}/")
         self.assertEqual(len(mail.outbox), 0)
 
-    @override_settings(PASSWORD_RESET_DIRECT_LINK=True)
+    @override_settings(PASSWORD_RESET_DIRECT_LINK=True, DEBUG=True)
     def test_request_endpoint_404_on_unknown_identifier_in_direct_link_mode(self):
         response = self.client.post(
             "/api/v1/accounts/password-reset/request/",
@@ -215,6 +215,27 @@ class PasswordResetApiTests(APITestCase):
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 404)
+
+    @override_settings(PASSWORD_RESET_DIRECT_LINK=True, DEBUG=False)
+    def test_direct_link_never_active_outside_debug(self):
+        """Verrou du 2026-11-16 : même réglé à True (staging/production), le
+        lien direct n'est jamais renvoyé hors développement."""
+        response = self.client.post(
+            "/api/v1/accounts/password-reset/request/",
+            {"identifier": "api-pass"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("reset_path", response.json())
+        self.assertEqual(len(mail.outbox), 1)
+
+        unknown = self.client.post(
+            "/api/v1/accounts/password-reset/request/",
+            {"identifier": "personne-de-ce-nom"},
+            content_type="application/json",
+        )
+        self.assertEqual(unknown.status_code, 200)
+        self.assertEqual(response.json()["detail"], unknown.json()["detail"])
 
     def test_detail_endpoint_is_public_and_returns_status(self):
         reset = PasswordResetRequest.objects.create(user=self.user)
