@@ -10,7 +10,6 @@ import logging
 from datetime import datetime, time, timedelta
 
 from dateutil.rrule import rrulestr
-from django.core.cache import cache
 from django.db.models import Q
 from django.utils import timezone
 
@@ -360,10 +359,6 @@ def _member_project_ids(actor):
     )
 
 
-OUTLOOK_BUSY_CACHE_SECONDS = 120
-OUTLOOK_BUSY_ERROR_CACHE_SECONDS = 60
-_OUTLOOK_ERROR = "error"
-
 logger = logging.getLogger(__name__)
 
 
@@ -386,26 +381,20 @@ def get_outlook_busy(*, actor, window_start, window_end):
     (`outlook_calendar_sync_enabled`) et à une `O365Connection` prête.
 
     Appel Graph synchrone pendant la requête — exception actée à la règle
-    "aucun appel externe dans le flux HTTP" : délai court, résultat mis en
-    cache par utilisateur × fenêtre, et un échec ne casse jamais le
-    planning (`status="error"`, liste vide)."""
+    "aucun appel externe dans le flux HTTP" : délai court, et un échec ne
+    casse jamais le planning (`status="error"`, liste vide). Pas de cache
+    (retiré le 2026-11-16) : un rendez-vous supprimé dans Outlook restait
+    affiché jusqu'à 2 min, et différemment selon le processus gunicorn."""
     connection = get_o365_connection(actor.organisation) if actor.outlook_calendar_sync_enabled else None
     if connection is None or not (
         connection.is_enabled and connection.tenant_id and connection.client_id and connection.client_secret
     ):
         return {"status": "disabled", "items": []}
 
-    key = f"planning:outlook-busy:{actor.id}:{window_start.isoformat()}:{window_end.isoformat()}"
-    slots = cache.get(key)
-    if slots is None:
-        try:
-            slots = list_graph_busy_slots(connection, actor.email, window_start, window_end)
-            cache.set(key, slots, OUTLOOK_BUSY_CACHE_SECONDS)
-        except Exception as exc:  # GraphSyncError, requests.Timeout, msal…
-            logger.warning("Lecture Outlook impossible pour %s : %s", actor.id, exc)
-            slots = _OUTLOOK_ERROR
-            cache.set(key, slots, OUTLOOK_BUSY_ERROR_CACHE_SECONDS)
-    if slots == _OUTLOOK_ERROR:
+    try:
+        slots = list_graph_busy_slots(connection, actor.email, window_start, window_end)
+    except Exception as exc:  # GraphSyncError, requests.Timeout, msal…
+        logger.warning("Lecture Outlook impossible pour %s : %s", actor.id, exc)
         return {"status": "error", "items": []}
 
     own_ids = _awtodo_outlook_ids(actor)

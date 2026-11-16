@@ -125,12 +125,15 @@ class OutlookBusyOverlayTests(TestCase):
         self.assertEqual(data["outlook"]["items"][0]["title"], "RDV")
 
     @patch("apps.planning.services.list_graph_busy_slots")
-    def test_result_is_cached(self, mock_list):
+    def test_each_load_reads_outlook_again(self, mock_list):
+        """Pas de cache : un rendez-vous supprimé dans Outlook disparaît au
+        rechargement suivant."""
         self._enable()
         mock_list.return_value = [self._slot("external")]
-        self._calendar(include_outlook=True)
-        self._calendar(include_outlook=True)
-        self.assertEqual(mock_list.call_count, 1)
+        self.assertEqual(len(self._calendar(include_outlook=True)["outlook"]["items"]), 1)
+        mock_list.return_value = []
+        self.assertEqual(self._calendar(include_outlook=True)["outlook"]["items"], [])
+        self.assertEqual(mock_list.call_count, 2)
 
     @patch("apps.planning.services.list_graph_busy_slots")
     def test_graph_error_does_not_break_calendar(self, mock_list):
