@@ -22,7 +22,7 @@ Toujours depuis `main` à jour, jamais depuis une branche de fonctionnalité. Le
    .venv\Scripts\python.exe manage.py migrate --settings=config.settings.staging
    Remove-Item Env:DATABASE_URL
    ```
-2. **Pousser vers Clever** : `git push clever main:master` (clé SSH enregistrée dans la console Clever requise). Suivre le build dans la console ou avec `clever logs`.
+2. **Déployer sur Clever** : `clever deploy` (CLI `clever-tools`, connecté par `clever login`, lancé sur `main` dans un dossier lié à l'application — fichier `.clever.json`). Méthode retenue le 2026-11-16 : elle passe par le jeton du CLI, alors que `git push clever main:master` en SSH est refusé (`Permission denied (publickey)`) malgré une clé enregistrée sur le compte. Le build s'affiche dans le terminal ; sinon `clever logs`.
 3. Vérifier `https://awtodo.reparstores.com/api/health/` → `{"status": "ok", "database": "ok"}`.
 
 Migrer **avant** de pousser : sinon le nouveau code tourne quelques minutes sur un schéma incomplet (erreurs 500). Une migration additive (nouvelle table, nouvelle colonne nullable) ne gêne pas l'ancien code encore en ligne ; une migration qui renomme ou supprime une colonne demande un déploiement plus soigné.
