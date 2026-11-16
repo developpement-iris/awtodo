@@ -278,6 +278,11 @@ PASSWORD_RESET_DIRECT_LINK = env.bool("PASSWORD_RESET_DIRECT_LINK", default=Fals
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="memory://")
 CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", default=True)
 CELERY_TASK_EAGER_PROPAGATES = env.bool("CELERY_TASK_EAGER_PROPAGATES", default=False)
+# Sans broker, la synchro Outlook part dans un fil d'arrière-plan plutôt que
+# dans la requête (session du 2026-11-16, voir `apps.common.background`).
+# Activé en production par variable d'environnement ; désactivé par défaut
+# pour que les tests et le développement restent synchrones et prévisibles.
+BACKGROUND_THREAD_TASKS = env.bool("BACKGROUND_THREAD_TASKS", default=False)
 
 # Serveur MCP / connecteur Claude (apps.mcp) — django-oauth-toolkit sert de
 # serveur d'autorisation OAuth 2.1 : claude.ai découvre les endpoints via les

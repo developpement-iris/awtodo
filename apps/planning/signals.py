@@ -3,6 +3,7 @@ from django.db import transaction
 from django.dispatch import receiver
 
 from apps.accounts.signals import outlook_calendar_sync_enabled_activated
+from apps.common.background import run_in_background
 
 # Émis par `apps.planning.services.add_participant`/`remove_participant`
 # quand un utilisateur est invité/retiré d'un événement. Consommés par
@@ -62,7 +63,7 @@ def _enqueue_outlook_sync(event, action):
     def _dispatch():
         from .tasks import sync_calendar_event_to_outlook
 
-        sync_calendar_event_to_outlook.delay(str(event.id), action)
+        run_in_background(sync_calendar_event_to_outlook, str(event.id), action)
 
     transaction.on_commit(_dispatch)
 
@@ -77,7 +78,7 @@ def _enqueue_participants_outlook_sync(event, action):
     def _dispatch():
         from .tasks import sync_event_to_all_participants_outlook
 
-        sync_event_to_all_participants_outlook.delay(str(event.id), action)
+        run_in_background(sync_event_to_all_participants_outlook, str(event.id), action)
 
     transaction.on_commit(_dispatch)
 
@@ -86,7 +87,7 @@ def _enqueue_participant_outlook_sync(event, participant, action):
     def _dispatch():
         from .tasks import sync_event_participant_to_outlook
 
-        sync_event_participant_to_outlook.delay(str(event.id), str(participant.user_id), action)
+        run_in_background(sync_event_participant_to_outlook, str(event.id), str(participant.user_id), action)
 
     transaction.on_commit(_dispatch)
 
@@ -130,8 +131,8 @@ def _enqueue_occurrence_outlook_sync(override, action):
     def _dispatch():
         from .tasks import sync_event_occurrence_to_all_participants_outlook, sync_event_occurrence_to_outlook
 
-        sync_event_occurrence_to_outlook.delay(str(override.id), action)
-        sync_event_occurrence_to_all_participants_outlook.delay(str(override.id), action)
+        run_in_background(sync_event_occurrence_to_outlook, str(override.id), action)
+        run_in_background(sync_event_occurrence_to_all_participants_outlook, str(override.id), action)
 
     transaction.on_commit(_dispatch)
 
@@ -150,7 +151,7 @@ def _enqueue_block_outlook_sync(block, action):
     def _dispatch():
         from .tasks import sync_scheduled_block_to_outlook
 
-        sync_scheduled_block_to_outlook.delay(str(block.id), action)
+        run_in_background(sync_scheduled_block_to_outlook, str(block.id), action)
 
     transaction.on_commit(_dispatch)
 
@@ -174,7 +175,7 @@ def _enqueue_project_entry_assignee_outlook_sync(entry, user_id, action):
     def _dispatch():
         from .tasks import sync_project_entry_assignee_to_outlook
 
-        sync_project_entry_assignee_to_outlook.delay(str(entry.id), str(user_id), action)
+        run_in_background(sync_project_entry_assignee_to_outlook, str(entry.id), str(user_id), action)
 
     transaction.on_commit(_dispatch)
 
@@ -183,7 +184,7 @@ def _enqueue_project_entry_to_all_assignees_outlook_sync(entry, action):
     def _dispatch():
         from .tasks import sync_project_entry_to_all_assignees_outlook
 
-        sync_project_entry_to_all_assignees_outlook.delay(str(entry.id), action)
+        run_in_background(sync_project_entry_to_all_assignees_outlook, str(entry.id), action)
 
     transaction.on_commit(_dispatch)
 
@@ -220,6 +221,6 @@ def backfill_outlook_sync_on_activation(sender, user, **kwargs):
     def _dispatch():
         from .tasks import backfill_user_outlook_sync
 
-        backfill_user_outlook_sync.delay(str(user.id))
+        run_in_background(backfill_user_outlook_sync, str(user.id))
 
     transaction.on_commit(_dispatch)
