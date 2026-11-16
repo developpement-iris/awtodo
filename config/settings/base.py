@@ -198,6 +198,13 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
+# SSO Microsoft (Entra ID), câblé le 2026-11-16 : l'application SPA obtient un
+# jeton d'identité par MSAL, le backend en vérifie la signature (JWKS du
+# tenant) puis délivre ses propres jetons JWT. Vide = connexion Microsoft
+# désactivée (le bouton l'indique). Aucun secret : application de type SPA.
+MICROSOFT_SSO_TENANT_ID = env("MICROSOFT_SSO_TENANT_ID", default="")
+MICROSOFT_SSO_CLIENT_ID = env("MICROSOFT_SSO_CLIENT_ID", default="")
+
 SPECTACULAR_SETTINGS = {
     "TITLE": "Awtodo API",
     "DESCRIPTION": (

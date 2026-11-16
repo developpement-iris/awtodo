@@ -18,7 +18,9 @@ class SecurityHeadersMiddleware:
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data:; "
         "font-src 'self'; "
-        "connect-src 'self'; "
+        # Connexion Microsoft (2026-11-16) : MSAL lit la configuration du
+        # tenant et échange le code contre un jeton par `fetch`.
+        "connect-src 'self' https://login.microsoftonline.com; "
         "frame-ancestors 'none'; "
         "base-uri 'self'; "
         "form-action 'self'"

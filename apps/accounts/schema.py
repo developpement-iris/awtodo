@@ -10,6 +10,7 @@ from .serializers import (
     InvitationSerializer,
     LoginSerializer,
     MeSerializer,
+    MicrosoftLoginSerializer,
     NotificationPreferencesSerializer,
     OrganisationBrandingSerializer,
     OrganisationBrandingUpdateSerializer,
@@ -24,6 +25,7 @@ from .serializers import (
     PermissionProfileSerializer,
     PermissionProfileUpdateSerializer,
     PlanningPreferencesSerializer,
+    SsoConfigSerializer,
     TeamCreateSerializer,
     TeamMemberRoleSerializer,
     TeamMemberSerializer,
@@ -41,6 +43,29 @@ login_schema = extend_schema_view(
             refresh=serializers.CharField(),
             user=MeSerializer(),
         ),
+    )
+)
+microsoft_login_schema = extend_schema_view(
+    post=extend_schema(
+        summary="Se connecter avec un compte Microsoft",
+        description=(
+            "Échange un jeton d'identité Microsoft (obtenu par MSAL dans le navigateur) contre les jetons Awtodo. "
+            "Un compte du tenant inconnu d'Awtodo est créé d'office ; un compte existant de même email y est lié."
+        ),
+        request=MicrosoftLoginSerializer,
+        responses=body(
+            "MicrosoftLoginResponse",
+            access=serializers.CharField(),
+            refresh=serializers.CharField(),
+            user=MeSerializer(),
+        ),
+    )
+)
+sso_config_schema = extend_schema_view(
+    get=extend_schema(
+        summary="Configuration de la connexion Microsoft",
+        description="Identifiants publics (tenant, application) dont le navigateur a besoin pour lancer MSAL.",
+        responses=SsoConfigSerializer,
     )
 )
 me_schema = extend_schema_view(get=extend_schema(responses=MeSerializer))

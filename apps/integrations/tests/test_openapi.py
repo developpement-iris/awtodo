@@ -62,6 +62,7 @@ NO_BODY = [
 # (méthode, chemin) -> champs réellement lus par la vue.
 BODIES = {
     ("post", "accounts/login/"): {"username", "password"},
+    ("post", "accounts/sso/microsoft/login/"): {"id_token"},
     ("post", "accounts/me/change-password/"): {"current_password", "new_password"},
     ("post", "accounts/password-reset/request/"): {"identifier"},
     ("post", "tasks/"): {"project", "title"},
@@ -214,6 +215,8 @@ class ApiDocumentationAccessTests(APITestCase):
     def test_anonymous_schema_only_describes_public_endpoints(self):
         paths = self._schema()["paths"]
         self.assertIn(f"{PREFIX}accounts/login/", paths)
+        self.assertIn(f"{PREFIX}accounts/sso/microsoft/login/", paths)
+        self.assertIn(f"{PREFIX}accounts/sso/microsoft/config/", paths)
         self.assertIn(f"{PREFIX}docs/public/{{token}}/", paths)
         self.assertIn(f"{PREFIX}evaluations/public/{{token}}/", paths)
         self.assertIn(f"{PREFIX}evaluations/public/{{token}}/responses/", paths)

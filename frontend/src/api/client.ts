@@ -507,6 +507,22 @@ export function login(username: string, password: string): Promise<LoginResponse
   return postJson<LoginResponse>("/accounts/login/", { username, password });
 }
 
+export interface SsoConfig {
+  enabled: boolean;
+  tenant_id: string;
+  client_id: string;
+}
+
+/** Connexion Microsoft (session du 2026-11-16) : identifiants publics de
+ * l'application Entra, lus à l'exécution. */
+export function getSsoConfig(): Promise<SsoConfig> {
+  return getJson<SsoConfig>("/accounts/sso/microsoft/config/");
+}
+
+export function loginWithMicrosoft(idToken: string): Promise<LoginResponse> {
+  return postJson<LoginResponse>("/accounts/sso/microsoft/login/", { id_token: idToken });
+}
+
 export function getMe(): Promise<Me> {
   return getJson<Me>("/accounts/me/");
 }

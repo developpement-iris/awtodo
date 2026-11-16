@@ -275,6 +275,18 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True)
 
 
+class MicrosoftLoginSerializer(serializers.Serializer):
+    """Jeton d'identité obtenu par MSAL côté navigateur (session du 2026-11-16)."""
+
+    id_token = serializers.CharField(write_only=True)
+
+
+class SsoConfigSerializer(serializers.Serializer):
+    enabled = serializers.BooleanField()
+    tenant_id = serializers.CharField()
+    client_id = serializers.CharField()
+
+
 class PasswordResetRequestSerializer(serializers.Serializer):
     """Identifiant OU email — voir `services.request_password_reset`."""
 

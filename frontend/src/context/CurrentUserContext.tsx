@@ -4,10 +4,11 @@ import {
   getOrganisationBranding,
   getUsers,
   login as loginRequest,
+  loginWithMicrosoft as loginWithMicrosoftRequest,
   onSessionExpired,
   setAccessToken,
 } from "../api/client";
-import type { Me, User } from "../types/watodo";
+import type { LoginResponse, Me, User } from "../types/watodo";
 import { applyBrandColors } from "../theme/brandColors";
 
 const ACCESS_TOKEN_STORAGE_KEY = "watodo-access-token";
@@ -29,6 +30,9 @@ interface CurrentUserContextValue {
    * d'un clic sur "Se déconnecter" — `LoginPage` l'annonce. */
   sessionExpired: boolean;
   login: (username: string, password: string) => Promise<void>;
+  /** Connexion Microsoft : échange le jeton d'identité MSAL contre les
+   * jetons Awtodo (session du 2026-11-16). */
+  loginWithMicrosoft: (idToken: string) => Promise<void>;
   logout: () => void;
   /** Recharge `currentUser` depuis `/accounts/me/` — utilisé après un
    * changement de préférence personnelle (écran Réglages) pour que le reste
@@ -123,12 +127,19 @@ export function CurrentUserProvider({ children }: { children: ReactNode }) {
     setAuthUser(null);
   }
 
-  async function login(username: string, password: string) {
-    const response = await loginRequest(username, password);
+  function startSession(response: LoginResponse) {
     window.localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, response.access);
     setAccessToken(response.access);
     setSessionExpired(false);
     setAuthUser(response.user);
+  }
+
+  async function login(username: string, password: string) {
+    startSession(await loginRequest(username, password));
+  }
+
+  async function loginWithMicrosoft(idToken: string) {
+    startSession(await loginWithMicrosoftRequest(idToken));
   }
 
   async function refreshCurrentUser() {
@@ -145,6 +156,7 @@ export function CurrentUserProvider({ children }: { children: ReactNode }) {
         isRestoring: !usersLoaded || !authRestored,
         sessionExpired,
         login,
+        loginWithMicrosoft,
         logout,
         refreshCurrentUser,
         refreshBranding,

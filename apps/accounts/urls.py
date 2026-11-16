@@ -6,6 +6,7 @@ from .views import (
     InvitationViewSet,
     LoginView,
     MeView,
+    MicrosoftLoginView,
     NotificationPreferencesView,
     OrganisationBrandingView,
     OrganisationViewSet,
@@ -14,6 +15,7 @@ from .views import (
     PasswordResetTokenView,
     PermissionProfileViewSet,
     PlanningPreferencesView,
+    SsoConfigView,
     TeamViewSet,
     UserViewSet,
 )
@@ -27,6 +29,8 @@ router.register("permission-profiles", PermissionProfileViewSet, basename="permi
 
 urlpatterns = router.urls + [
     path("login/", LoginView.as_view(), name="login"),
+    path("sso/microsoft/config/", SsoConfigView.as_view(), name="sso-microsoft-config"),
+    path("sso/microsoft/login/", MicrosoftLoginView.as_view(), name="sso-microsoft-login"),
     path("me/", MeView.as_view(), name="me"),
     path("me/change-password/", ChangePasswordView.as_view(), name="change-password"),
     path("me/notification-preferences/", NotificationPreferencesView.as_view(), name="notification-preferences"),

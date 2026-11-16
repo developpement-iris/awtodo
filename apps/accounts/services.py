@@ -107,6 +107,59 @@ def authenticate_user(*, username, password):
     return user
 
 
+@transaction.atomic
+def login_with_microsoft(claims):
+    """Résout le compte Awtodo d'une personne connectée par Microsoft (session
+    du 2026-11-16), d'après les revendications d'un jeton déjà vérifié
+    (`apps.accounts.sso.verify_microsoft_id_token`).
+
+    1. `azure_oid` connu → ce compte.
+    2. Sinon, compte existant de même email (insensible à la casse) → lié à
+       cet `oid`. Un compte déjà lié à un autre `oid` est refusé.
+    3. Sinon, compte créé d'office : interne, actif, membre, sans groupe ni
+       projet (décision du 2026-11-16).
+
+    Un compte désactivé reste refusé ; un compte en attente d'invitation est
+    activé, la connexion Microsoft prouvant l'identité de la personne."""
+    oid = claims["oid"]
+    email = (claims.get("email") or claims.get("preferred_username") or "").strip().lower()
+
+    user = User.objects.filter(azure_oid=oid).first()
+    if user is None:
+        if not email or "@" not in email:
+            raise AccountValidationError("Le compte Microsoft ne fournit pas d'adresse email.")
+        user = User.objects.filter(email__iexact=email).first()
+        if user is not None:
+            if user.azure_oid:
+                raise AccountValidationError("Ce compte est déjà lié à une autre identité Microsoft.")
+            user.azure_oid = oid
+            user.save(update_fields=["azure_oid"])
+        else:
+            user = User(
+                username=_derive_username(email),
+                email=email,
+                first_name=(claims.get("given_name") or "")[:150],
+                last_name=(claims.get("family_name") or "")[:150],
+                azure_oid=oid,
+                account_type="interne",
+                account_status="active",
+            )
+            if not user.first_name and not user.last_name:
+                first, _, last = (claims.get("name") or "").strip().partition(" ")
+                user.first_name, user.last_name = first[:150], last[:150]
+            user.set_unusable_password()
+            user.save()
+
+    if user.account_status == "desactive" or not user.is_active:
+        raise AccountValidationError("Ce compte a été désactivé.")
+    if user.account_status == "pending":
+        user.account_status = "active"
+        user.save(update_fields=["account_status"])
+        for invitation in Invitation.objects.filter(user=user, status="pending"):
+            _apply_invitation(invitation)
+    return user
+
+
 def set_organisation_role(*, actor, target_user, role):
     """Portée organisation (User.organisation_role) — à ne pas confondre avec
     User.is_platform_admin (portée plateforme) ni ProjectMembership.role
@@ -652,17 +705,24 @@ def accept_invitation(*, token, password=None):
         user.account_status = "active"
         user.save(update_fields=["password", "account_status"])
 
-        if invitation.team_id:
-            TeamMembership.objects.get_or_create(team=invitation.team, user=user)
-        if invitation.project_id:
-            from apps.projects.models import ProjectMembership
-
-            ProjectMembership.objects.get_or_create(project=invitation.project, user=user, role="membre")
-
-        invitation.status = "accepted"
-        invitation.accepted_at = timezone.now()
-        invitation.save(update_fields=["status", "accepted_at"])
+        _apply_invitation(invitation)
     return invitation
+
+
+def _apply_invitation(invitation):
+    """Accorde le groupe/projet d'une invitation et la marque acceptée —
+    partagé par l'activation par mot de passe et la connexion Microsoft."""
+    user = invitation.user
+    if invitation.team_id:
+        TeamMembership.objects.get_or_create(team=invitation.team, user=user)
+    if invitation.project_id:
+        from apps.projects.models import ProjectMembership
+
+        ProjectMembership.objects.get_or_create(project=invitation.project, user=user, role="membre")
+
+    invitation.status = "accepted"
+    invitation.accepted_at = timezone.now()
+    invitation.save(update_fields=["status", "accepted_at"])
 
 
 def resend_invitation(*, actor, invitation):

@@ -9,11 +9,13 @@ from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import Invitation, Organisation, PasswordResetRequest, PermissionProfile, Team, User
+from .sso import MicrosoftTokenError, sso_config, verify_microsoft_id_token
 from .schema import (
     change_password_schema,
     invitation_schema,
     login_schema,
     me_schema,
+    microsoft_login_schema,
     notification_preferences_schema,
     organisation_branding_schema,
     organisation_schema,
@@ -22,6 +24,7 @@ from .schema import (
     password_reset_token_schema,
     permission_profile_schema,
     planning_preferences_schema,
+    sso_config_schema,
     team_schema,
     user_schema,
 )
@@ -32,6 +35,7 @@ from .serializers import (
     InvitationSerializer,
     LoginSerializer,
     MeSerializer,
+    MicrosoftLoginSerializer,
     NotificationPreferencesSerializer,
     OrganisationBrandingSerializer,
     OrganisationBrandingUpdateSerializer,
@@ -70,6 +74,7 @@ from .services import (
     create_team,
     deactivate_account,
     list_permission_profiles,
+    login_with_microsoft,
     reactivate_account,
     remove_team_member,
     rename_team,
@@ -111,6 +116,48 @@ class LoginView(APIView):
                 "user": MeSerializer(user).data,
             }
         )
+
+
+def _token_response(user):
+    refresh = RefreshToken.for_user(user)
+    return Response(
+        {
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "user": MeSerializer(user).data,
+        }
+    )
+
+
+@sso_config_schema
+class SsoConfigView(APIView):
+    """Identifiants publics de l'application Entra (session du 2026-11-16) :
+    lus à l'exécution plutôt qu'intégrés au build du frontend, pour qu'un
+    changement d'application ne demande qu'une variable d'environnement."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response(sso_config())
+
+
+@microsoft_login_schema
+class MicrosoftLoginView(APIView):
+    """Connexion Microsoft (session du 2026-11-16), publique comme `LoginView`."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = MicrosoftLoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            claims = verify_microsoft_id_token(serializer.validated_data["id_token"])
+            user = login_with_microsoft(claims)
+        except (MicrosoftTokenError, AccountValidationError) as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return _token_response(user)
 
 
 @me_schema

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { requestPasswordReset } from "../../api/client";
 import { useCurrentUser } from "../../context/CurrentUserContext";
 import { useToast } from "../../context/ToastContext";
+import { consumeMicrosoftRedirect, startMicrosoftLogin } from "./microsoftAuth";
 import "./LoginPage.css";
 
 // Portage direct de `watodo-logo-animation.html` (fourni par l'utilisateur,
@@ -103,12 +104,52 @@ interface LoginPageProps {
 }
 
 export function LoginPage({ onSuccess, onCancel }: LoginPageProps) {
-  const { login, sessionExpired } = useCurrentUser();
+  const { login, loginWithMicrosoft, sessionExpired } = useCurrentUser();
   const { showToast } = useToast();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [microsoftPending, setMicrosoftPending] = useState(false);
+
+  // Retour de la page de connexion Microsoft : MSAL lit la réponse dans
+  // l'URL, puis le backend échange le jeton d'identité contre une session.
+  useEffect(() => {
+    let cancelled = false;
+    consumeMicrosoftRedirect()
+      .then(async (result) => {
+        if (!result?.idToken || cancelled) return;
+        setMicrosoftPending(true);
+        await loginWithMicrosoft(result.idToken);
+        if (!cancelled) onSuccess();
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "La connexion Microsoft a échoué.");
+      })
+      .finally(() => {
+        if (!cancelled) setMicrosoftPending(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Une seule lecture du retour Microsoft, au montage.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleMicrosoftLogin() {
+    setError(null);
+    setMicrosoftPending(true);
+    try {
+      const started = await startMicrosoftLogin();
+      if (!started) {
+        setMicrosoftPending(false);
+        showToast("La connexion Microsoft n'est pas encore configurée.");
+      }
+    } catch (err) {
+      setMicrosoftPending(false);
+      setError(err instanceof Error ? err.message : "La connexion Microsoft a échoué.");
+    }
+  }
 
   // "Mot de passe oublié" — reste dans la même carte plutôt qu'un routage
   // séparé (l'écran de connexion n'a pas de mécanisme de navigation interne,
@@ -233,7 +274,8 @@ export function LoginPage({ onSuccess, onCancel }: LoginPageProps) {
             <button
               type="button"
               className="login-page__sso"
-              onClick={() => showToast("Pas encore disponible.")}
+              onClick={handleMicrosoftLogin}
+              disabled={submitting || microsoftPending}
             >
               <span className="login-page__sso-logo">
                 <span />
@@ -241,7 +283,7 @@ export function LoginPage({ onSuccess, onCancel }: LoginPageProps) {
                 <span />
                 <span />
               </span>
-              Continuer avec Microsoft
+              {microsoftPending ? "Connexion Microsoft…" : "Continuer avec Microsoft"}
             </button>
 
             {onCancel && (
