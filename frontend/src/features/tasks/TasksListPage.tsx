@@ -35,7 +35,6 @@ import {
   priorityRank,
   priorityTone,
   PROJECT_PHASE_OPTIONS,
-  projectPhaseIcon,
   statusTone,
   taskStatusIcon,
 } from "../../lib/badges";
@@ -49,6 +48,7 @@ import { buildTaskCreatePayload } from "./taskCreatePayload";
 import { TaskAccordion } from "./TaskAccordion";
 import { useTaskTransitions } from "./useTaskTransitions";
 import "./TasksListPage.css";
+import { ProjectPhaseBadge } from "../projects/ProjectPhaseBadge";
 
 type Mode = "mine" | "team";
 
@@ -677,14 +677,10 @@ export function TasksListPage({ focusTaskId }: TasksListPageProps = {}) {
                         <td data-label="Phase">
                           {(() => {
                             const project = task.project ? projectById.get(task.project) : undefined;
-                            if (!project?.phase) return <span className="tasks-list-page__empty-cell">—</span>;
-                            return (
-                              <StatusBadge
-                                label={project.phase_display ?? project.phase}
-                                tone="neutral"
-                                icon={projectPhaseIcon(project.phase)}
-                              />
-                            );
+                            if (!project || (!project.phase && !project.current_phase)) {
+                              return <span className="tasks-list-page__empty-cell">—</span>;
+                            }
+                            return <ProjectPhaseBadge project={project} />;
                           })()}
                         </td>
                       )}

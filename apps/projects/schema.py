@@ -14,6 +14,7 @@ from .serializers import (
     ProjectMemberRemoveSerializer,
     ProjectMemberRoleSerializer,
     ProjectNotepadUpdateSerializer,
+    ProjectPhasesUpdateSerializer,
     ProjectSerializer,
     ProjectVersionCreateSerializer,
     ProjectVersionSerializer,
@@ -43,6 +44,14 @@ project_schema = extend_schema_view(
     members=extend_schema(request=ProjectMemberAddSerializer, responses={201: ProjectSerializer}),
     member_role=_update(ProjectMemberRoleSerializer),
     update_details=_update(ProjectDetailsUpdateSerializer),
+    phases=extend_schema(
+        description=(
+            "Phases personnalisées : liste complète `[{id?, name, due_date}]`, chef de projet. "
+            "Une phase commence le lendemain de la précédente ; une phase absente est archivée."
+        ),
+        request=ProjectPhasesUpdateSerializer,
+        responses=ProjectSerializer,
+    ),
     cover=[
         extend_schema(methods=["GET"], responses=file_response("image/webp")),
         extend_schema(methods=["POST"], request=FILE_UPLOAD, responses=ProjectSerializer),

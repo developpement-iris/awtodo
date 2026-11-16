@@ -91,15 +91,6 @@ project_planning_schema = extend_schema_view(
     entry_cancel=no_body(),
 )
 
-roadmap_schema = extend_schema_view(
-    get=extend_schema(
-        parameters=[
-            *_WINDOW,
-            OpenApiParameter("projects", OpenApiTypes.STR, description="Identifiants séparés par des virgules."),
-        ],
-        responses=_OBJECT,
-    )
-)
 workload_schema = extend_schema_view(
     get=extend_schema(
         parameters=[

@@ -185,12 +185,19 @@ export function ProjectDetailsForm({ project, onUpdated }: ProjectDetailsFormPro
 
         <label className="project-details-form__field">
           <span>Phase</span>
-          <Combobox
-            options={[{ value: "", label: "Non définie" }, ...PROJECT_PHASE_OPTIONS]}
-            value={values.phase}
-            onChange={(value) => update("phase", value)}
-            placeholder="Non définie"
-          />
+          {project.phases.length > 0 ? (
+            // Phases personnalisées : la phase en cours se déduit de leurs échéances.
+            <span className="project-details-form__derived">
+              {project.current_phase?.name ?? "—"} <small>(d'après les phases ci-dessous)</small>
+            </span>
+          ) : (
+            <Combobox
+              options={[{ value: "", label: "Non définie" }, ...PROJECT_PHASE_OPTIONS]}
+              value={values.phase}
+              onChange={(value) => update("phase", value)}
+              placeholder="Non définie"
+            />
+          )}
         </label>
 
         <label className="project-details-form__field">

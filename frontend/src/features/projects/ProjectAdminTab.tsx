@@ -15,6 +15,7 @@ import { useCurrentUser } from "../../context/CurrentUserContext";
 import { useToast } from "../../context/ToastContext";
 import type { Project, ProjectMembership, ProjectRole, Team } from "../../types/watodo";
 import { ProjectDetailsForm } from "./ProjectDetailsForm";
+import { ProjectPhasesEditor } from "./ProjectPhasesEditor";
 import "./ProjectAdminTab.css";
 
 const ROLE_OPTIONS: { value: ProjectRole; label: string }[] = [
@@ -189,6 +190,7 @@ export function ProjectAdminTab({ project, onUpdated }: ProjectAdminTabProps) {
       </p>
 
       {project.permissions.can_edit_details && <ProjectDetailsForm project={project} onUpdated={onUpdated} />}
+      {project.permissions.can_edit_details && <ProjectPhasesEditor project={project} onUpdated={onUpdated} />}
 
       {error && <p className="project-admin-tab__message project-admin-tab__message--error">{error}</p>}
 

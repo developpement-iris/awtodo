@@ -419,7 +419,17 @@ export interface Project {
   members: ProjectMembership[];
   permissions: ProjectPermissions;
   current_version_id: string | null;
+  // Phases personnalisées (session du 2026-11-16) : début calculé, échéance saisie.
+  phases: ProjectPhasePeriod[];
+  current_phase: ProjectPhasePeriod | null;
   created_at: string;
+}
+
+export interface ProjectPhasePeriod {
+  id: string;
+  name: string;
+  start_date: string;
+  due_date: string;
 }
 
 // Cahier des charges — voir docs/modeles-et-api.md > "Projets — Hub complet"

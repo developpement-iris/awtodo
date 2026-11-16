@@ -242,6 +242,15 @@ export interface ProjectDetailsUpdatePayload {
   [key: string]: unknown;
 }
 
+// Phases personnalisées d'un projet (session du 2026-11-16) : liste complète,
+// une phase absente est archivée. `id` absent = nouvelle phase.
+export function saveProjectPhases(
+  projectId: string,
+  phases: { id?: string; name: string; due_date: string }[],
+): Promise<Project> {
+  return putJson<Project>(`/projects/${projectId}/phases/`, { phases });
+}
+
 // Domaines et services déjà utilisés dans l'organisation (saisie assistée).
 export interface ProjectCategories {
   domains: string[];
@@ -1387,23 +1396,6 @@ export function composeProjectCommunicationMessage(
 }
 
 // --- Feuille de route et charge (session du 2026-11-14) -------------------
-
-/** Phase ou jalon du planning d'un projet, pour le Gantt de l'écran Projets. */
-export interface RoadmapEntry {
-  id: string;
-  project_id: string;
-  title: string;
-  kind: "phase" | "jalon";
-  all_day: boolean;
-  start: string;
-  end: string;
-}
-
-export function getRoadmapEntries(from: Date, to: Date): Promise<{ entries: RoadmapEntry[] }> {
-  return getJson<{ entries: RoadmapEntry[] }>(
-    `/planning/roadmap/${buildQuery({ from: from.toISOString(), to: to.toISOString() })}`,
-  );
-}
 
 export type WorkloadGranularity = "month" | "week";
 

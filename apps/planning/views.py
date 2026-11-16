@@ -26,7 +26,6 @@ from .schema import (
     calendar_schema,
     event_schema,
     project_planning_schema,
-    roadmap_schema,
     share_schema,
     working_hours_schema,
     workload_schema,
@@ -103,28 +102,6 @@ class CalendarView(_PlanningExceptionMixin, APIView):
             include_outlook=request.query_params.get("outlook") in ("1", "true"),
         )
         return Response(data)
-
-
-@roadmap_schema
-@extend_schema(responses=OpenApiTypes.OBJECT)
-class RoadmapView(_PlanningExceptionMixin, APIView):
-    """Phases et jalons des projets pour le Gantt de l'écran Projets (session
-    du 2026-11-14). Fenêtre `from`/`to` jusqu'à 370 jours, `projects`
-    optionnel (identifiants séparés par des virgules)."""
-
-    def get(self, request):
-        raw_start = _aware(parse_datetime(request.query_params.get("from") or ""))
-        raw_end = _aware(parse_datetime(request.query_params.get("to") or ""))
-        if raw_start is None or raw_end is None:
-            raise services.PlanningValidationError("Dates « from » / « to » invalides (format ISO 8601 attendu).")
-        return Response(
-            services.get_roadmap_entries(
-                actor=request.user,
-                window_start=raw_start,
-                window_end=raw_end,
-                project_ids=_id_list(request, "projects"),
-            )
-        )
 
 
 @workload_schema

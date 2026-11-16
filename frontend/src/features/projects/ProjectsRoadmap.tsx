@@ -1,14 +1,14 @@
 import { ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { getRoadmapEntries, type RoadmapEntry } from "../../api/client";
+import { useMemo, useState } from "react";
 import { Combobox } from "../../components/Combobox";
 import { PRIORITY_ORDER, PROJECT_PHASE_OPTIONS } from "../../lib/badges";
 import { categoryKey } from "../../lib/categoryKey";
 import type { Project } from "../../types/watodo";
 import { ProjectCover } from "./ProjectCover";
 import { ProjectsWorkload } from "./ProjectsWorkload";
-import { coverTone, formatProjectDate, memberName, parseIsoDate, projectProgress, teamLabel } from "./projectDisplay";
+import { coverTone, memberName, phaseTones, parseIsoDate, projectProgress, teamLabel } from "./projectDisplay";
 import "./ProjectCover.css";
+import { projectPhaseLabel } from "./projectDisplay";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const ZOOM_STORAGE_KEY = "awtodo:projects-gantt-zoom";
@@ -197,12 +197,24 @@ function matches(project: Project, filters: Filters): boolean {
   if (filters.team === INDIVIDUAL_TEAM ? project.team !== null : filters.team && project.team !== filters.team) {
     return false;
   }
-  if (filters.phase && (project.phase ?? NONE) !== filters.phase) return false;
+  if (filters.phase && phaseKey(project) !== filters.phase) return false;
   if (filters.priority && (project.priority ?? NONE) !== filters.priority) return false;
   if (filters.person && !contributors(project).some((membership) => membership.user.id === filters.person)) {
     return false;
   }
   return true;
+}
+
+/** Clé de la phase actuelle d'un projet (personnalisée ou fixe), `NONE` sans phase. */
+function phaseKey(project: Project): string {
+  const label = projectPhaseLabel(project);
+  return label ? categoryKey(label) : NONE;
+}
+
+/** Rang d'affichage d'une phase : les 4 phases fixes dans l'ordre d'avancement, puis les autres. */
+function phaseRank(label: string): number {
+  const index = PROJECT_PHASE_OPTIONS.findIndex((option) => categoryKey(option.label) === categoryKey(label));
+  return index === -1 ? PROJECT_PHASE_OPTIONS.length : index;
 }
 
 /** Libellés distincts (casse et accents ignorés), triés. */
@@ -238,13 +250,12 @@ function groupItems(items: GanttItem[], groupBy: GroupBy): Group[] {
     } else if (groupBy === "team") {
       push(project.team ?? NONE, project.team_name ?? "Projets individuels", item);
     } else {
-      push(project.phase ?? NONE, project.phase_display ?? "Phase non définie", item);
+      push(phaseKey(project), projectPhaseLabel(project) ?? "Phase non définie", item);
     }
   }
-  const phaseRank = (key: string) => PROJECT_PHASE_OPTIONS.findIndex((option) => option.value === key);
   return [...groups.values()].sort((a, b) => {
     if (a.key === NONE || b.key === NONE) return a.key === NONE ? 1 : -1;
-    if (groupBy === "phase") return phaseRank(a.key) - phaseRank(b.key);
+    if (groupBy === "phase" && phaseRank(a.label) !== phaseRank(b.label)) return phaseRank(a.label) - phaseRank(b.label);
     return a.label.localeCompare(b.label, "fr");
   });
 }
@@ -257,8 +268,8 @@ interface ProjectsRoadmapProps {
 /**
  * Feuille de route de l'écran Projets. Deux vues sur les mêmes filtres :
  * - le Gantt (session du 2026-11-03) : une ligne par projet, la durée de vie
- *   du projet (création → échéance) et, depuis le 2026-11-14, ses phases et
- *   jalons saisis dans son planning ;
+ *   du projet (création → échéance) et, depuis le 2026-11-16, ses phases
+ *   personnalisées saisies dans l'onglet Administration ;
  * - la charge par personne (session du 2026-11-14), voir `ProjectsWorkload`.
  */
 export function ProjectsRoadmap({ projects, onOpen }: ProjectsRoadmapProps) {
@@ -287,6 +298,12 @@ export function ProjectsRoadmap({ projects, onOpen }: ProjectsRoadmapProps) {
     }
     return {
       domains: distinctOptions(active.map((project) => project.domain)),
+      phases: [
+        ...distinctOptions(active.map((project) => projectPhaseLabel(project) ?? "")).sort(
+          (a, b) => phaseRank(a.label) - phaseRank(b.label) || a.label.localeCompare(b.label, "fr"),
+        ),
+        ...(active.some((project) => !projectPhaseLabel(project)) ? [{ value: NONE, label: "Non définie" }] : []),
+      ],
       services: distinctOptions(active.flatMap((project) => project.services)),
       teams: teamOptions,
       people: [...people.entries()]
@@ -311,7 +328,7 @@ export function ProjectsRoadmap({ projects, onOpen }: ProjectsRoadmapProps) {
           <h2 id="projects-roadmap-title">Feuille de route</h2>
           <p>
             {view === "gantt"
-              ? "Projets actifs, leurs phases et leurs jalons."
+              ? "Projets actifs et leurs phases, saisies dans l'onglet Administration de chaque projet."
               : "Projets en cours et demi-journées planifiées, par personne."}
           </p>
         </div>
@@ -362,7 +379,7 @@ export function ProjectsRoadmap({ projects, onOpen }: ProjectsRoadmapProps) {
         <RoadmapFilter
           label="Phase"
           all="Toutes les phases"
-          options={[...PROJECT_PHASE_OPTIONS, { value: NONE, label: "Non définie" }]}
+          options={options.phases}
           value={filters.phase}
           onChange={(value) => setFilter("phase", value)}
         />
@@ -447,33 +464,6 @@ function GanttView({ projects, groupBy, filtered, onOpen }: GanttViewProps) {
   const periodEnd = shiftUnit(periodStart, zoom, 1);
   const totalDays = daysBetween(periodStart, periodEnd);
   const showsToday = today >= periodStart && today < periodEnd;
-  const [entries, setEntries] = useState<RoadmapEntry[]>([]);
-
-  const periodKey = periodStart.getTime();
-  useEffect(() => {
-    let cancelled = false;
-    getRoadmapEntries(new Date(periodKey), shiftUnit(new Date(periodKey), zoom, 1))
-      .then((result) => {
-        if (!cancelled) setEntries(result.entries);
-      })
-      .catch(() => {
-        // Sans phases, le Gantt garde la barre création → échéance.
-        if (!cancelled) setEntries([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [periodKey, zoom]);
-
-  const entriesByProject = useMemo(() => {
-    const byProject = new Map<string, RoadmapEntry[]>();
-    for (const entry of entries) {
-      if (!byProject.has(entry.project_id)) byProject.set(entry.project_id, []);
-      byProject.get(entry.project_id)!.push(entry);
-    }
-    return byProject;
-  }, [entries]);
-
   function changeZoom(next: Zoom) {
     // Reste autour d'aujourd'hui s'il est visible, sinon autour de la
     // période actuellement consultée.
@@ -485,9 +475,12 @@ function GanttView({ projects, groupBy, filtered, onOpen }: GanttViewProps) {
   const { items, unplaced } = useMemo(() => {
     const placed: GanttItem[] = [];
     for (const project of projects) {
-      if (!project.deadline && !project.already_in_production) continue;
+      const lastPhase = project.phases[project.phases.length - 1];
+      if (!project.deadline && !project.already_in_production && !lastPhase) continue;
       const start = startOfDay(new Date(project.created_at));
-      const end = project.deadline ? parseIsoDate(project.deadline) : null;
+      // Sans échéance de projet, la dernière phase en tient lieu.
+      const endIso = project.deadline ?? (project.already_in_production ? null : lastPhase?.due_date ?? null);
+      const end = endIso ? parseIsoDate(endIso) : null;
       placed.push({ project, start: end && end < start ? end : start, end, late: end !== null && end < today });
     }
     placed.sort((a, b) => {
@@ -539,8 +532,8 @@ function GanttView({ projects, groupBy, filtered, onOpen }: GanttViewProps) {
             Phase
           </li>
           <li>
-            <span className="gantt-legend__swatch gantt-legend__swatch--milestone" />
-            Jalon
+            <span className="gantt-legend__swatch gantt-legend__swatch--current" />
+            Phase en cours
           </li>
           <li>
             <span className="gantt-legend__swatch gantt-legend__swatch--today" />
@@ -631,7 +624,6 @@ function GanttView({ projects, groupBy, filtered, onOpen }: GanttViewProps) {
                   <GanttRow
                     key={`${group.key}-${item.project.id}`}
                     item={item}
-                    entries={entriesByProject.get(item.project.id) ?? []}
                     place={place}
                     percent={percent}
                     periodEnd={periodEnd}
@@ -656,7 +648,6 @@ function GanttView({ projects, groupBy, filtered, onOpen }: GanttViewProps) {
 
 interface GanttRowProps {
   item: GanttItem;
-  entries: RoadmapEntry[];
   place: (start: Date, endExclusive: Date | null) => { left: number; width: number; clipStart: boolean; clipEnd: boolean } | null;
   percent: (date: Date) => number;
   periodEnd: Date;
@@ -665,19 +656,24 @@ interface GanttRowProps {
 
 const ENTRY_FORMAT = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" });
 
-function GanttRow({ item, entries, place, percent, periodEnd, onOpen }: GanttRowProps) {
+function GanttRow({ item, place, percent, periodEnd, onOpen }: GanttRowProps) {
   const { project, start, end, late } = item;
   const progress = projectProgress(project);
   const startLabel = START_FORMAT.format(start);
-  const period = end ? `du ${startLabel} au ${formatProjectDate(project.deadline!)}` : `en production depuis le ${startLabel}`;
+  // `end` vient de l'échéance du projet, ou à défaut de la dernière phase :
+  // jamais `project.deadline` directement, qui peut être vide.
+  const endLabel = end ? START_FORMAT.format(end) : null;
+  const period = endLabel ? `du ${startLabel} au ${endLabel}` : `en production depuis le ${startLabel}`;
   const endExclusive = end ? new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1) : null;
   const lifespan = place(start, endExclusive);
   // Hors période : un repère indique de quel côté se trouve le projet.
   const offscreen = lifespan ? null : start >= periodEnd ? "after" : "before";
-  const phases = entries.filter((entry) => entry.kind === "phase");
-  const milestones = entries.filter((entry) => entry.kind === "jalon");
-  const detailed = entries.length > 0;
+  const phases = project.phases;
+  const currentPhaseId = project.current_phase?.id;
+  const detailed = phases.length > 0;
   const tone = `project-cover--tone-${coverTone(project.id)}`;
+  // Une couleur par phase, tirée de son nom (voir `phaseTones`).
+  const tones = phaseTones(project.phases.map((phase) => phase.name));
 
   // Avancement placé sur toute la durée du projet, puis rapporté à la
   // portion visible (sinon une barre rognée mentirait).
@@ -696,7 +692,7 @@ function GanttRow({ item, entries, place, percent, periodEnd, onOpen }: GanttRow
           <strong>{project.name}</strong>
           <small>
             {teamLabel(project)}
-            {project.phase_display && ` · ${project.phase_display}`}
+            {projectPhaseLabel(project) && ` · ${projectPhaseLabel(project)}`}
             {detailed && ` · ${progress} %`}
           </small>
         </span>
@@ -705,7 +701,7 @@ function GanttRow({ item, entries, place, percent, periodEnd, onOpen }: GanttRow
         {!lifespan && offscreen === "before" && (
           <span className="gantt__offscreen gantt__offscreen--before">
             <ChevronLeft size={13} strokeWidth={1.75} aria-hidden="true" />
-            Échéance {formatProjectDate(project.deadline!)}
+            Échéance {endLabel}
           </span>
         )}
         {!lifespan && offscreen === "after" && (
@@ -740,40 +736,26 @@ function GanttRow({ item, entries, place, percent, periodEnd, onOpen }: GanttRow
             )}
           </button>
         )}
-        {phases.map((entry) => {
-          const phaseStart = startOfDay(new Date(entry.start));
-          const last = new Date(new Date(entry.end).getTime() - 1);
-          const position = place(phaseStart, new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1));
+        {phases.map((phase, index) => {
+          const phaseTone = `project-cover--tone-${tones[index]}`;
+          const phaseStart = parseIsoDate(phase.start_date);
+          const due = parseIsoDate(phase.due_date);
+          const position = place(startOfDay(phaseStart), new Date(due.getFullYear(), due.getMonth(), due.getDate() + 1));
           if (!position) return null;
-          const dates = `${ENTRY_FORMAT.format(phaseStart)} → ${ENTRY_FORMAT.format(last)}`;
+          const dates = `${ENTRY_FORMAT.format(phaseStart)} → ${ENTRY_FORMAT.format(due)}`;
+          const current = phase.id === currentPhaseId;
           return (
             <button
-              key={`${entry.id}-${entry.start}`}
+              key={phase.id}
               type="button"
-              className={`gantt__phase ${tone}${position.clipStart ? " gantt__bar--clip-start" : ""}${position.clipEnd ? " gantt__bar--clip-end" : ""}`}
+              className={`gantt__phase ${phaseTone}${current ?" gantt__phase--current" : ""}${position.clipStart ? " gantt__bar--clip-start" : ""}${position.clipEnd ? " gantt__bar--clip-end" : ""}`}
               style={{ left: `${position.left}%`, width: `max(6px, ${position.width}%)` }}
               onClick={() => onOpen(project)}
-              title={`${entry.title} · ${dates}`}
-              aria-label={`${project.name}, phase ${entry.title}, ${dates}`}
+              title={`${phase.name} · ${dates}${current ? " · phase en cours" : ""}`}
+              aria-label={`${project.name}, phase ${phase.name}, ${dates}${current ? ", en cours" : ""}`}
             >
-              {position.width >= 6 && <span>{entry.title}</span>}
+              {position.width >= 6 && <span>{phase.name}</span>}
             </button>
-          );
-        })}
-        {milestones.map((entry) => {
-          const day = startOfDay(new Date(entry.start));
-          const position = place(day, new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1));
-          if (!position) return null;
-          return (
-            <button
-              key={`${entry.id}-${entry.start}`}
-              type="button"
-              className="gantt__milestone"
-              style={{ left: `${position.left + position.width / 2}%` }}
-              onClick={() => onOpen(project)}
-              title={`${entry.title} · ${ENTRY_FORMAT.format(day)}`}
-              aria-label={`${project.name}, jalon ${entry.title}, ${ENTRY_FORMAT.format(day)}`}
-            />
           );
         })}
       </div>

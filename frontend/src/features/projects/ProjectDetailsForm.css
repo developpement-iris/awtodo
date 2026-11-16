@@ -151,3 +151,17 @@
     grid-column: 1 / -1;
   }
 }
+
+.project-details-form__derived {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  font-size: 13.5px;
+  color: var(--color-text);
+}
+
+.project-details-form__derived small {
+  margin-left: var(--space-1);
+  font-size: 11.5px;
+  color: var(--color-text-muted);
+}
