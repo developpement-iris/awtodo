@@ -6,7 +6,7 @@ import { categoryKey } from "../../lib/categoryKey";
 import type { Project } from "../../types/watodo";
 import { ProjectCover } from "./ProjectCover";
 import { ProjectsWorkload } from "./ProjectsWorkload";
-import { coverTone, formatProjectDate, memberName, parseIsoDate, projectProgress, teamLabel } from "./projectDisplay";
+import { coverTone, memberName, parseIsoDate, projectProgress, teamLabel } from "./projectDisplay";
 import "./ProjectCover.css";
 import { projectPhaseLabel } from "./projectDisplay";
 
@@ -660,7 +660,10 @@ function GanttRow({ item, place, percent, periodEnd, onOpen }: GanttRowProps) {
   const { project, start, end, late } = item;
   const progress = projectProgress(project);
   const startLabel = START_FORMAT.format(start);
-  const period = end ? `du ${startLabel} au ${formatProjectDate(project.deadline!)}` : `en production depuis le ${startLabel}`;
+  // `end` vient de l'échéance du projet, ou à défaut de la dernière phase :
+  // jamais `project.deadline` directement, qui peut être vide.
+  const endLabel = end ? START_FORMAT.format(end) : null;
+  const period = endLabel ? `du ${startLabel} au ${endLabel}` : `en production depuis le ${startLabel}`;
   const endExclusive = end ? new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1) : null;
   const lifespan = place(start, endExclusive);
   // Hors période : un repère indique de quel côté se trouve le projet.
@@ -696,7 +699,7 @@ function GanttRow({ item, place, percent, periodEnd, onOpen }: GanttRowProps) {
         {!lifespan && offscreen === "before" && (
           <span className="gantt__offscreen gantt__offscreen--before">
             <ChevronLeft size={13} strokeWidth={1.75} aria-hidden="true" />
-            Échéance {formatProjectDate(project.deadline!)}
+            Échéance {endLabel}
           </span>
         )}
         {!lifespan && offscreen === "after" && (
