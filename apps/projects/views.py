@@ -13,7 +13,7 @@ from apps.common.serializers import ProjectHistoryEntrySerializer
 from apps.common.views import ListOnlyFilterMixin
 
 from .filters import ProjectFilterSet
-from .models import Project, ProjectMembership, ProjectVersion
+from .models import Project, ProjectMembership, ProjectPhase, ProjectVersion
 from .schema import project_schema
 from .serializers import (
     NON_REJECTED_TASK_STATUSES,
@@ -26,6 +26,7 @@ from .serializers import (
     ProjectMemberRemoveSerializer,
     ProjectMemberRoleSerializer,
     ProjectNotepadUpdateSerializer,
+    ProjectPhasesUpdateSerializer,
     ProjectSerializer,
     ProjectVersionCreateSerializer,
     ProjectVersionSerializer,
@@ -51,6 +52,7 @@ from .services import (
     prefetched_project_roles,
     remove_project_member,
     reopen_project,
+    save_project_phases,
     update_project_details,
     upload_project_cover,
     update_project_notepad,
@@ -104,6 +106,12 @@ class ProjectViewSet(
                     "versions",
                     queryset=ProjectVersion.objects.filter(is_current=True),
                     to_attr="_current_versions",
+                ),
+                # Phases personnalisées : `phases` / `current_phase` du serializer.
+                Prefetch(
+                    "phases",
+                    queryset=ProjectPhase.objects.order_by("due_date", "created_at"),
+                    to_attr="_active_phases",
                 ),
             )
             .annotate(
@@ -273,6 +281,21 @@ class ProjectViewSet(
         except ProjectValidationError as exc:
             return Response({"detail": str(exc)}, status=400)
 
+        return Response(self.get_serializer(project).data)
+
+    @action(detail=True, methods=["put"])
+    def phases(self, request, pk=None):
+        """Phases personnalisées du projet (session du 2026-11-16) : liste
+        complète, chef de projet uniquement. Les phases absentes sont archivées."""
+        project = self.get_object()
+        serializer = ProjectPhasesUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            save_project_phases(actor=request.user, project=project, phases=serializer.validated_data["phases"])
+        except ProjectPermissionError as exc:
+            return Response({"detail": str(exc)}, status=403)
+        except ProjectValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
         return Response(self.get_serializer(project).data)
 
     @action(detail=True, methods=["get", "post"], url_path="cover", parser_classes=[MultiPartParser])

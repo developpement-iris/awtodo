@@ -5,7 +5,7 @@ from apps.accounts.serializers import UserSerializer
 from apps.common.choices import PRIORITY_CHOICES
 
 from .models import Project, ProjectMembership, ProjectVersion
-from .services import get_project_permissions
+from .services import current_phase, get_project_permissions, phase_periods
 
 # Statuts de tâche comptant comme "travail réel" pour l'indicateur de
 # progression (X/Y tâches terminées) — tout sauf `rejetee`, qui n'a jamais
@@ -34,6 +34,28 @@ class ProjectMembershipSerializer(serializers.ModelSerializer):
         fields = ["id", "user", "role", "role_display"]
 
 
+class ProjectPhasePeriodSerializer(serializers.Serializer):
+    """Une phase et sa période : début calculé (lendemain de la phase
+    précédente, ou création du projet), échéance saisie."""
+
+    id = serializers.UUIDField()
+    name = serializers.CharField()
+    start_date = serializers.DateField()
+    due_date = serializers.DateField()
+
+
+class ProjectPhaseInputSerializer(serializers.Serializer):
+    id = serializers.UUIDField(required=False, allow_null=True)
+    name = serializers.CharField(max_length=80, allow_blank=True)
+    due_date = serializers.DateField()
+
+
+class ProjectPhasesUpdateSerializer(serializers.Serializer):
+    """Liste complète des phases : les phases absentes sont archivées."""
+
+    phases = ProjectPhaseInputSerializer(many=True)
+
+
 class ProjectSerializer(serializers.ModelSerializer):
     project_type_display = serializers.CharField(source="get_project_type_display", read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
@@ -46,6 +68,8 @@ class ProjectSerializer(serializers.ModelSerializer):
     members = serializers.SerializerMethodField()
     permissions = serializers.SerializerMethodField()
     current_version_id = serializers.SerializerMethodField()
+    phases = serializers.SerializerMethodField()
+    current_phase = serializers.SerializerMethodField()
 
     class Meta:
         model = Project
@@ -76,9 +100,19 @@ class ProjectSerializer(serializers.ModelSerializer):
             "members",
             "permissions",
             "current_version_id",
+            "phases",
+            "current_phase",
             "created_at",
         ]
         read_only_fields = ["created_at", "cover_updated_at"]
+
+    def get_phases(self, obj) -> list[dict]:
+        # Phases personnalisées (session du 2026-11-16), avec leur début calculé.
+        return ProjectPhasePeriodSerializer(phase_periods(obj), many=True).data
+
+    def get_current_phase(self, obj) -> dict | None:
+        period = current_phase(obj)
+        return ProjectPhasePeriodSerializer(period).data if period else None
 
     def get_permissions(self, obj) -> dict[str, bool]:
         request = self.context.get("request")

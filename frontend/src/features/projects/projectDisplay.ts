@@ -38,3 +38,9 @@ export function memberName(membership: ProjectMembership): string {
 export function teamLabel(project: Project): string {
   return project.team_name ?? "Individuel";
 }
+
+/** Libellé de la phase actuelle : la phase personnalisée en cours (session du
+ * 2026-11-16) si le projet en a, sinon la phase à 4 valeurs fixes. */
+export function projectPhaseLabel(project: Pick<Project, "phase" | "phase_display" | "current_phase">): string | null {
+  return project.current_phase?.name ?? project.phase_display ?? project.phase ?? null;
+}

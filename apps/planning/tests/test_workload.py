@@ -12,7 +12,6 @@ from apps.planning import workload
 from apps.planning.models import ProjectPlanningEntry, ScheduledBlock
 from apps.planning.services import (
     PlanningValidationError,
-    get_roadmap_entries,
     get_workload,
 )
 from apps.projects.models import Project, ProjectMembership
@@ -187,33 +186,6 @@ class WorkloadServiceTests(TestCase):
             self.january(self.manager, granularity="day")
 
 
-class RoadmapEntriesTests(TestCase):
-    def setUp(self):
-        self.manager = User.objects.create(username="cdp", email="cdp@x.io")
-        self.reader = User.objects.create(username="lecteur", email="lecteur@x.io")
-        self.project = Project.objects.create(name="Projet X")
-        ProjectMembership.objects.create(project=self.project, user=self.manager, role="chef_de_projet")
-        ProjectMembership.objects.create(project=self.project, user=self.reader, role="lecteur")
-        for kind, title in (("phase", "Cadrage"), ("jalon", "Livraison CDC"), ("reunion", "Point hebdo")):
-            ProjectPlanningEntry.objects.create(
-                project=self.project, title=title, kind=kind, start=local(2027, 1, 4, 9), end=local(2027, 1, 29, 18)
-            )
-
-    def test_only_phases_and_milestones(self):
-        result = get_roadmap_entries(
-            actor=self.manager, window_start=local(2027, 1, 1), window_end=local(2027, 12, 31)
-        )
-        self.assertEqual(sorted(e["title"] for e in result["entries"]), ["Cadrage", "Livraison CDC"])
-
-    def test_reader_gets_nothing(self):
-        result = get_roadmap_entries(actor=self.reader, window_start=local(2027, 1, 1), window_end=local(2027, 12, 31))
-        self.assertEqual(result["entries"], [])
-
-    def test_window_limit(self):
-        with self.assertRaises(PlanningValidationError):
-            get_roadmap_entries(actor=self.manager, window_start=local(2027, 1, 1), window_end=local(2028, 6, 1))
-
-
 @override_settings(
     DEBUG=True,
     REST_FRAMEWORK={
@@ -243,10 +215,3 @@ class WorkloadApiTests(APITestCase):
     def test_workload_rejects_bad_dates(self):
         response = self.client.get("/api/v1/planning/workload/?from=janvier&to=2027-03-31", **self.headers())
         self.assertEqual(response.status_code, 400)
-
-    def test_roadmap_endpoint(self):
-        response = self.client.get(
-            "/api/v1/planning/roadmap/?from=2027-01-01T00:00:00&to=2027-12-31T00:00:00", **self.headers()
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"entries": []})

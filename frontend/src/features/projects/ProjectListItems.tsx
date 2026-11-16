@@ -3,11 +3,12 @@ import { useRef, useState } from "react";
 import { AnchoredPanel } from "../../components/AnchoredPanel";
 import { ProgressBar } from "../../components/ProgressBar";
 import { StatusBadge } from "../../components/StatusBadge";
-import { priorityTone, projectPhaseIcon, projectStatusIcon, projectStatusTone } from "../../lib/badges";
+import { priorityTone, projectStatusIcon, projectStatusTone } from "../../lib/badges";
 import { initials } from "../../lib/initials";
 import type { Project } from "../../types/watodo";
 import { ProjectCover } from "./ProjectCover";
 import { deadlineLabel, memberName, projectProgress, teamLabel } from "./projectDisplay";
+import { ProjectPhaseBadge } from "./ProjectPhaseBadge";
 
 export interface ProjectItemProps {
   project: Project;
@@ -21,13 +22,7 @@ export interface ProjectItemProps {
 export function ProjectBadges({ project }: { project: Project }) {
   return (
     <>
-      {project.phase && (
-        <StatusBadge
-          label={project.phase_display ?? project.phase}
-          tone="neutral"
-          icon={projectPhaseIcon(project.phase)}
-        />
-      )}
+      <ProjectPhaseBadge project={project} />
       {project.status !== "actif" && (
         <StatusBadge
           label={project.status_display}
@@ -164,12 +159,8 @@ export function ProjectRow(props: ProjectItemProps) {
         </span>
       </button>
       <div className="project-row__cell" data-label="Phase">
-        {project.phase ? (
-          <StatusBadge
-            label={project.phase_display ?? project.phase}
-            tone="neutral"
-            icon={projectPhaseIcon(project.phase)}
-          />
+        {project.current_phase || project.phase ? (
+          <ProjectPhaseBadge project={project} />
         ) : (
           <span className="project-row__empty">—</span>
         )}

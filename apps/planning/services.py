@@ -1189,44 +1189,6 @@ def clear_working_hours_override(*, actor, target_user, week_start):
     return get_working_hours(actor=actor, target_user=target_user, week_start=week_start)
 
 
-# --- Feuille de route : phases et jalons (session du 2026-11-14) -------------
-
-ROADMAP_KINDS = ("phase", "jalon")
-# Le Gantt affiche jusqu'à une année entière ; les phases sont rarement
-# récurrentes, et l'expansion reste plafonnée par MAX_OCCURRENCES.
-MAX_ROADMAP_WINDOW_DAYS = 370
-
-
-def get_roadmap_entries(*, actor, window_start, window_end, project_ids=None):
-    """Phases et jalons du planning des projets dont l'acteur est contributeur
-    (un lecteur n'a pas accès au planning), pour le Gantt de l'écran Projets."""
-    _require_actor(actor)
-    _validate_window(window_start, window_end)
-    if window_end - window_start > timedelta(days=MAX_ROADMAP_WINDOW_DAYS):
-        raise PlanningValidationError(f"La fenêtre ne peut pas dépasser {MAX_ROADMAP_WINDOW_DAYS} jours.")
-    projects = contributor_projects(actor)
-    if project_ids:
-        projects = projects.filter(id__in=project_ids)
-    entries = list(
-        ProjectPlanningEntry.objects.filter(project__in=projects, kind__in=ROADMAP_KINDS, start__lt=window_end)
-    )
-    occurrences = expand_occurrences(entries, window_start, window_end)
-    return {
-        "entries": [
-            {
-                "id": str(occ["source"].id),
-                "project_id": str(occ["source"].project_id),
-                "title": occ["source"].title,
-                "kind": occ["source"].kind,
-                "all_day": occ["source"].all_day,
-                "start": _iso(occ["start"]),
-                "end": _iso(occ["end"]),
-            }
-            for occ in occurrences
-        ]
-    }
-
-
 # --- Charge par personne (session du 2026-11-14) ----------------------------
 
 MAX_WORKLOAD_DAYS = 370

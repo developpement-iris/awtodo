@@ -5,7 +5,7 @@ import { closeProject, reopenProject } from "../../api/client";
 import { SectionSidebar } from "../../components/SectionSidebar";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useToast } from "../../context/ToastContext";
-import { projectPhaseIcon, projectStatusIcon, projectStatusTone } from "../../lib/badges";
+import { projectStatusIcon, projectStatusTone } from "../../lib/badges";
 import { CommunicationTab } from "../communication/CommunicationTab";
 import { IncidentsPage } from "../incidents/IncidentsPage";
 import { TasksTab } from "../tasks/TasksTab";
@@ -20,6 +20,7 @@ import { ProjectAdminTab } from "./ProjectAdminTab";
 import { SpecTab } from "./SpecTab";
 import { StatsTab } from "./StatsTab";
 import "./ProjectDetailView.css";
+import { ProjectPhaseBadge } from "./ProjectPhaseBadge";
 
 type Tab =
   | "tasks"
@@ -141,13 +142,7 @@ export function ProjectDetailView({ project: initialProject, onBack }: ProjectDe
             tone={projectStatusTone(project.status)}
             icon={projectStatusIcon(project.status)}
           />
-          {project.phase && (
-            <StatusBadge
-              label={project.phase_display ?? project.phase}
-              tone="neutral"
-              icon={projectPhaseIcon(project.phase)}
-            />
-          )}
+          <ProjectPhaseBadge project={project} />
           {project.permissions.can_close && (
             <motion.button
               type="button"

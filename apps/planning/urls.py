@@ -6,7 +6,6 @@ from .views import (
     CalendarShareViewSet,
     CalendarView,
     ProjectPlanningViewSet,
-    RoadmapView,
     ScheduledBlockViewSet,
     WorkingHoursView,
     WorkloadView,
@@ -21,7 +20,6 @@ router.register("projects", ProjectPlanningViewSet, basename="planning-project")
 urlpatterns = [
     path("calendar/", CalendarView.as_view(), name="planning-calendar"),
     path("working-hours/", WorkingHoursView.as_view(), name="planning-working-hours"),
-    path("roadmap/", RoadmapView.as_view(), name="planning-roadmap"),
     path("workload/", WorkloadView.as_view(), name="planning-workload"),
     *router.urls,
 ]

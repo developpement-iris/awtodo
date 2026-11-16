@@ -187,6 +187,34 @@ class ProjectVersion(UUIDModel, TimeStampedModel):
             ),
         ]
 
+
+class ProjectPhase(UUIDModel, TimeStampedModel, StatusLifecycleModel):
+    """Phase personnalisée d'un projet (session du 2026-11-16), saisie par le
+    chef de projet dans l'onglet Administration et dessinée sur le Gantt.
+
+    Seule l'échéance est saisie : une phase commence le lendemain de l'échéance
+    de la précédente, la première à la création du projet (calculé, jamais
+    stocké). Les phases se suivent donc sans se chevaucher, dans l'ordre de
+    leurs échéances. La « phase actuelle » d'un projet est celle dont la
+    période contient aujourd'hui ; `Project.phase` (4 valeurs fixes) ne sert
+    plus qu'aux projets sans phase. Retirer une phase l'archive."""
+
+    STATUS_CHOICES = [("active", "Active"), ("archived", "Archivée")]
+    ACTIVE_STATUSES = frozenset({"active"})
+
+    project = models.ForeignKey(Project, on_delete=models.PROTECT, related_name="phases")
+    name = models.CharField(max_length=80)
+    due_date = models.DateField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active")
+
+    class Meta:
+        default_manager_name = "all_objects"
+        base_manager_name = "all_objects"
+        ordering = ["due_date", "created_at"]
+
+    def __str__(self):
+        return f"{self.project} — {self.name}"
+
     def __str__(self):
         return f"{self.project} — {self.label}"
 

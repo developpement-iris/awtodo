@@ -1,4 +1,5 @@
 import contextvars
+from datetime import timedelta
 import unicodedata
 from contextlib import contextmanager
 
@@ -11,7 +12,7 @@ from apps.common.audit import get_project_audit_log, record_changes, record_even
 from apps.common.models import AuditLogEntry
 from apps.common.permissions import check_permission
 
-from .models import Project, ProjectCoverUpload, ProjectMembership, ProjectVersion, SpecSection
+from .models import Project, ProjectCoverUpload, ProjectMembership, ProjectPhase, ProjectVersion, SpecSection
 
 
 # --- Cache d'appartenances pour la sérialisation d'une liste --------------
@@ -909,3 +910,104 @@ def get_scoped_history(*, actor):
     scoped = scoped.exclude(Q(is_private=True) & ~Q(actor=actor))
 
     return scoped.select_related("actor", "project", "team").order_by("-created_at")
+
+
+# --- Phases personnalisées du projet (session du 2026-11-16) ---------------
+
+MAX_PROJECT_PHASES = 20
+MAX_PHASE_NAME_LENGTH = 80
+
+
+def active_phases(project):
+    """Phases actives dans l'ordre de leurs échéances. Lit le préchargement
+    `_active_phases` de la liste des projets quand il existe."""
+    if hasattr(project, "_active_phases"):
+        return list(project._active_phases)
+    return list(ProjectPhase.objects.filter(project=project).order_by("due_date", "created_at"))
+
+
+def phase_periods(project, phases=None):
+    """`[{id, name, start_date, due_date}]` : chaque phase commence le
+    lendemain de l'échéance de la précédente, la première à la création du
+    projet (ou à sa propre échéance si le projet a été créé après)."""
+    phases = active_phases(project) if phases is None else phases
+    created = timezone.localtime(project.created_at).date() if project.created_at else None
+    periods = []
+    previous_due = None
+    for phase in phases:
+        start = previous_due + timedelta(days=1) if previous_due else (created or phase.due_date)
+        if start > phase.due_date:
+            start = phase.due_date
+        periods.append({"id": str(phase.id), "name": phase.name, "start_date": start, "due_date": phase.due_date})
+        previous_due = phase.due_date
+    return periods
+
+
+def current_phase(project, phases=None, today=None):
+    """Phase dont la période contient aujourd'hui ; après la dernière
+    échéance, la dernière phase reste affichée (le projet n'en a pas d'autre)."""
+    periods = phase_periods(project, phases)
+    if not periods:
+        return None
+    today = today or timezone.localdate()
+    for period in periods:
+        if period["start_date"] <= today <= period["due_date"]:
+            return period
+    return periods[-1] if today > periods[-1]["due_date"] else periods[0]
+
+
+def save_project_phases(*, actor, project, phases):
+    """Remplace la liste des phases par celle saisie dans Administration
+    (chef de projet). `phases` : `[{id?, name, due_date}]`. Une phase connue
+    est mise à jour, une nouvelle créée, une absente archivée (jamais
+    supprimée). Les phases sont rangées par échéance ; deux phases ne
+    peuvent pas avoir la même échéance."""
+    _ensure_can_edit_details(actor, project)
+    if len(phases) > MAX_PROJECT_PHASES:
+        raise ProjectValidationError(f"{MAX_PROJECT_PHASES} phases au maximum.")
+
+    cleaned = []
+    for raw in phases:
+        name = " ".join(str(raw.get("name") or "").split())
+        if not name:
+            raise ProjectValidationError("Chaque phase doit avoir un nom.")
+        if len(name) > MAX_PHASE_NAME_LENGTH:
+            raise ProjectValidationError(f"« {name[:30]}… » dépasse {MAX_PHASE_NAME_LENGTH} caractères.")
+        due_date = raw.get("due_date")
+        if due_date is None:
+            raise ProjectValidationError(f"La phase « {name} » n'a pas d'échéance.")
+        cleaned.append({"id": str(raw["id"]) if raw.get("id") else None, "name": name, "due_date": due_date})
+
+    dates = [item["due_date"] for item in cleaned]
+    if len(set(dates)) != len(dates):
+        raise ProjectValidationError("Deux phases ne peuvent pas avoir la même échéance.")
+
+    existing = {str(phase.id): phase for phase in ProjectPhase.objects.filter(project=project)}
+    unknown = [item["id"] for item in cleaned if item["id"] and item["id"] not in existing]
+    if unknown:
+        raise ProjectValidationError("Phase inconnue pour ce projet.")
+
+    kept = set()
+    for item in cleaned:
+        phase = existing.get(item["id"]) if item["id"] else None
+        if phase is None:
+            phase = ProjectPhase.objects.create(project=project, name=item["name"], due_date=item["due_date"])
+        elif phase.name != item["name"] or phase.due_date != item["due_date"]:
+            phase.name = item["name"]
+            phase.due_date = item["due_date"]
+            phase.save(update_fields=["name", "due_date", "updated_at"])
+        kept.add(str(phase.id))
+    for phase_id, phase in existing.items():
+        if phase_id not in kept:
+            phase.status = "archived"
+            phase.save(update_fields=["status", "updated_at"])
+
+    summary = ", ".join(f"{item['name']} ({item['due_date']:%d/%m/%Y})" for item in sorted(cleaned, key=lambda i: i["due_date"]))
+    record_event(
+        project,
+        actor=actor,
+        verb="phases_updated",
+        description=f"Phases du projet : {summary or 'aucune'}",
+        project=project,
+    )
+    return active_phases(project)
