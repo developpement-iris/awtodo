@@ -11,7 +11,7 @@ from django.urls import path
 from oauth2_provider import views as oauth_views
 
 from .oauth import McpAuthorizationView, ReadOnlyClientManagementView
-from .views import McpLoginView
+from .views import McpLoginView, McpMicrosoftCallbackView, McpMicrosoftStartView
 
 app_name = "oauth2_provider"
 
@@ -24,6 +24,8 @@ urlpatterns = [
         name="oauth-resource-metadata-path",
     ),
     path("o/login/", McpLoginView.as_view(), name="mcp-login"),
+    path("o/sso/microsoft/", McpMicrosoftStartView.as_view(), name="mcp-sso-microsoft"),
+    path("o/sso/microsoft/callback/", McpMicrosoftCallbackView.as_view(), name="mcp-sso-microsoft-callback"),
     path("o/authorize/", McpAuthorizationView.as_view(), name="authorize"),
     path("o/token/", oauth_views.TokenView.as_view(), name="token"),
     path("o/revoke_token/", oauth_views.RevokeTokenView.as_view(), name="revoke-token"),

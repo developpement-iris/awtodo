@@ -3,6 +3,12 @@
 {% block content %}
   <h1>Connexion pour Claude</h1>
   <p class="muted">Connectez-vous avec votre compte Awtodo pour autoriser le connecteur Claude.</p>
+  {% if microsoft_enabled %}
+  <div class="actions">
+    <a class="button primary" href="{{ microsoft_url }}">Se connecter avec Microsoft</a>
+  </div>
+  <p class="separator muted">ou avec un identifiant</p>
+  {% endif %}
   <form method="post">
     {% csrf_token %}
     <input type="hidden" name="next" value="{{ next }}">
@@ -12,7 +18,7 @@
     <input id="password" name="password" type="password" autocomplete="current-password" required>
     {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
     <div class="actions">
-      <button type="submit" class="primary">Se connecter</button>
+      <button type="submit"{% if not microsoft_enabled %} class="primary"{% endif %}>Se connecter</button>
     </div>
   </form>
 {% endblock %}

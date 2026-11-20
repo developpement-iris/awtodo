@@ -34,13 +34,15 @@
       width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 4px;
       background: var(--bg); color: var(--text); font: inherit;
     }
-    input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    input:focus-visible, button:focus-visible, a.button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .actions { display: flex; gap: 8px; margin-top: 20px; }
-    button {
+    button, a.button {
       flex: 1; padding: 10px 12px; border-radius: 4px; font: inherit; font-weight: 600; cursor: pointer;
       border: 1px solid var(--border); background: transparent; color: var(--text);
+      text-align: center; text-decoration: none;
     }
-    button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
+    button.primary, a.button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
+    .separator { margin: 20px 0 0; text-align: center; font-size: 13px; }
     .error { color: var(--error); margin-top: 12px; }
     ul { margin: 0 0 12px; padding-left: 20px; }
   </style>
